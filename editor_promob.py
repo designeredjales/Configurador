@@ -44,6 +44,8 @@ class PromobSetupManager:
         self.cat_img_attrs = {}
         self.image_cache = {}
         self.full_image_cache = {}
+        self.image_file_index = None
+        self.last_image_error = ""
 
         self.available_setups = {}
         self.current_setup_id = None
@@ -396,56 +398,126 @@ class PromobSetupManager:
 
     # ---------- Categorias / imagens ----------
 
-    def load_cat_image(self, img_rel_path, full=False):
-        """Carrega e cacheia a imagem de categoria (apenas folhas). full=True retorna imagem grande."""
-        if not img_rel_path:
-            return None
+    IMAGE_EXTS = (".jpg", ".jpeg", ".png", ".bmp", ".gif")
+    POPUP_MAX_SIZE = (1200, 850)
 
-        rel_clean = img_rel_path.strip().strip('"').strip("'")
-        if not rel_clean:
-            return None
-        rel_clean = rel_clean.replace("/", os.sep).replace("\\", os.sep)
+    def expand_image_path(self, raw):
+        """Limpa o caminho vindo do property e resolve variáveis do Promob
+        (%PastaSistema%, {PastaSistema}...) e do Windows (%APPDATA%...)."""
+        rel = raw.strip().strip('"').strip("'").strip()
+        if not rel:
+            return ""
+        if self.system_path:
+            for token in ("%PastaSistema%", "{PastaSistema}", "%SystemFolder%", "%SYSTEM%"):
+                idx = rel.lower().find(token.lower())
+                if idx != -1:
+                    rel = rel[:idx] + self.system_path + rel[idx + len(token):]
+        rel = os.path.expandvars(rel)
+        rel = rel.replace("/", os.sep).replace("\\", os.sep)
+        return rel
 
+    def build_image_index(self):
+        """Indexa por nome de arquivo (minúsculo) todas as imagens da pasta System.
+        Usado como último recurso quando o caminho do property não bate."""
+        index = {}
+        if self.system_path and os.path.isdir(self.system_path):
+            for dirpath, _dirnames, filenames in os.walk(self.system_path):
+                for fn in filenames:
+                    if fn.lower().endswith(self.IMAGE_EXTS):
+                        index.setdefault(fn.lower(), os.path.join(dirpath, fn))
+        self.image_file_index = index
+        return index
+
+    def image_candidates(self, rel_clean):
         candidates = []
         if os.path.isabs(rel_clean):
             candidates.append(rel_clean)
         else:
-            if self.atributos_path:
-                candidates.append(os.path.join(self.atributos_path, rel_clean))
-                candidates.append(os.path.join(self.atributos_path, "imagens", rel_clean))
-            if self.system_path:
-                candidates.append(os.path.join(self.system_path, rel_clean))
-                candidates.append(os.path.join(self.system_path, "Atributos", rel_clean))
-                candidates.append(os.path.join(self.system_path, "Atributos", "imagens", rel_clean))
+            bases = []
             if self.property_path:
-                candidates.append(os.path.join(os.path.dirname(self.property_path), rel_clean))
+                bases.append(os.path.dirname(self.property_path))
+            if self.atributos_path:
+                bases.append(self.atributos_path)
+                bases.append(os.path.join(self.atributos_path, "imagens"))
+                bases.append(os.path.join(self.atributos_path, "Imagens"))
+            if self.system_path:
+                bases.append(self.system_path)
+                bases.append(os.path.dirname(self.system_path))
+                bases.append(os.path.join(self.system_path, "Atributos", "imagens"))
+                bases.append(os.path.join(self.system_path, "Imagens"))
+            for b in bases:
+                candidates.append(os.path.join(b, rel_clean))
+
+        # Caminho sem extensão: testa as extensões comuns
+        if not os.path.splitext(rel_clean)[1]:
+            candidates = [c + ext for c in candidates for ext in self.IMAGE_EXTS]
+
+        # Último recurso: procura o arquivo pelo nome em qualquer subpasta da System
+        index = self.image_file_index if self.image_file_index is not None else self.build_image_index()
+        name = os.path.basename(rel_clean).lower()
+        names = [name] if os.path.splitext(name)[1] else [name + ext for ext in self.IMAGE_EXTS]
+        for n in names:
+            if n in index:
+                candidates.append(index[n])
+        return candidates
+
+    def open_photo(self, p, full):
+        if PIL_AVAILABLE:
+            with Image.open(p) as src:
+                src.load()
+                img = src.copy()
+            # JPG em CMYK, PNG paletizado, 16 bits etc. não são aceitos direto pelo Tk
+            if img.mode not in ("RGB", "RGBA"):
+                img = img.convert("RGBA" if "A" in img.getbands() or "transparency" in img.info else "RGB")
+            if full:
+                img.thumbnail(self.POPUP_MAX_SIZE, Image.Resampling.LANCZOS)
+            else:
+                img.thumbnail((16, 16), Image.Resampling.LANCZOS)
+            return ImageTk.PhotoImage(img, master=self.root)
+        if not p.lower().endswith((".png", ".gif")):
+            raise ValueError("formato exige Pillow (python -m pip install pillow)")
+        return tk.PhotoImage(file=p, master=self.root)
+
+    def load_cat_image(self, img_rel_path, full=False):
+        """Carrega e cacheia a imagem de categoria (apenas folhas). full=True retorna imagem grande.
+        Em caso de falha, self.last_image_error guarda os caminhos testados e o erro."""
+        self.last_image_error = ""
+        if not img_rel_path:
+            return None
+
+        rel_clean = self.expand_image_path(img_rel_path)
+        if not rel_clean:
+            return None
 
         cache = self.full_image_cache if full else self.image_cache
-        seen = set()
-        for path in candidates:
+        seen = []
+        errors = []
+        for path in self.image_candidates(rel_clean):
             p = os.path.normpath(path)
             if p in seen:
                 continue
-            seen.add(p)
-            if not os.path.exists(p):
+            seen.append(p)
+            if not os.path.isfile(p):
                 continue
             if p in cache:
                 return cache[p]
             try:
-                if PIL_AVAILABLE:
-                    img = Image.open(p)
-                    if not full:
-                        img = img.resize((16, 16), Image.Resampling.LANCZOS)
-                    photo = ImageTk.PhotoImage(img)
-                else:
-                    if not p.lower().endswith((".png", ".gif")):
-                        continue
-                    photo = tk.PhotoImage(file=p)
+                photo = self.open_photo(p, full)
                 cache[p] = photo
                 return photo
-            except Exception:
-                continue
+            except Exception as e:
+                errors.append(f"{p}: {type(e).__name__}: {e}")
 
+        lines = [f"Caminho no property: {img_rel_path}"]
+        if errors:
+            lines.append("\nArquivo encontrado, mas falhou ao abrir:")
+            lines.extend(errors)
+        else:
+            lines.append("\nArquivo não encontrado. Caminhos testados:")
+            lines.extend(seen[:12])
+            if len(seen) > 12:
+                lines.append(f"... e mais {len(seen) - 12}")
+        self.last_image_error = "\n".join(lines)
         return None
 
     def parse_property(self, filepath):
@@ -455,6 +527,9 @@ class PromobSetupManager:
         self.cat_names = {}
         self.cat_images = {}
         self.cat_img_attrs = {}
+        self.image_cache = {}
+        self.full_image_cache = {}
+        self.image_file_index = None
 
         try:
             tree = ET.parse(filepath)
@@ -1106,7 +1181,10 @@ em memória."""
 
         img = self.load_cat_image(img_attr, full=True)
         if not img:
-            messagebox.showerror("Imagem", "Não foi possível carregar a imagem.\n\nSe for JPG, instale Pillow:\npython -m pip install pillow")
+            detalhe = self.last_image_error or "Sem detalhes."
+            if not PIL_AVAILABLE:
+                detalhe += "\n\nPillow não está instalado (JPG/BMP não abrem):\npython -m pip install pillow"
+            messagebox.showerror("Imagem", "Não foi possível carregar a imagem.\n\n" + detalhe)
             return
 
         real_cat_id = self.get_real_cat_id(cid)
