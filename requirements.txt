@@ -1,0 +1,2 @@
+# Opcional: necessário para exibir imagens JPG das categorias
+pillow

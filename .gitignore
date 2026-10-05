@@ -1,0 +1,7 @@
+__pycache__/
+*.pyc
+build/
+dist/
+*.spec
+log_erro_importacao.txt
+log_erro_execucao.txt
