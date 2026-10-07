@@ -4,7 +4,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from ..db import get_db
-from ..deps import ADMIN, CADASTROS, PCP, empresa_atual
+from ..deps import ADMIN, CADASTRO_CLIENTE, CADASTROS, PCP, empresa_atual
 from ..models import CentroTrabalho, Cliente, Empresa, Material
 from ..schemas import (
     CentroIn,
@@ -28,7 +28,11 @@ def empresa(emp: Empresa = Depends(empresa_atual)):
 @router.put("/empresas/atual", response_model=EmpresaOut, dependencies=[Depends(ADMIN)])
 def configurar_empresa(dados: EmpresaAtualizar, emp: Empresa = Depends(empresa_atual), db: Session = Depends(get_db)):
     for campo, valor in dados.model_dump(exclude_unset=True).items():  # só o que foi enviado
-        if valor is None and campo != "cnpj":
+        if campo == "fiscal_token" and not valor:
+            continue  # token vazio não apaga o configurado
+        if campo in ("uf",) and valor:
+            valor = valor.upper()
+        if valor is None and campo not in ("cnpj", "inscricao_estadual"):
             raise HTTPException(422, f"O campo {campo} não pode ficar vazio.")
         setattr(emp, campo, valor)
     db.commit()
@@ -42,7 +46,19 @@ def listar_clientes(emp: Empresa = Depends(empresa_atual), db: Session = Depends
     return db.scalars(select(Cliente).where(Cliente.empresa_id == emp.id).order_by(Cliente.nome))
 
 
-@router.post("/clientes", response_model=ClienteOut, status_code=201, dependencies=[Depends(CADASTROS)])
+@router.put("/clientes/{cliente_id}", response_model=ClienteOut, dependencies=[Depends(CADASTRO_CLIENTE)])
+def atualizar_cliente(cliente_id: int, dados: ClienteIn, emp: Empresa = Depends(empresa_atual),
+                      db: Session = Depends(get_db)):
+    cliente = db.get(Cliente, cliente_id)
+    if cliente is None or cliente.empresa_id != emp.id:
+        raise HTTPException(404, "Cliente não encontrado")
+    for campo, valor in dados.model_dump().items():
+        setattr(cliente, campo, valor.upper() if campo == "uf" and valor else valor)
+    db.commit()
+    return cliente
+
+
+@router.post("/clientes", response_model=ClienteOut, status_code=201, dependencies=[Depends(CADASTRO_CLIENTE)])
 def criar_cliente(dados: ClienteIn, emp: Empresa = Depends(empresa_atual),
                   db: Session = Depends(get_db)):
     cliente = Cliente(empresa_id=emp.id, **dados.model_dump())

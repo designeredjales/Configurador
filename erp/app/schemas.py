@@ -1,8 +1,21 @@
 from datetime import date, datetime
+from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
-from .models import CausaChamado, Categoria, Perfil, StatusChamado, StatusMontagem, TipoChamado, RegraCentro, StatusOP, StatusProjeto, TipoLancamento, TipoMaterial
+from .models import (
+    CausaChamado,
+    Categoria,
+    Perfil,
+    RegraCentro,
+    StatusChamado,
+    StatusMontagem,
+    StatusOP,
+    StatusProjeto,
+    TipoChamado,
+    TipoLancamento,
+    TipoMaterial,
+)
 from .security import SENHA_MINIMA
 
 
@@ -27,6 +40,14 @@ class EmpresaIn(Schema):
 
 class EmpresaOut(EmpresaIn):
     id: int
+    uf: str | None = None
+    inscricao_estadual: str | None = None
+    ncm_padrao: str = "94034000"
+    cfop_interno: str = "5101"
+    cfop_interestadual: str = "6101"
+    csosn_padrao: str = "102"
+    fiscal_ambiente: str = "homologacao"
+    fiscal_token_configurado: bool = False  # o token em si nunca é devolvido
 
 
 class EmpresaAtualizar(Schema):
@@ -41,6 +62,14 @@ class EmpresaAtualizar(Schema):
     refilo_mm: float | None = Field(None, ge=0)
     imposto_venda_pct: float | None = Field(None, ge=0, le=100)
     garantia_meses: int | None = Field(None, ge=0, le=120)
+    uf: str | None = Field(None, min_length=2, max_length=2)
+    inscricao_estadual: str | None = None
+    ncm_padrao: str | None = Field(None, pattern=r"^\d{4}\.?\d{2}\.?\d{2}$")
+    cfop_interno: str | None = Field(None, pattern=r"^\d{4}$")
+    cfop_interestadual: str | None = Field(None, pattern=r"^\d{4}$")
+    csosn_padrao: str | None = Field(None, pattern=r"^\d{3}$")
+    fiscal_ambiente: Literal["homologacao", "producao"] | None = None
+    fiscal_token: str | None = None
 
 
 # --- Acesso -------------------------------------------------------------------
@@ -120,7 +149,13 @@ class ClienteIn(Schema):
     documento: str | None = None
     telefone: str | None = None
     email: str | None = None
+    logradouro: str | None = None
+    numero: str | None = None
+    complemento: str | None = None
+    bairro: str | None = None
     cidade: str | None = None
+    uf: str | None = Field(None, max_length=2)
+    cep: str | None = None
 
 
 class ClienteOut(ClienteIn):
@@ -450,6 +485,60 @@ class FluxoCaixa(Schema):
     meses: list[MesFluxo]
     vencido_receber: float
     vencido_pagar: float
+
+
+# --- NF-e ------------------------------------------------------------------------
+
+class EmitirNotaIn(Schema):
+    valor: float | None = Field(None, gt=0)
+    descricao: str | None = Field(None, max_length=120)
+
+
+class NotaOut(Schema):
+    id: int
+    projeto_id: int
+    ref: str
+    ambiente: str
+    valor: float
+    status: str
+    numero: str | None
+    serie: str | None
+    chave: str | None
+    url_danfe: str | None
+    url_xml: str | None
+    mensagem: str | None
+    criado_em: datetime
+    atualizado_em: datetime
+
+
+# --- Conciliação bancária -------------------------------------------------------
+
+class SugestaoConciliacao(Schema):
+    lancamento_id: int
+    descricao: str
+    vencimento: date
+    valor: float
+
+
+class MovimentoBancarioOut(Schema):
+    id: int
+    data: date
+    valor: float
+    descricao: str
+    situacao: str  # PENDENTE, CONCILIADO, IGNORADO
+    lancamento_id: int | None
+    lancamento_descricao: str | None
+    sugestoes: list[SugestaoConciliacao]
+
+
+class ConciliarIn(Schema):
+    lancamento_id: int
+
+
+class LancarMovimentoIn(Schema):
+    categoria: Categoria
+    descricao: str | None = None
+    projeto_id: int | None = None
 
 
 # --- Montagem e pós-obra --------------------------------------------------------

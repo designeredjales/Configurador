@@ -141,6 +141,19 @@ class Empresa(Base):
     # Imposto sobre a venda (ex.: alíquota do Simples) usado no DRE por obra
     imposto_venda_pct: Mapped[float] = mapped_column(Float, default=0.0)
     garantia_meses: Mapped[int] = mapped_column(Integer, default=12)
+    # Fiscal (NF-e por emissor integrado). O token nunca sai pela API.
+    uf: Mapped[str | None] = mapped_column(String(2))
+    inscricao_estadual: Mapped[str | None] = mapped_column(String(20))
+    ncm_padrao: Mapped[str] = mapped_column(String(10), default="94034000")
+    cfop_interno: Mapped[str] = mapped_column(String(4), default="5101")
+    cfop_interestadual: Mapped[str] = mapped_column(String(4), default="6101")
+    csosn_padrao: Mapped[str] = mapped_column(String(3), default="102")
+    fiscal_ambiente: Mapped[str] = mapped_column(String(12), default="homologacao")
+    fiscal_token: Mapped[str | None] = mapped_column(String(200))
+
+    @property
+    def fiscal_token_configurado(self) -> bool:
+        return bool(self.fiscal_token)
     criado_em: Mapped[datetime] = mapped_column(DateTime, default=agora)
 
 
@@ -170,6 +183,12 @@ class Cliente(Base):
     telefone: Mapped[str | None] = mapped_column(String(30))
     email: Mapped[str | None] = mapped_column(String(200))
     cidade: Mapped[str | None] = mapped_column(String(100))
+    logradouro: Mapped[str | None] = mapped_column(String(200))
+    numero: Mapped[str | None] = mapped_column(String(20))
+    complemento: Mapped[str | None] = mapped_column(String(100))
+    bairro: Mapped[str | None] = mapped_column(String(100))
+    uf: Mapped[str | None] = mapped_column(String(2))
+    cep: Mapped[str | None] = mapped_column(String(9))
 
 
 class Fornecedor(Base):
@@ -564,5 +583,54 @@ class Chamado(Base):
     resolvido_em: Mapped[datetime | None] = mapped_column(DateTime)
     em_garantia: Mapped[bool] = mapped_column(default=False)
     usuario_id: Mapped[int | None] = mapped_column(ForeignKey("usuarios.id"))
+
+    projeto: Mapped[Projeto] = relationship()
+
+
+class MovimentoBancario(Base):
+    """Linha do extrato bancário (OFX). Valor positivo = entrada; negativo = saída."""
+    __tablename__ = "movimentos_bancarios"
+    __table_args__ = (UniqueConstraint("empresa_id", "fitid"),)
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    empresa_id: Mapped[int] = mapped_column(ForeignKey("empresas.id"), index=True)
+    fitid: Mapped[str] = mapped_column(String(120))
+    data: Mapped[date] = mapped_column(Date, index=True)
+    valor: Mapped[float] = mapped_column(Float)
+    descricao: Mapped[str] = mapped_column(String(300))
+    lancamento_id: Mapped[int | None] = mapped_column(ForeignKey("lancamentos.id"))
+    ignorado: Mapped[bool] = mapped_column(default=False)
+    usuario_id: Mapped[int | None] = mapped_column(ForeignKey("usuarios.id"))
+    importado_em: Mapped[datetime] = mapped_column(DateTime, default=agora)
+
+    lancamento: Mapped[Lancamento | None] = relationship()
+
+
+class StatusNota(str, Enum):
+    PROCESSANDO = "PROCESSANDO"
+    AUTORIZADA = "AUTORIZADA"
+    ERRO = "ERRO"
+    CANCELADA = "CANCELADA"
+
+
+class NotaFiscal(Base):
+    __tablename__ = "notas_fiscais"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    empresa_id: Mapped[int] = mapped_column(ForeignKey("empresas.id"), index=True)
+    projeto_id: Mapped[int] = mapped_column(ForeignKey("projetos.id"), index=True)
+    ref: Mapped[str] = mapped_column(String(60), unique=True)
+    ambiente: Mapped[str] = mapped_column(String(12))
+    valor: Mapped[float] = mapped_column(Float)
+    status: Mapped[StatusNota] = mapped_column(String(15), default=StatusNota.PROCESSANDO)
+    numero: Mapped[str | None] = mapped_column(String(20))
+    serie: Mapped[str | None] = mapped_column(String(5))
+    chave: Mapped[str | None] = mapped_column(String(60))
+    url_danfe: Mapped[str | None] = mapped_column(String(400))
+    url_xml: Mapped[str | None] = mapped_column(String(400))
+    mensagem: Mapped[str | None] = mapped_column(String(1000))
+    usuario_id: Mapped[int | None] = mapped_column(ForeignKey("usuarios.id"))
+    criado_em: Mapped[datetime] = mapped_column(DateTime, default=agora)
+    atualizado_em: Mapped[datetime] = mapped_column(DateTime, default=agora)
 
     projeto: Mapped[Projeto] = relationship()

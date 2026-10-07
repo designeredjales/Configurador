@@ -69,6 +69,7 @@ td input.num { width: 90px; text-align: right; }
 .tag.VENCIDO, .tag.ABERTO.atrasado { background: var(--err); color: #fff; }
 .tag.AGENDADA, .tag.AGENDADO { background: var(--line); }
 .tag.EM_ANDAMENTO { background: var(--warn); color: #fff; }
+.tag.AUTORIZADA { background: var(--ok); color: #fff; } .tag.ERRO { background: var(--err); color: #fff; } .tag.PROCESSANDO { background: var(--warn); color: #fff; }
 .tag.ENTREGUE, .tag.RESOLVIDO { background: var(--ok); color: #fff; }
 .check { display: grid; gap: 6px; } .check label { display: flex; gap: 10px; align-items: center; padding: 8px 10px; border: 1px solid var(--line); border-radius: 8px; }
 #ind-kpis { grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); }
@@ -298,6 +299,12 @@ td input.num { width: 90px; text-align: right; }
       <div class="tabela" id="lista-lanc"></div>
       <div id="fin-msg"></div>
     </div>
+    <div class="card"><h2>Conciliação bancária</h2>
+      <p class="dica">Importe o extrato OFX do internet banking. O ERP sugere a conta em aberto de mesmo valor com vencimento em até 7 dias.</p>
+      <div class="linha"><input type="file" id="ofx" accept=".ofx,.OFX"><button class="btn" onclick="importarExtrato()">Importar extrato</button></div>
+      <div id="conc-msg"></div>
+      <div class="tabela" id="lista-conc"></div>
+    </div>
     <div class="card"><h2>Novo lançamento</h2>
       <p class="dica">Custos da obra (frete, montador, comissão) vinculados ao projeto entram no DRE da obra.</p>
       <div class="linha">
@@ -516,7 +523,45 @@ async function mostrarComercial(p) {
       ${linha(`Margem de contribuição · ${d.margem_pct}%`, d.margem_contribuicao, "total")}
     </tbody></table></div>
     <p class="dica">Recebido ${brl(d.recebido)} · a receber ${brl(d.a_receber)}${d.orcado_frete != null ? ` · orçado no Promob: frete ${brl(d.orcado_frete)}, montagem ${brl(d.orcado_montagem || 0)}` : ""}.
-    Material sem custo no cadastro entra como zero no DRE.</p>`;
+    Material sem custo no cadastro entra como zero no DRE.</p>
+    <h2>Faturamento (NF-e)</h2><div id="proj-nfe"></div>`;
+  mostrarNfe(p);
+}
+
+const CAMPOS_CLIENTE = [["nome", "Nome / razão social"], ["documento", "CPF ou CNPJ"], ["email", "E-mail"], ["telefone", "Telefone"],
+  ["cep", "CEP"], ["logradouro", "Logradouro"], ["numero", "Número"], ["complemento", "Complemento"], ["bairro", "Bairro"], ["cidade", "Município"], ["uf", "UF"]];
+async function mostrarNfe(p) {
+  const [clientes, notas] = await Promise.all([api("/api/clientes"), api(`/api/notas?projeto_id=${p.id}`)]);
+  const c = clientes.find((x) => x.id === p.cliente_id);
+  const ativa = notas.find((n) => ["PROCESSANDO", "AUTORIZADA"].includes(n.status));
+  $("proj-nfe").innerHTML = `${c ? `<p class="dica">Dados do destinatário (cliente ${esc(c.nome)}). Confira antes de emitir.</p>
+    <div class="cfg">${CAMPOS_CLIENTE.map(([k, r]) => `<label>${r}<input id="cli-${k}" value="${esc(c[k] ?? "")}"></label>`).join("")}</div>
+    <div class="linha" style="margin-top:10px"><button class="btn sec" onclick="salvarCliente(${c.id}, ${p.id})">Salvar cliente</button>
+      ${ativa ? "" : `<input id="nf-valor" value="${p.valor_venda || ""}" size="12" aria-label="Valor da nota"><button class="btn" onclick="emitirNfe(${p.id})">Emitir NF-e</button>`}</div>`
+    : `<p class="dica">O projeto não tem cliente vinculado.</p>`}
+    <div id="nf-msg"></div>
+    ${notas.length ? tabela([["Referência", (n) => esc(n.ref)], ["Ambiente", (n) => n.ambiente === "producao" ? "Produção" : "Homologação"],
+      ["Valor", (n) => brl(n.valor), 1], ["Número", (n) => n.numero ? `${n.numero}/${n.serie}` : "—"], ["Status", (n) => tag(n.status)],
+      ["Mensagem", (n) => esc(n.mensagem || "")],
+      ["", (n) => n.status === "PROCESSANDO" ? `<button class="btn sec" onclick="consultarNfe(${n.id}, ${p.id})">Consultar</button>`
+        : n.url_danfe ? `<a href="${esc(n.url_danfe)}" target="_blank" rel="noopener">DANFE</a>` : ""]], notas) : ""}`;
+}
+async function salvarCliente(id, pid) {
+  const dados = {}; CAMPOS_CLIENTE.forEach(([k]) => dados[k] = $(`cli-${k}`).value.trim() || null);
+  try { await api(`/api/clientes/${id}`, {method: "PUT", json: dados}); $("nf-msg").innerHTML = `<div class="msg ok">Cliente atualizado.</div>`; }
+  catch (e) { $("nf-msg").innerHTML = `<div class="msg err">${esc(e.message)}</div>`; }
+}
+async function emitirNfe(pid) {
+  try {
+    const n = await api(`/api/projetos/${pid}/nfe`, {method: "POST", json: {valor: Number($("nf-valor").value.replace(",", ".")) || null}});
+    await mostrarNfe(await api(`/api/projetos/${pid}`));
+    $("nf-msg").innerHTML = n.status === "ERRO" ? `<div class="msg err">Emissor recusou: ${esc(n.mensagem)}</div>`
+      : `<div class="msg ok">Nota ${esc(n.ref)} enviada ao emissor (${n.status}). Use Consultar para acompanhar a autorização.</div>`;
+  } catch (e) { $("nf-msg").innerHTML = `<div class="msg err">${esc(e.message)}</div>`; }
+}
+async function consultarNfe(id, pid) {
+  try { await api(`/api/notas/${id}/consultar`, {method: "POST"}); await mostrarNfe(await api(`/api/projetos/${pid}`)); }
+  catch (e) { $("nf-msg").innerHTML = `<div class="msg err">${esc(e.message)}</div>`; }
 }
 
 async function registrarContrato(id) {
@@ -980,7 +1025,39 @@ async function carregarFinanceiro() {
     ["Recebido", (m) => brl(m.recebido), 1], ["Pago", (m) => brl(m.pago), 1], ["Saldo do mês", (m) => val(m.saldo_mes), 1], ["Acumulado", (m) => val(m.saldo_acumulado), 1]], fluxo.meses);
   $("l-proj").innerHTML = `<option value="">Sem projeto (despesa geral)</option>` + projetos.map((p) => `<option value="${p.id}">${esc(p.codigo)} · ${esc(p.nome)}</option>`).join("");
   $("l-venc").value ||= new Date().toISOString().slice(0, 10);
-  await carregarLancamentos();
+  await Promise.all([carregarLancamentos(), carregarConciliacao()]);
+}
+
+async function carregarConciliacao() {
+  const movs = await api("/api/conciliacao?pendentes=true");
+  $("lista-conc").innerHTML = movs.length ? tabela([["Data", (m) => dataBR(m.data)], ["Histórico do banco", (m) => esc(m.descricao)],
+    ["Valor", (m) => `<span class="${m.valor < 0 ? "neg" : "pos"}">${brl(m.valor)}</span>`, 1],
+    ["Conciliar com", (m) => `<select id="conc-${m.id}" aria-label="Destino do movimento">
+      ${m.sugestoes.map((s) => `<option value="L${s.lancamento_id}">${esc(s.descricao)} · venc. ${dataBR(s.vencimento)}</option>`).join("")}
+      <option value="NOVO">Lançar como ${m.valor < 0 ? "despesa" : "receita"} (já baixada)</option><option value="IGNORAR">Ignorar (ex.: transferência entre contas)</option></select>`],
+    ["", (m) => `<button class="btn sec" onclick="confirmarConciliacao(${m.id})">Confirmar</button>`]], movs)
+    : `<p class="dica">Nenhum movimento pendente de conciliação.</p>`;
+}
+
+async function importarExtrato() {
+  const arq = $("ofx").files[0];
+  if (!arq) { $("conc-msg").innerHTML = `<div class="msg err">Escolha o arquivo OFX do extrato.</div>`; return; }
+  const fd = new FormData(); fd.append("arquivo", arq);
+  try {
+    const r = await api("/api/conciliacao/importar", {method: "POST", body: fd});
+    $("ofx").value = ""; $("conc-msg").innerHTML = `<div class="msg ok">${r.novos} movimento(s) novo(s)${r.repetidos ? `, ${r.repetidos} já importado(s)` : ""}.</div>`;
+    await carregarConciliacao();
+  } catch (e) { $("conc-msg").innerHTML = `<div class="msg err">${esc(e.message)}</div>`; }
+}
+
+async function confirmarConciliacao(id) {
+  const destino = $(`conc-${id}`).value;
+  try {
+    if (destino === "IGNORAR") await api(`/api/conciliacao/${id}/ignorar`, {method: "POST"});
+    else if (destino === "NOVO") await api(`/api/conciliacao/${id}/lancar`, {method: "POST", json: {categoria: "OUTROS"}});
+    else await api(`/api/conciliacao/${id}/conciliar`, {method: "POST", json: {lancamento_id: Number(destino.slice(1))}});
+    await carregarFinanceiro();
+  } catch (e) { $("conc-msg").innerHTML = `<div class="msg err">${esc(e.message)}</div>`; }
 }
 
 async function carregarLancamentos() {
@@ -1013,15 +1090,26 @@ async function criarLancamento() {
 // --- Configurações da empresa ----------------------------------------------
 const CAMPOS_EMPRESA = [["nome", "Razão social", "text"], ["cnpj", "CNPJ", "text"], ["perda_chapa_pct", "Perda de chapa (%)"], ["perda_fita_pct", "Perda de fita (%)"],
   ["imposto_venda_pct", "Imposto sobre a venda (%)"], ["garantia_meses", "Garantia (meses)"], ["chapa_comprimento_mm", "Chapa padrão: comprimento (mm)"], ["chapa_largura_mm", "Chapa padrão: largura (mm)"],
-  ["serra_mm", "Espessura da serra (mm)"], ["refilo_mm", "Refilo da chapa (mm)"]];
+  ["serra_mm", "Espessura da serra (mm)"], ["refilo_mm", "Refilo da chapa (mm)"],
+  ["uf", "UF da empresa", "text"], ["inscricao_estadual", "Inscrição estadual", "text"], ["ncm_padrao", "NCM padrão (móveis)", "text"],
+  ["cfop_interno", "CFOP venda no estado", "text"], ["cfop_interestadual", "CFOP venda fora do estado", "text"], ["csosn_padrao", "CSOSN (Simples)", "text"],
+  ["fiscal_ambiente", "Ambiente da NF-e", "ambiente"], ["fiscal_token", "Token do emissor (Focus NFe)", "senha"]];
 async function carregarEmpresa() {
   const e = await api("/api/empresas/atual");
-  $("cfg-empresa").innerHTML = CAMPOS_EMPRESA.map(([k, r, t]) => `<label>${r}<input id="cfg-${k}" value="${esc(e[k] ?? "")}" ${t ? "" : 'inputmode="decimal"'}></label>`).join("");
+  $("cfg-empresa").innerHTML = CAMPOS_EMPRESA.map(([k, r, t]) => t === "ambiente"
+    ? `<label>${r}<select id="cfg-${k}"><option value="homologacao" ${e[k] === "homologacao" ? "selected" : ""}>Homologação (testes)</option><option value="producao" ${e[k] === "producao" ? "selected" : ""}>Produção (vale imposto)</option></select></label>`
+    : t === "senha" ? `<label>${r}<input id="cfg-${k}" type="password" autocomplete="off" placeholder="${e.fiscal_token_configurado ? "configurado (deixe em branco para manter)" : "não configurado"}"></label>`
+    : `<label>${r}<input id="cfg-${k}" value="${esc(e[k] ?? "")}" ${t ? "" : 'inputmode="decimal"'}></label>`).join("");
 }
 async function salvarEmpresa() {
   const dados = {};
-  for (const [k, , t] of CAMPOS_EMPRESA) { const v = $(`cfg-${k}`).value.trim(); dados[k] = t ? (v || null) : Number(v.replace(",", ".")); }
-  try { const e = await api("/api/empresas/atual", {method: "PUT", json: dados}); $("empresa").textContent = e.nome; $("cfg-msg").innerHTML = `<div class="msg ok">Configurações salvas.</div>`; }
+  for (const [k, , t] of CAMPOS_EMPRESA) {
+    const v = $(`cfg-${k}`).value.trim();
+    if (t === "senha") { if (v) dados[k] = v; continue; }
+    if (["uf", "inscricao_estadual"].includes(k) && !v) continue;
+    dados[k] = t ? (v || null) : Number(v.replace(",", "."));
+  }
+  try { const e = await api("/api/empresas/atual", {method: "PUT", json: dados}); $("empresa").textContent = e.nome; await carregarEmpresa(); $("cfg-msg").innerHTML = `<div class="msg ok">Configurações salvas.</div>`; }
   catch (e) { $("cfg-msg").innerHTML = `<div class="msg err">${esc(e.message)}</div>`; }
 }
 

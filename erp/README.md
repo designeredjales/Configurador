@@ -22,6 +22,7 @@ Projeto (Promob) → Engenharia (BOM + consumo + gate) → Ordem de Produção �
 | **Estoque** | Saldo por movimentação, reserva automática na liberação do projeto, baixa automática na conclusão, inventário com ajuste pela diferença, custo médio ponderado |
 | **Comercial** | Valor de tabela, pedido à fábrica, venda ao cliente, frete, montagem e condição de pagamento lidos do XML; contrato gera as parcelas a receber |
 | **Financeiro** | Contas a receber e a pagar (a compra recebida vira conta a pagar no prazo do fornecedor), baixas, fluxo de caixa de 6 meses, **DRE por obra** (receita − impostos − material − custos diretos = margem de contribuição) |
+| **Fiscal e banco** | NF-e de venda por emissor integrado (Focus NFe) com validação prévia e CFOP automático; conciliação bancária por extrato OFX com sugestão de pareamento |
 | **Indicadores do dono** | Painel único: vendas contratadas, margem de contribuição ponderada, pontualidade, prazo contrato→entrega, gargalo da fábrica, retrabalho, caixa vencido e alertas |
 | **Montagem e pós-obra** | Agenda de montagem (só inicia com a produção concluída), checklist de entrega com quem conferiu, entrega com nome de quem recebeu; assistência técnica com garantia, causa raiz e custo lançado no DRE da obra |
 | **Compras (MRP)** | Sugestão de compra = reservado + mínimo − saldo − em pedido; pedido ao fornecedor, envio, recebimento parcial ou total, cancelamento |
@@ -118,6 +119,20 @@ Saldo negativo é permitido e aparece em vermelho: indica consumo sem entrada re
 - **Fluxo de caixa** (`GET /api/financeiro/fluxo`): previsto por vencimento (atrasado entra no mês atual) e realizado por data de baixa, com saldo acumulado.
 - **Configurações** (`PUT /api/empresas/atual`, administrador): perdas, imposto sobre a venda, chapa padrão, serra e refilo.
 
+## Fiscal e conciliação bancária
+
+**NF-e (Focus NFe, API v2)**
+1. Administrador: Usuários → Configurações da empresa: CNPJ, UF, NCM padrão (9403.40.00 para móveis de cozinha), CFOP no estado/fora (5101/6101), CSOSN (102 no Simples), ambiente e token. O token só é gravado; a API devolve apenas `fiscal_token_configurado`.
+2. No projeto (Financeiro/Gestor): complete o cliente (CPF/CNPJ, endereço, CEP) e clique em **Emitir NF-e**. Faltando dado, o ERP lista as pendências e não chama o emissor.
+3. A nota volta `PROCESSANDO`; **Consultar** atualiza para `AUTORIZADA` (número, chave, DANFE, XML) ou `ERRO` (mensagem da SEFAZ). Com erro, a próxima tentativa usa nova referência.
+
+> A emissão foi testada contra um emissor simulado. Antes de usar em produção: emita em **homologação** com o seu token e peça ao contador que valide NCM, CFOP e CSOSN. Montagem é serviço (NFS-e municipal) e não entra nesta nota.
+
+**Conciliação bancária (OFX)**
+- `POST /api/conciliacao/importar`: lê o extrato OFX (1.x SGML ou 2.x XML); movimentos já importados (mesmo `FITID`) são ignorados.
+- Para cada movimento pendente, sugere contas em aberto do mesmo sentido e valor, com vencimento em até 7 dias.
+- Confirmar baixa a conta com a data e o valor do banco. Sem conta correspondente: **lançar** (cria a conta já baixada, ex.: tarifa) ou **ignorar** (ex.: transferência entre contas).
+
 ## Indicadores do dono
 
 `GET /api/indicadores?dias=90` (Administrador e Gestor), também a tela inicial desses perfis:
@@ -177,6 +192,9 @@ erp/
       financeiro.py    # contrato, contas, DRE por obra, fluxo de caixa
       pos_obra.py      # montagem, checklist de entrega, assistência técnica
       indicadores.py   # painel do dono
+      fiscal.py        # NF-e via Focus NFe
+      conciliacao.py   # extrato OFX e pareamento com contas
+      code128.py       # código de barras das etiquetas
     routers/           # API REST (cadastros, projetos, produção)
     static/index.html  # interface web (painel, projetos, OPs, apontamento, materiais)
   tests/               # fluxo completo, XML do Promob, gate, perfis, isolamento entre empresas
@@ -190,5 +208,5 @@ erp/
 3. **Integração com a otimizadora** (Corte Certo, Optiplanning) e programas CNC por peça.
 4. **Compras 2.0**: cotação entre fornecedores, envio do pedido por e-mail/WhatsApp, lotes e sobras de chapa reaproveitáveis.
 5. **Pós-obra 2.0**: fotos da obra no checklist, assinatura do cliente na tela e peça de reposição gerando OP.
-6. **Fiscal**: NF-e via emissor integrado (Focus NFe, eNotas) e conciliação bancária.
+6. **Fiscal 2.0**: cancelamento e carta de correção da NF-e, NFS-e da montagem, uma linha por ambiente na nota.
 7. **Alembic** para migrações e PostgreSQL como padrão.
