@@ -36,6 +36,7 @@ Projeto (Promob) → Engenharia (BOM + consumo + gate) → Ordem de Produção �
 - **Erros com código:** erro inesperado mostra ao usuário um código de 8 caracteres e fica registrado com rota e rastreio. O Sentry é opcional (`SENTRY_DSN`).
 - **Backup diário:** serviço `backup` no docker-compose, com retenção, cópia opcional na nuvem (rclone) e script de restauração. O último backup aparece em Configurações → Saúde do sistema, com alerta depois de 26 horas.
 - **Logs JSON** por requisição e `/api/saude` para monitor externo. Detalhes no [DEPLOY.md](DEPLOY.md).
+- **Kit de VPS**: `scripts/provisionar.sh` instala tudo numa VPS Ubuntu limpa (firewall, fail2ban, Docker, segredos gerados, HTTPS automático com Caddy); `scripts/atualizar.sh` atualiza com backup antes e volta sozinho se a versão nova falhar; `scripts/verificar.sh` confere a saúde da instalação. Testado de ponta a ponta com Docker.
 
 ## Rodar
 
@@ -346,7 +347,7 @@ erp/
       limite.py        # limite de tentativas (login, redefinição)
       email.py         # envio SMTP
   migrations/          # migrações do banco (Alembic)
-  Dockerfile, docker-compose.yml, DEPLOY.md
+  Dockerfile, docker-compose.yml, docker-compose.vps.yml, deploy/Caddyfile, DEPLOY.md
     routers/           # API REST (cadastros, projetos, produção)
     static/index.html  # interface web (painel, projetos, OPs, apontamento, materiais)
   tests/               # fluxo completo, XML do Promob, gate, perfis, isolamento entre empresas

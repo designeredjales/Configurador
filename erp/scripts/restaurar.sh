@@ -14,3 +14,11 @@ if [ "${2:-}" != "--sim" ]; then
 fi
 pg_restore --clean --if-exists --no-owner -d "$PGDATABASE" "$ARQ"
 echo "restaurado: $(basename "$ARQ")"
+# Renders das propostas: o pacote do mesmo horário volta para o volume de arquivos (montado com escrita só aqui)
+PACOTE="${ARQ/erp_/erp_arquivos_}"; PACOTE="${PACOTE%.dump}.tar.gz"
+if [ -f "$PACOTE" ] && [ -w /arquivos ]; then
+  tar -xzf "$PACOTE" -C /arquivos && echo "arquivos restaurados: $(basename "$PACOTE")"
+elif [ -f "$PACOTE" ]; then
+  echo "Renders do mesmo horário: $(basename "$PACOTE"). Para restaurá-los, no servidor (pasta do ERP):"
+  echo "  docker run --rm -v erp_arquivos:/arquivos -v erp_backups:/backups:ro postgres:16 tar -xzf /backups/$(basename "$PACOTE") -C /arquivos"
+fi

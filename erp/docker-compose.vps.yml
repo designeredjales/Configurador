@@ -1,0 +1,26 @@
+# Produção na VPS: Caddy na frente do ERP com HTTPS automático (Let's Encrypt).
+# Ativado pelo .env (COMPOSE_FILE=docker-compose.yml:docker-compose.vps.yml), junto com ERP_BIND=127.0.0.1.
+services:
+  caddy:
+    image: caddy:2
+    restart: unless-stopped
+    depends_on:
+      - erp
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"
+    environment:
+      ERP_DOMINIO: "${ERP_DOMINIO:?defina ERP_DOMINIO no .env, por exemplo erp.suaempresa.com.br}"
+      ACME_EMAIL: "${ACME_EMAIL:?defina ACME_EMAIL no .env para os avisos do certificado}"
+    volumes:
+      - ./deploy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_dados:/data
+      - caddy_config:/config
+    logging:
+      driver: json-file
+      options: {max-size: "10m", max-file: "5"}
+
+volumes:
+  caddy_dados:
+  caddy_config:

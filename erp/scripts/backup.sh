@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Backup do banco do ERP. Roda no serviço "backup" do docker-compose:
+# Backup do banco e dos arquivos (renders das propostas) do ERP. Roda no serviço "backup" do docker-compose:
 #   - um backup ao subir e depois todo dia na hora BACKUP_HORA (fuso TZ);
 #   - guarda BACKUP_DIAS dias na pasta /backups (volume "backups");
 #   - com RCLONE_DESTINO definido (ex.: nuvem:erp-backups), envia cada arquivo para a nuvem.
@@ -20,9 +20,16 @@ fazer_backup() {
   pg_dump -Fc --no-owner -f "$arq.parcial"     # PGHOST, PGUSER, PGDATABASE e PGPASSWORD vêm do ambiente
   mv "$arq.parcial" "$arq"                       # só vira .dump quando o arquivo está completo
   echo "$(date '+%F %T') backup ok: $(basename "$arq") ($(du -h "$arq" | cut -f1))"
-  find "$PASTA" -name 'erp_*.dump' -mtime +"$DIAS" -print -delete | sed 's/^/removido (antigo): /'
+  local arqs=""
+  if [ -d /arquivos ] && [ -n "$(ls -A /arquivos 2>/dev/null)" ]; then
+    arqs="$PASTA/erp_arquivos_$(date +%Y%m%d_%H%M).tar.gz"
+    tar -czf "$arqs.parcial" -C /arquivos . && mv "$arqs.parcial" "$arqs"
+    echo "$(date '+%F %T') arquivos ok: $(basename "$arqs") ($(du -h "$arqs" | cut -f1))"
+  fi
+  find "$PASTA" \( -name 'erp_*.dump' -o -name 'erp_arquivos_*.tar.gz' \) -mtime +"$DIAS" -print -delete | sed 's/^/removido (antigo): /'
   if [ -n "${RCLONE_DESTINO:-}" ]; then
     rclone copy "$arq" "$RCLONE_DESTINO" && echo "cópia na nuvem ok: $RCLONE_DESTINO"
+    [ -n "$arqs" ] && rclone copy "$arqs" "$RCLONE_DESTINO" && echo "arquivos na nuvem ok"
   fi
 }
 

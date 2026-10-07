@@ -1,9 +1,17 @@
-# Ambiente completo: ERP + PostgreSQL. Uso: copie .env.exemplo para .env, ajuste e rode
+# Ambiente completo: ERP + PostgreSQL + backup. Uso: copie .env.exemplo para .env, ajuste e rode
 #   docker compose up -d
+# Na VPS, com HTTPS (Caddy), o .env define COMPOSE_FILE=docker-compose.yml:docker-compose.vps.yml
+# e ERP_BIND=127.0.0.1: o ERP só responde pelo proxy. O script scripts/provisionar.sh faz tudo isso.
+x-logs: &logs
+  logging:
+    driver: json-file
+    options: {max-size: "10m", max-file: "5"}   # logs não enchem o disco
+
 services:
   banco:
     image: postgres:16
     restart: unless-stopped
+    <<: *logs
     environment:
       POSTGRES_DB: erp
       POSTGRES_USER: erp
@@ -18,7 +26,9 @@ services:
 
   erp:
     build: .
+    image: erp-moveleiro:${APP_VERSAO:-local}
     restart: unless-stopped
+    <<: *logs
     depends_on:
       banco:
         condition: service_healthy
@@ -35,17 +45,19 @@ services:
       APP_VERSAO: ${APP_VERSAO:-}
       ERP_PASTA_BACKUP: /backups
       ERP_PASTA_ARQUIVOS: /app/arquivos
+      ERP_AGENDADOR: ${ERP_AGENDADOR:-1}
       TZ: ${TZ:-America/Sao_Paulo}
     volumes:
       - arquivos:/app/arquivos   # renders e imagens das propostas comerciais
       - backups:/backups:ro   # só para o painel "Saúde do sistema" mostrar o último backup
     ports:
-      - "8000:8000"
+      - "${ERP_BIND:-0.0.0.0}:${ERP_PORTA:-8000}:8000"
 
   # Backup diário do banco (pg_dump), com retenção e cópia opcional para a nuvem (rclone)
   backup:
     image: postgres:16
     restart: unless-stopped
+    <<: *logs
     depends_on:
       banco:
         condition: service_healthy
@@ -60,6 +72,7 @@ services:
       TZ: ${TZ:-America/Sao_Paulo}
     volumes:
       - backups:/backups
+      - arquivos:/arquivos:ro   # renders das propostas entram no backup
       - ./scripts:/scripts:ro
     entrypoint: ["bash", "/scripts/backup.sh"]
 

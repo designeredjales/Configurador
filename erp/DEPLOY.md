@@ -4,30 +4,65 @@ O ERP é uma aplicação Python (FastAPI) com PostgreSQL. Escolha um dos caminho
 
 ## Opção A: servidor próprio (VPS) com Docker — recomendada
 
-Uma VPS de 2 GB de RAM (Hostinger, Contabo, DigitalOcean, AWS Lightsail) atende dezenas de usuários.
+### Do que você precisa
 
-1. No servidor, instale o Docker e clone o repositório.
-2. Na pasta `erp/`, copie `.env.exemplo` para `.env` e preencha:
-   - `POSTGRES_PASSWORD`: senha forte do banco;
-   - `ERP_SECRET`: `python -c "import secrets; print(secrets.token_urlsafe(48))"`;
-   - `ERP_URL_PUBLICA`: o endereço com HTTPS (ex.: `https://erp.suaempresa.com.br`);
-   - SMTP (opcional, para "Esqueci a senha"): servidor, porta, usuário e senha do seu e-mail transacional.
-3. `docker compose up -d --build`. Na subida, o contêiner aplica as migrações (`alembic upgrade head`) e só então inicia o servidor.
-4. **HTTPS é obrigatório** (senhas e tokens trafegam pela rede). Coloque na frente um proxy com certificado automático, por exemplo o Caddy:
-   ```
-   erp.suaempresa.com.br {
-       reverse_proxy localhost:8000
-   }
-   ```
-5. Acesse o endereço e cadastre a empresa. O primeiro usuário vira administrador.
+- **VPS Ubuntu 24.04 (ou 22.04)** com acesso root por SSH. Para começar: 2 vCPU, 4 GB de RAM e 50 GB de disco (Hostinger KVM 2, Hetzner CPX21, Contabo VPS S, DigitalOcean 4 GB). Com 2 GB de RAM funciona: o script cria swap.
+- **Um domínio** (ex.: `erp.suaempresa.com.br`) com um registro **A** apontando para o IP da VPS.
+- **Um e-mail** para os avisos do certificado HTTPS.
+- Se o repositório for privado, um **token de leitura** do GitHub (fine-grained, só `Contents: read` neste repositório). Ele é usado só no clone e não fica gravado no servidor.
 
-**Atualizar a versão:** `APP_VERSAO=$(git rev-parse --short HEAD) docker compose up -d --build` depois do `git pull`. As migrações novas rodam sozinhas na subida.
+### Instalação em um comando
+
+No servidor, como root:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/designeredjales/Configurador/claude/adoring-heisenberg-kzz1c6/erp/scripts/provisionar.sh -o provisionar.sh
+DOMINIO=erp.suaempresa.com.br EMAIL=ti@suaempresa.com.br RAMO=claude/adoring-heisenberg-kzz1c6 bash provisionar.sh
+# repositório privado: acrescente GIT_TOKEN=github_pat_... antes do bash (e baixe o script com o mesmo token)
+```
+
+Depois que o PR for mesclado, use `RAMO=main` (o padrão). O script, em 7 etapas:
+
+1. atualiza o sistema, liga as **atualizações de segurança automáticas**, o **fail2ban** e o **firewall** (só SSH, 80 e 443), cria swap em máquina pequena e ajusta o fuso;
+2. instala o **Docker**;
+3. baixa o ERP em `/opt/erp-moveleiro`;
+4. cria o `.env` com **senha do banco e segredo gerados** (permissão 600; o `.env` nunca é sobrescrito numa segunda execução);
+5. confere se o DNS do domínio aponta para a VPS;
+6. sobe **banco, ERP, backup e Caddy** (HTTPS automático com Let's Encrypt, HTTP→HTTPS, HSTS, compressão). O ERP fica só em `127.0.0.1` e é alcançado pelo proxy;
+7. confere se o ERP e o HTTPS responderam.
+
+Ao final, acesse `https://seu-dominio` e cadastre a empresa: o primeiro usuário vira administrador. Em seguida aplique o **setup da base** (Configurações) e informe os tokens pela tela.
+
+### Operação do dia a dia (na pasta `/opt/erp-moveleiro/erp`)
+
+| Tarefa | Comando |
+|---|---|
+| Conferir tudo (contêineres, ERP, HTTPS e validade do certificado, último backup, disco, memória) | `bash scripts/verificar.sh` |
+| **Atualizar a versão** | `bash scripts/atualizar.sh` |
+| Backup agora (banco + renders) | `docker compose exec backup bash /scripts/backup.sh agora` |
+| Logs | `docker compose logs -f erp` (ou `caddy`, `backup`) |
+| Reiniciar | `docker compose restart erp` |
+
+`atualizar.sh` faz **backup antes**, baixa e constrói a versão nova e confere se ela respondeu. **Se o build falhar, nada muda**; **se a versão nova não subir em 3 minutos, o código e a imagem anteriores voltam sozinhos**. As 3 imagens mais recentes ficam guardadas para voltar sem rebuild. Migrações de banco não são desfeitas automaticamente: se a volta acontecer depois de uma migração nova, restaure o backup do passo 1 (o nome aparece na tela). Durante a troca, o Caddy segura as requisições por até 60 s em vez de devolver erro.
+
+### Segurança recomendada depois da instalação
+
+- Entre por **chave SSH** e desligue o login por senha (`PasswordAuthentication no` em `/etc/ssh/sshd_config`, depois `systemctl restart ssh`). Só faça isso depois de testar a chave numa segunda janela.
+- Guarde o `.env` num cofre de senhas: sem ele, os backups não sobem em outra máquina.
+- Ligue a **cópia do backup na nuvem** (`RCLONE_DESTINO`) e um **monitor externo** em `https://seu-dominio/api/saude` (UptimeRobot, Better Stack).
+- Libere no provedor só as portas 22, 80 e 443 (o firewall da VPS já faz isso).
+
+### Instalação manual (sem o script)
+
+1. Instale o Docker e clone o repositório.
+2. Em `erp/`, copie `.env.exemplo` para `.env` e preencha `POSTGRES_PASSWORD`, `ERP_SECRET` (`openssl rand -base64 48`), `ERP_URL_PUBLICA`, `ERP_DOMINIO`, `ACME_EMAIL`, `ERP_BIND=127.0.0.1`, `COMPOSE_FILE=docker-compose.yml:docker-compose.vps.yml` e `COMPOSE_PROJECT_NAME=erp`.
+3. `docker compose up -d --build`. Na subida, o contêiner aplica as migrações e só então inicia o servidor.
 
 ## Backup automático
 
 O serviço `backup` do `docker-compose.yml` já vem ligado:
 
-- faz um backup assim que sobe e depois **todo dia às `BACKUP_HORA`** (padrão 03h, no fuso `TZ`);
+- faz um backup assim que sobe e depois **todo dia às `BACKUP_HORA`** (padrão 03h, no fuso `TZ`): o banco (`erp_*.dump`) e os renders das propostas (`erp_arquivos_*.tar.gz`);
 - guarda **`BACKUP_DIAS` dias** (padrão 14) no volume `backups`, em arquivos `erp_AAAAMMDD_HHMM.dump`;
 - com `RCLONE_DESTINO` preenchido, **envia cada backup para a nuvem** (S3, Backblaze B2, Google Drive, Dropbox... qualquer destino do rclone, configurado pelas variáveis `RCLONE_CONFIG_*` no `.env`). Backup que fica só no próprio servidor não protege contra a perda do servidor: ligue a nuvem.
 
@@ -39,6 +74,8 @@ docker compose exec backup ls -lh /backups                       # listar
 docker compose stop erp                                          # restaurar (apaga os dados atuais!)
 docker compose exec backup bash /scripts/restaurar.sh erp_20261007_0300.dump
 docker compose start erp
+# renders do mesmo horário (o restaurar.sh mostra o comando exato):
+docker run --rm -v erp_arquivos:/arquivos -v erp_backups:/backups:ro postgres:16 tar -xzf /backups/erp_arquivos_20261007_0300.tar.gz -C /arquivos
 ```
 
 Teste a restauração uma vez por mês num banco à parte: backup que nunca foi restaurado não é backup.
