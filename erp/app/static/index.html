@@ -49,9 +49,46 @@ button.sec { background: none; color: var(--brand); }
 .feito { color: var(--ok); } .pend { color: var(--muted); }
 a { color: var(--brand); cursor: pointer; }
 .dica { color: var(--muted); font-size: 13px; margin: 0 0 10px; }
+.acesso { max-width: 420px; margin: 8vh auto; padding-inline: 16px; }
+.acesso .card { padding: 24px; }
+.acesso h1 { font-size: 22px; margin: 0 0 4px; } .acesso h1 span { color: var(--brand); }
+.acesso form { display: grid; gap: 10px; margin-top: 14px; }
+.acesso label { display: grid; gap: 4px; font-size: 13px; color: var(--muted); }
+.acesso .troca { margin-top: 14px; font-size: 13px; color: var(--muted); }
+#sessao { margin-left: auto; display: flex; gap: 10px; align-items: center; color: var(--muted); font-size: 13px; }
+#sessao b { color: var(--ink); font-weight: 600; }
+.perfil { font-size: 11px; letter-spacing: .04em; }
+.inativo { opacity: .55; }
 </style>
 </head>
 <body>
+<div id="tela-acesso" class="acesso" hidden>
+  <div class="card">
+    <h1>ERP <span>Moveleiro</span></h1>
+    <div id="form-login">
+      <p class="dica">Entre com o e-mail e a senha da sua empresa.</p>
+      <form id="login">
+        <label>E-mail <input id="l-email" type="email" autocomplete="username" required></label>
+        <label>Senha <input id="l-senha" type="password" autocomplete="current-password" required></label>
+        <button class="btn" type="submit">Entrar</button>
+      </form>
+      <p class="troca">Primeira vez? <a id="ir-registro">Cadastre sua empresa</a></p>
+    </div>
+    <div id="form-registro" hidden>
+      <p class="dica">Cadastre a empresa. Você será o administrador e poderá convidar a equipe depois.</p>
+      <form id="registro">
+        <label>Empresa <input id="r-empresa" required minlength="2"></label>
+        <label>Seu nome <input id="r-nome" autocomplete="name" required minlength="2"></label>
+        <label>E-mail <input id="r-email" type="email" autocomplete="username" required></label>
+        <label>Senha (mínimo 8 caracteres) <input id="r-senha" type="password" autocomplete="new-password" required minlength="8"></label>
+        <button class="btn" type="submit">Criar empresa</button>
+      </form>
+      <p class="troca">Já tem acesso? <a id="ir-login">Entrar</a></p>
+    </div>
+    <div id="acesso-msg"></div>
+  </div>
+</div>
+<div id="app" hidden>
 <header>
   <h1>ERP <span>Moveleiro</span></h1>
   <nav id="abas">
@@ -60,8 +97,9 @@ a { color: var(--brand); cursor: pointer; }
     <button data-aba="ops">Ordens de Produção</button>
     <button data-aba="apontamento">Apontamento</button>
     <button data-aba="materiais">Materiais</button>
+    <button data-aba="usuarios">Usuários</button>
   </nav>
-  <div id="empresa"></div>
+  <div id="sessao"><span id="empresa"></span><span id="quem"></span><button class="btn sec" id="sair" type="button">Sair</button></div>
 </header>
 <main>
   <section id="painel">
@@ -94,11 +132,31 @@ a { color: var(--brand); cursor: pointer; }
     <div class="card"><h2>Baixa por código de barras</h2>
       <div class="linha">
         <select id="ap-centro"></select>
-        <input id="ap-operador" placeholder="Operador">
+        <span class="dica" id="ap-quem"></span>
       </div>
       <input id="scan" placeholder="Bipe a etiqueta da peça e tecle Enter" autocomplete="off">
       <div id="ap-msg"></div>
     </div>
+  </section>
+
+  <section id="usuarios">
+    <div class="card"><h2>Novo usuário</h2>
+      <div class="linha">
+        <input id="u-nome" placeholder="Nome">
+        <input id="u-email" type="email" placeholder="E-mail">
+        <input id="u-senha" type="password" placeholder="Senha inicial (8+)" autocomplete="new-password">
+        <select id="u-perfil">
+          <option value="OPERADOR">Operador: apontamento</option>
+          <option value="PCP">PCP: ordens e apontamento</option>
+          <option value="ENGENHARIA">Engenharia: projetos e materiais</option>
+          <option value="GESTOR">Gestor: engenharia + PCP</option>
+          <option value="ADMIN">Administrador: tudo</option>
+        </select>
+        <button class="btn" onclick="criarUsuario()">Adicionar</button>
+      </div>
+      <div id="u-msg"></div>
+    </div>
+    <div class="card"><h2>Equipe</h2><div class="tabela" id="lista-usuarios"></div></div>
   </section>
 
   <section id="materiais">
@@ -119,6 +177,7 @@ a { color: var(--brand); cursor: pointer; }
     <div class="card"><h2>Cadastro</h2><div class="tabela" id="lista-materiais"></div></div>
   </section>
 </main>
+</div>
 
 <script>
 const $ = (id) => document.getElementById(id);
@@ -129,14 +188,17 @@ const dataBR = (d) => d ? new Date(d + (d.length === 10 ? "T00:00" : "")).toLoca
 const tag = (s) => `<span class="tag ${s}">${s}</span>`;
 const barra = (p) => `<div class="barra" title="${p}%"><i style="width:${p}%"></i></div>`;
 
-let empresaId = new URLSearchParams(location.search).get("empresa");
-try { if (empresaId) localStorage.setItem("empresaId", empresaId); else empresaId = localStorage.getItem("empresaId"); } catch (e) {}
+let sessao = null;  // {token, usuario, empresa}
+let token = null;
+try { token = localStorage.getItem("erpToken"); } catch (e) {}
+function guardarToken(t) { token = t; try { t ? localStorage.setItem("erpToken", t) : localStorage.removeItem("erpToken"); } catch (e) {} }
 
 async function api(caminho, opcoes = {}) {
-  const headers = {"X-Empresa-Id": empresaId, ...(opcoes.headers || {})};
+  const headers = {...(token ? {Authorization: `Bearer ${token}`} : {}), ...(opcoes.headers || {})};
   if (opcoes.json !== undefined) { headers["Content-Type"] = "application/json"; opcoes.body = JSON.stringify(opcoes.json); }
   const r = await fetch(caminho, {...opcoes, headers});
   const corpo = await r.json().catch(() => ({}));
+  if (r.status === 401 && token) { guardarToken(null); mostrarAcesso("Sua sessão expirou. Entre novamente."); }
   if (!r.ok) {
     const d = corpo.detail;
     const texto = typeof d === "string" ? d : d?.pendencias ? `${d.mensagem}:\n• ${d.pendencias.join("\n• ")}`
@@ -154,7 +216,7 @@ function tabela(colunas, linhas) {
 }
 
 // --- Navegação --------------------------------------------------------------
-const carregadores = {painel: carregarPainel, projetos: carregarProjetos, ops: carregarOps,
+const carregadores = {painel: carregarPainel, projetos: carregarProjetos, ops: carregarOps, usuarios: carregarUsuarios,
                       apontamento: carregarApontamento, materiais: carregarMateriais};
 function abrir(aba) {
   document.querySelectorAll("section").forEach((s) => s.classList.toggle("ativo", s.id === aba));
@@ -287,7 +349,7 @@ $("scan").addEventListener("keydown", async (ev) => {
   if (!codigo) return;
   try {
     const r = await api("/api/apontamentos", {method: "POST", json: {codigo_barras: codigo,
-      centro_codigo: $("ap-centro").value, operador: $("ap-operador").value || null}});
+      centro_codigo: $("ap-centro").value}});
     $("ap-msg").innerHTML = `<div class="msg ok">✔ ${esc(r.peca)} baixada em ${r.centro_codigo}.
 Próxima etapa: ${r.proxima_etapa ?? "peça finalizada"} · OP #${r.op_numero} ${r.op_progresso_pct}% (${r.op_status})</div>`;
   } catch (e) { $("ap-msg").innerHTML = `<div class="msg err">✖ ${esc(codigo)}: ${esc(e.message)}</div>`; }
@@ -313,18 +375,80 @@ async function criarMaterial() {
   } catch (e) { $("m-msg").innerHTML = `<div class="msg err">${esc(e.message)}</div>`; }
 }
 
-// --- Empresa (tenant) -------------------------------------------------------
+// --- Acesso -----------------------------------------------------------------
+const ABAS = {
+  ADMIN: ["painel", "projetos", "ops", "apontamento", "materiais", "usuarios"],
+  GESTOR: ["painel", "projetos", "ops", "apontamento", "materiais"],
+  ENGENHARIA: ["painel", "projetos", "ops", "materiais"],
+  PCP: ["painel", "projetos", "ops", "apontamento", "materiais"],
+  OPERADOR: ["apontamento", "ops", "painel"],
+};
+const NOME_PERFIL = {ADMIN: "Administrador", GESTOR: "Gestor", ENGENHARIA: "Engenharia", PCP: "PCP", OPERADOR: "Operador"};
+
+function mostrarAcesso(msg) {
+  sessao = null; $("app").hidden = true; $("tela-acesso").hidden = false;
+  $("form-login").hidden = false; $("form-registro").hidden = true; $("l-senha").value = "";
+  $("acesso-msg").innerHTML = msg ? `<div class="msg err">${esc(msg)}</div>` : "";
+}
+
+function entrar(s) {
+  sessao = s; guardarToken(s.token);
+  $("tela-acesso").hidden = true; $("app").hidden = false;
+  $("empresa").textContent = s.empresa.nome;
+  $("quem").innerHTML = `<b>${esc(s.usuario.nome)}</b> <span class="tag perfil">${NOME_PERFIL[s.usuario.perfil]}</span>`;
+  $("ap-quem").textContent = `Baixas registradas em nome de ${s.usuario.nome}.`;
+  const abas = ABAS[s.usuario.perfil] || [];
+  document.querySelectorAll("#abas button").forEach((b) => b.hidden = !abas.includes(b.dataset.aba));
+  abrir(abas[0]);
+}
+
+async function enviarAcesso(rota, corpo) {
+  try {
+    const r = await fetch(rota, {method: "POST", headers: {"Content-Type": "application/json"}, body: JSON.stringify(corpo)});
+    const d = await r.json().catch(() => ({}));
+    if (!r.ok) throw new Error(typeof d.detail === "string" ? d.detail : Array.isArray(d.detail) ? d.detail.map((x) => x.msg.replace(/^Value error, /, "")).join("; ") : `Erro ${r.status}`);
+    entrar(d);
+  } catch (e) { $("acesso-msg").innerHTML = `<div class="msg err">${esc(e.message)}</div>`; }
+}
+
+$("login").addEventListener("submit", (ev) => { ev.preventDefault();
+  enviarAcesso("/api/auth/login", {email: $("l-email").value, senha: $("l-senha").value}); });
+$("registro").addEventListener("submit", (ev) => { ev.preventDefault();
+  enviarAcesso("/api/auth/registrar", {empresa: $("r-empresa").value, nome: $("r-nome").value,
+    email: $("r-email").value, senha: $("r-senha").value}); });
+$("ir-registro").onclick = () => { $("form-login").hidden = true; $("form-registro").hidden = false; $("acesso-msg").innerHTML = ""; };
+$("ir-login").onclick = () => { $("form-login").hidden = false; $("form-registro").hidden = true; $("acesso-msg").innerHTML = ""; };
+$("sair").onclick = () => { guardarToken(null); mostrarAcesso(); };
+
+// --- Usuários (administrador) ----------------------------------------------
+async function carregarUsuarios() {
+  const lista = await api("/api/usuarios");
+  $("lista-usuarios").innerHTML = tabela([["Nome", (u) => `<span class="${u.ativo ? "" : "inativo"}">${esc(u.nome)}</span>`],
+    ["E-mail", (u) => esc(u.email)],
+    ["Perfil", (u) => `<select onchange="alterarUsuario(${u.id}, {perfil: this.value})">${Object.keys(NOME_PERFIL).map((p) => `<option value="${p}" ${p === u.perfil ? "selected" : ""}>${NOME_PERFIL[p]}</option>`).join("")}</select>`],
+    ["Último acesso", (u) => u.ultimo_acesso ? new Date(u.ultimo_acesso).toLocaleString("pt-BR") : "—"],
+    ["Situação", (u) => u.id === sessao.usuario.id ? "Você" : `<button class="btn sec" onclick="alterarUsuario(${u.id}, {ativo: ${!u.ativo}})">${u.ativo ? "Desativar" : "Reativar"}</button>`]], lista);
+}
+
+async function alterarUsuario(id, dados) {
+  try { await api(`/api/usuarios/${id}`, {method: "PATCH", json: dados}); $("u-msg").innerHTML = ""; }
+  catch (e) { $("u-msg").innerHTML = `<div class="msg err">${esc(e.message)}</div>`; }
+  carregarUsuarios();
+}
+
+async function criarUsuario() {
+  try {
+    await api("/api/usuarios", {method: "POST", json: {nome: $("u-nome").value.trim(), email: $("u-email").value.trim(),
+      senha: $("u-senha").value, perfil: $("u-perfil").value}});
+    ["u-nome", "u-email", "u-senha"].forEach((id) => $(id).value = "");
+    $("u-msg").innerHTML = `<div class="msg ok">Usuário criado. Passe o e-mail e a senha inicial para a pessoa entrar.</div>`;
+    carregarUsuarios();
+  } catch (e) { $("u-msg").innerHTML = `<div class="msg err">${esc(e.message.replace(/Value error, /g, ""))}</div>`; }
+}
+
 async function iniciar() {
-  if (empresaId) {
-    try { const e = await api("/api/empresas/atual"); $("empresa").textContent = e.nome; return abrir("painel"); }
-    catch (e) { empresaId = null; }
-  }
-  const nome = prompt("Nome da empresa (primeiro acesso):", "Minha Marcenaria");
-  if (!nome) return;
-  const r = await fetch("/api/empresas", {method: "POST", headers: {"Content-Type": "application/json"}, body: JSON.stringify({nome})});
-  const e = await r.json(); empresaId = String(e.id);
-  try { localStorage.setItem("empresaId", empresaId); } catch (err) {}
-  $("empresa").textContent = e.nome; abrir("painel");
+  if (!token) return mostrarAcesso();
+  try { entrar(await api("/api/auth/eu")); } catch (e) { mostrarAcesso(); }
 }
 iniciar();
 </script>

@@ -1,4 +1,4 @@
-from conftest import importar_exemplo
+from conftest import importar_exemplo, registrar
 
 
 def test_importacao_monta_arvore_do_projeto(client, empresa, materiais):
@@ -90,7 +90,7 @@ def test_fluxo_completo_op_e_apontamentos(client, empresa, materiais):
 
 def test_isolamento_entre_empresas(client, empresa, materiais):
     pid, _ = importar_exemplo(client, empresa)
-    outra = {"X-Empresa-Id": str(client.post("/api/empresas", json={"nome": "Outra"}).json()["id"])}
+    outra = registrar(client, "Outra Marcenaria", "dono@outra.com")
     assert client.get(f"/api/projetos/{pid}", headers=outra).status_code == 404
     assert client.get("/api/materiais", headers=outra).json() == []
     assert client.get("/api/projetos", headers=empresa).json()[0]["id"] == pid

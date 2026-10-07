@@ -4,7 +4,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from ..db import get_db
-from ..deps import empresa_atual
+from ..deps import ENGENHARIA, empresa_atual
 from ..models import Cliente, Empresa, Projeto, StatusProjeto
 from ..schemas import ConsumoProjeto, ProjetoIn, ProjetoOut, ProjetoResumo, ResultadoImportacao
 from ..services import engenharia
@@ -27,7 +27,7 @@ def listar(emp: Empresa = Depends(empresa_atual), db: Session = Depends(get_db))
     )
 
 
-@router.post("", response_model=ProjetoResumo, status_code=201)
+@router.post("", response_model=ProjetoResumo, status_code=201, dependencies=[Depends(ENGENHARIA)])
 def criar(dados: ProjetoIn, emp: Empresa = Depends(empresa_atual), db: Session = Depends(get_db)):
     if dados.cliente_id is not None:
         cliente = db.get(Cliente, dados.cliente_id)
@@ -43,7 +43,8 @@ def criar(dados: ProjetoIn, emp: Empresa = Depends(empresa_atual), db: Session =
     return projeto
 
 
-@router.post("/importar-xml", response_model=ResultadoImportacao, status_code=201)
+@router.post("/importar-xml", response_model=ResultadoImportacao, status_code=201,
+             dependencies=[Depends(ENGENHARIA)])
 async def novo_por_xml(arquivo: UploadFile = File(...), codigo: str | None = Form(None),
                        nome: str | None = Form(None), emp: Empresa = Depends(empresa_atual),
                        db: Session = Depends(get_db)):
@@ -84,7 +85,7 @@ def detalhe(projeto_id: int, emp: Empresa = Depends(empresa_atual), db: Session 
     return carregar(db, emp, projeto_id)
 
 
-@router.post("/{projeto_id}/importar", response_model=ResultadoImportacao)
+@router.post("/{projeto_id}/importar", response_model=ResultadoImportacao, dependencies=[Depends(ENGENHARIA)])
 async def importar(projeto_id: int, arquivo: UploadFile = File(...),
                    emp: Empresa = Depends(empresa_atual), db: Session = Depends(get_db)):
     projeto = carregar(db, emp, projeto_id)
@@ -113,7 +114,7 @@ def consumo(projeto_id: int, emp: Empresa = Depends(empresa_atual), db: Session 
     return engenharia.consumo(db, carregar(db, emp, projeto_id))
 
 
-@router.post("/{projeto_id}/liberar", response_model=ProjetoResumo)
+@router.post("/{projeto_id}/liberar", response_model=ProjetoResumo, dependencies=[Depends(ENGENHARIA)])
 def liberar(projeto_id: int, emp: Empresa = Depends(empresa_atual), db: Session = Depends(get_db)):
     projeto = carregar(db, emp, projeto_id)
     erros = engenharia.liberar(db, projeto)

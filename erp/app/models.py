@@ -44,6 +44,14 @@ class StatusOP(str, Enum):
     CANCELADA = "CANCELADA"
 
 
+class Perfil(str, Enum):
+    ADMIN = "ADMIN"            # tudo, inclusive usuários
+    GESTOR = "GESTOR"          # engenharia + PCP + cadastros
+    ENGENHARIA = "ENGENHARIA"  # projetos, importação, liberação, materiais
+    PCP = "PCP"                # ordens de produção, centros, apontamento
+    OPERADOR = "OPERADOR"      # apontamento e consulta
+
+
 class RegraCentro(str, Enum):
     """Quando uma peça passa pelo centro de trabalho."""
     TODAS = "TODAS"
@@ -60,6 +68,22 @@ class Empresa(Base):
     perda_chapa_pct: Mapped[float] = mapped_column(Float, default=15.0)
     perda_fita_pct: Mapped[float] = mapped_column(Float, default=10.0)
     criado_em: Mapped[datetime] = mapped_column(DateTime, default=agora)
+
+
+class Usuario(Base):
+    __tablename__ = "usuarios"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    empresa_id: Mapped[int] = mapped_column(ForeignKey("empresas.id"), index=True)
+    nome: Mapped[str] = mapped_column(String(120))
+    email: Mapped[str] = mapped_column(String(200), unique=True, index=True)
+    senha_hash: Mapped[str] = mapped_column(String(200))
+    perfil: Mapped[Perfil] = mapped_column(String(20))
+    ativo: Mapped[bool] = mapped_column(default=True)
+    criado_em: Mapped[datetime] = mapped_column(DateTime, default=agora)
+    ultimo_acesso: Mapped[datetime | None] = mapped_column(DateTime)
+
+    empresa: Mapped[Empresa] = relationship()
 
 
 class Cliente(Base):
@@ -267,6 +291,7 @@ class EtapaUnidade(Base):
     sequencia: Mapped[int] = mapped_column(Integer)
     concluida_em: Mapped[datetime | None] = mapped_column(DateTime)
     operador: Mapped[str | None] = mapped_column(String(100))
+    usuario_id: Mapped[int | None] = mapped_column(ForeignKey("usuarios.id"))
 
     unidade: Mapped[UnidadePeca] = relationship(back_populates="etapas")
     centro: Mapped[CentroTrabalho] = relationship()

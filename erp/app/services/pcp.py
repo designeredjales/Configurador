@@ -96,7 +96,7 @@ def progresso(op: OrdemProducao) -> tuple[int, int]:
 
 
 def apontar(db: Session, empresa_id: int, codigo_barras: str, centro_codigo: str,
-            operador: str | None = None) -> tuple[UnidadePeca, EtapaUnidade | None]:
+            usuario=None) -> tuple[UnidadePeca, EtapaUnidade | None]:
     """Dá baixa da peça no centro. Retorna a unidade e a próxima etapa pendente."""
     unidade = db.scalar(
         select(UnidadePeca).join(OrdemProducao)
@@ -121,7 +121,9 @@ def apontar(db: Session, empresa_id: int, codigo_barras: str, centro_codigo: str
         raise ErroPCP(f"Etapa anterior pendente: {anteriores[0].centro.codigo}")
 
     etapa.concluida_em = datetime.now()
-    etapa.operador = operador
+    if usuario is not None:
+        etapa.operador = usuario.nome
+        etapa.usuario_id = usuario.id
 
     if op.status == StatusOP.ABERTA:
         op.status = StatusOP.EM_PRODUCAO

@@ -1,8 +1,9 @@
 from datetime import date, datetime
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
-from .models import RegraCentro, StatusOP, StatusProjeto, TipoMaterial
+from .models import Perfil, RegraCentro, StatusOP, StatusProjeto, TipoMaterial
+from .security import SENHA_MINIMA
 
 
 class Schema(BaseModel):
@@ -20,6 +21,76 @@ class EmpresaIn(Schema):
 
 class EmpresaOut(EmpresaIn):
     id: int
+
+
+# --- Acesso -------------------------------------------------------------------
+
+def _validar_senha(senha: str | None) -> str | None:
+    if senha is not None and len(senha) < SENHA_MINIMA:
+        raise ValueError(f"A senha precisa ter pelo menos {SENHA_MINIMA} caracteres.")
+    return senha
+
+
+def _validar_email(email: str) -> str:
+    email = email.strip()
+    if "@" not in email or "." not in email.split("@")[-1] or " " in email:
+        raise ValueError("E-mail inválido.")
+    return email
+
+
+class RegistroIn(Schema):
+    empresa: str = Field(min_length=2)
+    cnpj: str | None = None
+    nome: str = Field(min_length=2)
+    email: str
+    senha: str
+
+    _senha = field_validator("senha")(_validar_senha)
+    _email = field_validator("email")(_validar_email)
+
+
+class LoginIn(Schema):
+    email: str
+    senha: str
+
+
+class UsuarioIn(Schema):
+    nome: str = Field(min_length=2)
+    email: str
+    senha: str
+    perfil: Perfil
+
+    _senha = field_validator("senha")(_validar_senha)
+    _email = field_validator("email")(_validar_email)
+
+
+class UsuarioAtualizar(Schema):
+    nome: str | None = None
+    perfil: Perfil | None = None
+    ativo: bool | None = None
+    senha: str | None = None
+
+    _senha = field_validator("senha")(_validar_senha)
+
+
+class UsuarioOut(Schema):
+    id: int
+    nome: str
+    email: str
+    perfil: Perfil
+    ativo: bool
+    ultimo_acesso: datetime | None
+
+
+class EmpresaResumo(Schema):
+    id: int
+    nome: str
+
+
+class Sessao(Schema):
+    token: str
+    usuario: UsuarioOut
+    empresa: EmpresaResumo
 
 
 # --- Cadastros ---------------------------------------------------------------
@@ -218,7 +289,6 @@ class OPDetalhe(OPResumo):
 class ApontamentoIn(Schema):
     codigo_barras: str
     centro_codigo: str
-    operador: str | None = None
 
 
 class ApontamentoOut(Schema):

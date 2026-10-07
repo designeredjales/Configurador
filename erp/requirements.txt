@@ -3,6 +3,7 @@ uvicorn[standard]>=0.30
 sqlalchemy>=2.0
 pydantic>=2.7
 python-multipart>=0.0.9
+pyjwt>=2.8
 # PostgreSQL em produção:
 # psycopg[binary]>=3.2
 

@@ -5,8 +5,8 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from ..db import get_db
-from ..deps import empresa_atual
-from ..models import Empresa, OrdemProducao, StatusOP
+from ..deps import APONTAR, PCP, empresa_atual
+from ..models import Empresa, OrdemProducao, StatusOP, Usuario
 from ..schemas import ApontamentoIn, ApontamentoOut, GerarOPIn, OPDetalhe, OPResumo, Painel
 from ..services import pcp
 from .projetos import carregar
@@ -39,7 +39,7 @@ def carregar_op(db: Session, emp: Empresa, op_id: int) -> OrdemProducao:
     return op
 
 
-@router.post("/projetos/{projeto_id}/ops", response_model=OPResumo, status_code=201)
+@router.post("/projetos/{projeto_id}/ops", response_model=OPResumo, status_code=201, dependencies=[Depends(PCP)])
 def gerar_op(projeto_id: int, dados: GerarOPIn, emp: Empresa = Depends(empresa_atual),
              db: Session = Depends(get_db)):
     projeto = carregar(db, emp, projeto_id)
@@ -86,7 +86,7 @@ def detalhe_op(op_id: int, emp: Empresa = Depends(empresa_atual), db: Session = 
     return {**resumo(op), "unidades": unidades}
 
 
-@router.post("/ops/{op_id}/cancelar", response_model=OPResumo)
+@router.post("/ops/{op_id}/cancelar", response_model=OPResumo, dependencies=[Depends(PCP)])
 def cancelar_op(op_id: int, emp: Empresa = Depends(empresa_atual), db: Session = Depends(get_db)):
     op = carregar_op(db, emp, op_id)
     if op.status == StatusOP.CONCLUIDA:
@@ -97,11 +97,12 @@ def cancelar_op(op_id: int, emp: Empresa = Depends(empresa_atual), db: Session =
 
 
 @router.post("/apontamentos", response_model=ApontamentoOut)
-def apontar(dados: ApontamentoIn, emp: Empresa = Depends(empresa_atual),
+def apontar(dados: ApontamentoIn, usuario: Usuario = Depends(APONTAR),
             db: Session = Depends(get_db)):
+    # Quem deu a baixa vem do login, não de um campo digitado
     try:
-        unidade, proxima = pcp.apontar(db, emp.id, dados.codigo_barras, dados.centro_codigo,
-                                       dados.operador)
+        unidade, proxima = pcp.apontar(db, usuario.empresa_id, dados.codigo_barras,
+                                       dados.centro_codigo, usuario)
     except pcp.ErroPCP as e:
         db.rollback()
         raise HTTPException(e.status, str(e))

@@ -23,11 +23,30 @@ def client():
         yield c
 
 
+SENHA = "senha-forte-123"
+
+
+def registrar(client, empresa="Marcenaria Teste", email="admin@marcenaria.com"):
+    r = client.post("/api/auth/registrar", json={"empresa": empresa, "nome": "Admin",
+                                                 "email": email, "senha": SENHA})
+    assert r.status_code == 201, r.text
+    return {"Authorization": f"Bearer {r.json()['token']}"}
+
+
+def criar_usuario(client, admin, perfil, email=None, nome=None):
+    email = email or f"{perfil.lower()}@marcenaria.com"
+    r = client.post("/api/usuarios", json={"nome": nome or perfil.title(), "email": email,
+                                           "senha": SENHA, "perfil": perfil}, headers=admin)
+    assert r.status_code == 201, r.text
+    login = client.post("/api/auth/login", json={"email": email, "senha": SENHA})
+    assert login.status_code == 200, login.text
+    return {"Authorization": f"Bearer {login.json()['token']}"}
+
+
 @pytest.fixture
 def empresa(client):
-    r = client.post("/api/empresas", json={"nome": "Marcenaria Teste"})
-    assert r.status_code == 201
-    return {"X-Empresa-Id": str(r.json()["id"])}
+    """Cabeçalho de sessão do administrador de uma empresa nova."""
+    return registrar(client)
 
 
 @pytest.fixture

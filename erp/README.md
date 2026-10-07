@@ -10,12 +10,13 @@ Projeto (Promob) → Engenharia (BOM + consumo + gate) → Ordem de Produção �
 
 | Módulo | Entrega |
 |---|---|
-| **Cadastros** | Empresa (multiempresa desde o dia 1), clientes, materiais (chapa, fita, ferragem, acessório) e centros de trabalho |
+| **Acesso e segurança** | Cadastro da empresa com o primeiro administrador, login por e-mail e senha, perfis com permissão checada no servidor, gestão da equipe. A empresa (tenant) vem sempre do login |
+| **Cadastros** | Clientes, materiais (chapa, fita, ferragem, acessório) e centros de trabalho, isolados por empresa |
 | **Entrada pelo Promob (XML)** | O projeto inteiro nasce do XML do Promob: cliente, ambientes, módulos, conjuntos (gavetas), peças com medida acabada, chapa, fita (metros), ferragens e o roteiro produtivo de cada peça. Materiais novos entram no cadastro automaticamente com o preço de tabela |
 | **Consumo** | Chapas em m² e em nº de chapas (com % de perda), fita de borda em metros por lado, ferragens, custo de material |
 | **Gate de liberação** | O projeto só vai para a fábrica sem pendências: material sem cadastro, medida inválida, projeto vazio. Depois de liberado, a engenharia fica travada |
 | **PCP** | Geração de OP com uma etiqueta (código de barras) por peça física e roteiro pelas operações do Promob: CORTE → BORDA (se a peça tem borda) → USINAGEM (se tem FURAR/RASGO) → EMBALAGEM |
-| **Apontamento** | Baixa por leitor de código de barras: bloqueia etapa fora de ordem, centro fora do roteiro e baixa duplicada. Fecha a OP e o projeto sozinho |
+| **Apontamento** | Baixa por leitor de código de barras, registrada em nome do usuário logado: bloqueia etapa fora de ordem, centro fora do roteiro e baixa duplicada. Fecha a OP e o projeto sozinho |
 | **Painel** | OPs abertas, em produção e atrasadas, fila de peças por centro, baixas do dia, progresso por OP |
 
 ## Rodar
@@ -23,11 +24,30 @@ Projeto (Promob) → Engenharia (BOM + consumo + gate) → Ordem de Produção �
 ```bash
 cd erp
 pip install -r requirements.txt
+export ERP_SECRET="$(python -c 'import secrets; print(secrets.token_urlsafe(48))')"
 python seed_demo.py                 # opcional: empresa demo com a cozinha de exemplo
 uvicorn app.main:app --reload
 ```
 
-Abra `http://localhost:8000/?empresa=1`. A API documentada fica em `http://localhost:8000/docs`.
+Abra `http://localhost:8000` e cadastre sua empresa, ou entre na demonstração com `admin@demo.com` / `demo12345` (operador: `operador@demo.com` / `demo12345`). A API documentada fica em `http://localhost:8000/docs`.
+
+## Acesso e perfis
+
+| Perfil | Pode |
+|---|---|
+| **Administrador** | Tudo, inclusive criar, desativar e trocar o perfil dos usuários |
+| **Gestor** | Engenharia, PCP, apontamento e cadastros |
+| **Engenharia** | Importar o XML, criar e liberar projetos, cadastrar materiais e clientes |
+| **PCP** | Gerar e cancelar OPs, cadastrar centros de trabalho, apontar |
+| **Operador** | Apontar (dar baixa) e consultar OPs e painel |
+
+Todos os perfis consultam os dados da própria empresa. Detalhes de segurança:
+
+- Senhas guardadas só como hash `scrypt` com sal; mínimo de 8 caracteres.
+- Sessão por token JWT (HS256) válido por 12 horas (`ERP_SESSAO_HORAS`). **Defina `ERP_SECRET` em produção**: sem ele, o servidor gera um segredo temporário e todos precisam entrar de novo a cada reinício.
+- O perfil e a situação do usuário são lidos do banco a cada requisição: desativar alguém corta o acesso na hora, mesmo com token emitido.
+- Login com erro não revela se o e-mail existe; a empresa nunca fica sem um administrador ativo.
+- Ainda faltam: recuperação de senha por e-mail, limite de tentativas de login e HTTPS (fica a cargo do servidor de hospedagem).
 
 O banco padrão é SQLite (`marcenaria_erp.db`). Em produção, use `DATABASE_URL=postgresql+psycopg://...`.
 
@@ -42,7 +62,7 @@ cd erp && python -m pytest -q
 No Promob, exporte o relatório **Orçamento-Explodido c/ Operação** em XML. Na tela **Projetos → Novo projeto a partir do Promob**, ou pela API:
 
 ```bash
-curl -H "X-Empresa-Id: 1" -F arquivo=@Cozinha.xml -F codigo=P-0001 http://localhost:8000/api/projetos/importar-xml
+curl -H "Authorization: Bearer $TOKEN" -F arquivo=@Cozinha.xml -F codigo=P-0001 http://localhost:8000/api/projetos/importar-xml
 ```
 
 | No XML (`LISTING/AMBIENTS/AMBIENT/CATEGORIES/CATEGORY/ITEMS/ITEM`) | No ERP |
@@ -85,6 +105,8 @@ Para projetos que não vêm do Promob, `POST /api/projetos/{id}/importar` aceita
 erp/
   app/
     models.py          # modelo de dados (multiempresa)
+    security.py        # hash de senha e tokens de sessão
+    deps.py            # usuário logado, empresa e permissões por perfil
     services/
       promob_xml.py    # leitor do XML do Promob
       importacao.py    # XML/CSV → árvore do projeto, cadastro automático de materiais
@@ -92,13 +114,13 @@ erp/
       pcp.py           # OP, roteiro, apontamento, filas
     routers/           # API REST (cadastros, projetos, produção)
     static/index.html  # interface web (painel, projetos, OPs, apontamento, materiais)
-  tests/               # fluxo completo, gate, isolamento entre empresas
+  tests/               # fluxo completo, XML do Promob, gate, perfis, isolamento entre empresas
   exemplos/            # XML do Promob (anonimizado), CSV e materiais de demonstração
 ```
 
 ## Próximas camadas (roadmap)
 
-1. **Autenticação e perfis** (JWT, usuário por empresa, papéis: engenharia, PCP, operador, gestor). Hoje o tenant vem no header `X-Empresa-Id`, e isso **não serve para produção**.
+1. **Segurança 2.0**: recuperação de senha por e-mail, limite de tentativas de login, registro de auditoria.
 2. **Lados da fita e furação**: ler o XML de máquina do Promob (ou o relatório com bordas) para etiquetas com C1/C2/L1/L2 e programas CNC.
 3. **Etiquetas** (PDF/ZPL) e **plano de corte** com integração à otimizadora.
 4. **Compras e estoque**: MRP a partir do consumo dos projetos liberados, reserva de chapas e almoxarifado.
