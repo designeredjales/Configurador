@@ -139,6 +139,8 @@ def apontar(db: Session, empresa_id: int, codigo_barras: str, centro_codigo: str
         )
         if not abertas:
             op.projeto.status = StatusProjeto.CONCLUIDO
+            from .estoque import consumir_projeto  # evita import circular
+            consumir_projeto(db, op.projeto, usuario.id if usuario is not None else None)
     db.flush()
 
     proxima = next((e for e in unidade.etapas if not e.concluida_em), None)

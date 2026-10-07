@@ -47,5 +47,6 @@ def exigir(*perfis: Perfil):
 ENGENHARIA = exigir(Perfil.GESTOR, Perfil.ENGENHARIA)
 PCP = exigir(Perfil.GESTOR, Perfil.PCP)
 APONTAR = exigir(Perfil.GESTOR, Perfil.PCP, Perfil.OPERADOR)
-CADASTROS = exigir(Perfil.GESTOR, Perfil.ENGENHARIA)
+CADASTROS = exigir(Perfil.GESTOR, Perfil.ENGENHARIA, Perfil.COMPRAS)
+COMPRAS = exigir(Perfil.GESTOR, Perfil.COMPRAS)
 ADMIN = exigir()

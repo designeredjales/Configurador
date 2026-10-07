@@ -59,6 +59,11 @@ a { color: var(--brand); cursor: pointer; }
 #sessao b { color: var(--ink); font-weight: 600; }
 .perfil { font-size: 11px; letter-spacing: .04em; }
 .inativo { opacity: .55; }
+.tag.FALTA, .tag.CANCELADO { background: var(--err); color: #fff; }
+.tag.MINIMO, .tag.ENVIADO, .tag.PARCIAL { background: var(--warn); color: #fff; }
+.tag.OK, .tag.RECEBIDO { background: var(--ok); color: #fff; }
+td input.num { width: 90px; text-align: right; }
+.neg { color: var(--err); font-weight: 600; }
 </style>
 </head>
 <body>
@@ -96,6 +101,8 @@ a { color: var(--brand); cursor: pointer; }
     <button data-aba="projetos">Projetos</button>
     <button data-aba="ops">Ordens de Produção</button>
     <button data-aba="apontamento">Apontamento</button>
+    <button data-aba="estoque">Estoque</button>
+    <button data-aba="compras">Compras</button>
     <button data-aba="materiais">Materiais</button>
     <button data-aba="usuarios">Usuários</button>
   </nav>
@@ -139,6 +146,51 @@ a { color: var(--brand); cursor: pointer; }
     </div>
   </section>
 
+  <section id="estoque">
+    <div class="grid" id="kpis-estoque"></div>
+    <div class="card"><h2>Posição de estoque</h2>
+      <p class="dica">Disponível = saldo − reservado pelos projetos liberados. A sugestão de compra já desconta o que está em pedido e inclui o estoque mínimo.</p>
+      <div class="tabela" id="lista-estoque"></div>
+    </div>
+    <div class="card"><h2>Inventário (contagem física)</h2>
+      <div class="linha">
+        <select id="inv-material"></select>
+        <input id="inv-qtd" placeholder="Quantidade contada" size="12">
+        <input id="inv-obs" placeholder="Observação (opcional)">
+        <button class="btn" onclick="lancarInventario()">Ajustar saldo</button>
+      </div>
+      <div id="inv-msg"></div>
+    </div>
+    <div class="card"><h2>Últimas movimentações</h2><div class="tabela" id="lista-movimentos"></div></div>
+  </section>
+
+  <section id="compras">
+    <div class="card"><h2>Sugestão de compra</h2>
+      <p class="dica">Calculada a partir das reservas dos projetos liberados. Ajuste quantidades e custos, escolha o fornecedor e gere o pedido.</p>
+      <div class="tabela" id="lista-sugestao"></div>
+      <div class="linha" style="margin-top:10px">
+        <select id="sug-fornecedor"></select>
+        <input id="sug-previsao" type="date" title="Previsão de entrega">
+        <button class="btn" onclick="gerarPedido()">Gerar pedido com os itens marcados</button>
+      </div>
+      <div id="sug-msg"></div>
+    </div>
+    <div class="card"><h2>Pedidos de compra</h2><div class="tabela" id="lista-pedidos"></div></div>
+    <div class="card" id="det-pedido" hidden></div>
+    <div class="card"><h2>Fornecedores</h2>
+      <div class="linha">
+        <input id="f-nome" placeholder="Nome">
+        <input id="f-doc" placeholder="CNPJ" size="16">
+        <input id="f-tel" placeholder="Telefone" size="14">
+        <input id="f-email" type="email" placeholder="E-mail">
+        <input id="f-prazo" placeholder="Prazo (dias)" size="8">
+        <button class="btn" onclick="criarFornecedor()">Adicionar</button>
+      </div>
+      <div id="f-msg"></div>
+      <div class="tabela" id="lista-fornecedores"></div>
+    </div>
+  </section>
+
   <section id="usuarios">
     <div class="card"><h2>Novo usuário</h2>
       <div class="linha">
@@ -148,6 +200,7 @@ a { color: var(--brand); cursor: pointer; }
         <select id="u-perfil">
           <option value="OPERADOR">Operador: apontamento</option>
           <option value="PCP">PCP: ordens e apontamento</option>
+          <option value="COMPRAS">Compras: pedidos e estoque</option>
           <option value="ENGENHARIA">Engenharia: projetos e materiais</option>
           <option value="GESTOR">Gestor: engenharia + PCP</option>
           <option value="ADMIN">Administrador: tudo</option>
@@ -170,6 +223,7 @@ a { color: var(--brand); cursor: pointer; }
         <input id="m-comp" placeholder="Comp. chapa" size="8">
         <input id="m-larg" placeholder="Larg. chapa" size="8">
         <input id="m-custo" placeholder="Custo unit." size="8">
+        <input id="m-min" placeholder="Estoque mín." size="8">
         <button class="btn" onclick="criarMaterial()">Salvar</button>
       </div>
       <div id="m-msg"></div>
@@ -217,6 +271,7 @@ function tabela(colunas, linhas) {
 
 // --- Navegação --------------------------------------------------------------
 const carregadores = {painel: carregarPainel, projetos: carregarProjetos, ops: carregarOps, usuarios: carregarUsuarios,
+                      estoque: carregarEstoque, compras: carregarCompras,
                       apontamento: carregarApontamento, materiais: carregarMateriais};
 function abrir(aba) {
   document.querySelectorAll("section").forEach((s) => s.classList.toggle("ativo", s.id === aba));
@@ -369,21 +424,138 @@ async function criarMaterial() {
   try {
     await api("/api/materiais", {method: "POST", json: {codigo: $("m-codigo").value.trim(), descricao: $("m-desc").value.trim(),
       tipo: $("m-tipo").value, unidade: $("m-un").value.trim() || "UN", espessura_mm: n("m-esp"),
-      comprimento_mm: n("m-comp"), largura_mm: n("m-larg"), custo_unitario: n("m-custo") || 0}});
-    ["m-codigo", "m-desc", "m-un", "m-esp", "m-comp", "m-larg", "m-custo"].forEach((id) => $(id).value = "");
+      comprimento_mm: n("m-comp"), largura_mm: n("m-larg"), custo_unitario: n("m-custo") || 0, estoque_minimo: n("m-min") || 0}});
+    ["m-codigo", "m-desc", "m-un", "m-esp", "m-comp", "m-larg", "m-custo", "m-min"].forEach((id) => $(id).value = "");
     $("m-msg").innerHTML = ""; carregarMateriais();
   } catch (e) { $("m-msg").innerHTML = `<div class="msg err">${esc(e.message)}</div>`; }
 }
 
+// --- Estoque ----------------------------------------------------------------
+const q = (v) => num(v, 3);
+function situacao(p) {
+  if (p.disponivel < 0) return "FALTA";
+  if (p.estoque_minimo && p.disponivel < p.estoque_minimo) return "MINIMO";
+  return "OK";
+}
+const ROTULO = {FALTA: "Falta", MINIMO: "Abaixo do mínimo", OK: "OK"};
+
+async function carregarEstoque() {
+  const [pos, movs] = await Promise.all([api("/api/estoque"), api("/api/estoque/movimentos?limite=30")]);
+  const falta = pos.filter((p) => situacao(p) === "FALTA");
+  const valor = pos.reduce((s, p) => s + Math.max(0, p.saldo) * p.custo_unitario, 0);
+  $("kpis-estoque").innerHTML = [[falta.length, "Materiais em falta"], [pos.filter((p) => p.sugestao_compra > 0).length, "Com sugestão de compra"],
+    [brl(valor), "Valor em estoque (custo médio)"]].map(([v, t]) => `<div class="card kpi">${v}<small>${t}</small></div>`).join("");
+  pos.sort((a, b) => (situacao(a) === "FALTA" ? 0 : situacao(a) === "MINIMO" ? 1 : 2) - (situacao(b) === "FALTA" ? 0 : situacao(b) === "MINIMO" ? 1 : 2) || a.codigo.localeCompare(b.codigo));
+  $("lista-estoque").innerHTML = tabela([["Material", (p) => `<b>${esc(p.codigo)}</b> ${esc(p.descricao)}`], ["Un.", (p) => esc(p.unidade)],
+    ["Saldo", (p) => `<span class="${p.saldo < 0 ? "neg" : ""}">${q(p.saldo)}</span>`, 1], ["Reservado", (p) => q(p.reservado), 1],
+    ["Disponível", (p) => `<span class="${p.disponivel < 0 ? "neg" : ""}">${q(p.disponivel)}</span>`, 1], ["Em pedido", (p) => q(p.em_pedido), 1],
+    ["Mínimo", (p) => q(p.estoque_minimo), 1], ["Custo médio", (p) => brl(p.custo_unitario), 1],
+    ["Situação", (p) => `<span class="tag ${situacao(p)}">${ROTULO[situacao(p)]}</span>`]], pos);
+  $("inv-material").innerHTML = pos.map((p) => `<option value="${p.material_id}">${esc(p.codigo)} (saldo ${q(p.saldo)} ${esc(p.unidade)})</option>`).join("");
+  $("lista-movimentos").innerHTML = tabela([["Data", (m) => new Date(m.criado_em).toLocaleString("pt-BR")], ["Material", (m) => esc(m.material_codigo)],
+    ["Qtd.", (m) => `<span class="${m.quantidade < 0 ? "neg" : ""}">${m.quantidade > 0 ? "+" : ""}${q(m.quantidade)}</span>`, 1],
+    ["Origem", (m) => m.origem], ["Referência", (m) => esc(m.referencia || "")], ["Por", (m) => esc(m.usuario || "—")],
+    ["Obs.", (m) => esc(m.observacao || "")]], movs);
+}
+
+async function lancarInventario() {
+  const qtd = Number($("inv-qtd").value.replace(",", "."));
+  if ($("inv-qtd").value.trim() === "" || Number.isNaN(qtd)) { $("inv-msg").innerHTML = `<div class="msg err">Informe a quantidade contada.</div>`; return; }
+  try {
+    const r = await api("/api/estoque/inventario", {method: "POST", json: {material_id: Number($("inv-material").value),
+      quantidade_contada: qtd, observacao: $("inv-obs").value.trim() || null}});
+    $("inv-qtd").value = $("inv-obs").value = "";
+    await carregarEstoque();
+    $("inv-msg").innerHTML = `<div class="msg ok">Saldo de ${esc(r.codigo)} ajustado para ${q(r.saldo)} ${esc(r.unidade)}.</div>`;
+  } catch (e) { $("inv-msg").innerHTML = `<div class="msg err">${esc(e.message)}</div>`; }
+}
+
+// --- Compras ----------------------------------------------------------------
+let fornecedores = [];
+async function carregarCompras() {
+  const [pos, peds, forns] = await Promise.all([api("/api/estoque"), api("/api/pedidos"), api("/api/fornecedores")]);
+  fornecedores = forns;
+  const sug = pos.filter((p) => p.sugestao_compra > 0);
+  $("lista-sugestao").innerHTML = tabela([["", (p) => `<input type="checkbox" class="sug-sel" data-id="${p.material_id}" checked aria-label="Incluir ${esc(p.codigo)}">`],
+    ["Material", (p) => `<b>${esc(p.codigo)}</b> ${esc(p.descricao)}`], ["Disponível", (p) => q(p.disponivel), 1], ["Em pedido", (p) => q(p.em_pedido), 1],
+    ["Comprar", (p) => `<input class="num sug-qtd" data-id="${p.material_id}" value="${p.sugestao_compra}"> ${esc(p.unidade)}`, 1],
+    ["Custo unit.", (p) => `<input class="num sug-custo" data-id="${p.material_id}" value="${p.custo_unitario}">`, 1]], sug);
+  $("sug-fornecedor").innerHTML = forns.length ? forns.map((f) => `<option value="${f.id}">${esc(f.nome)}</option>`).join("")
+    : `<option value="">Cadastre um fornecedor abaixo</option>`;
+  $("lista-pedidos").innerHTML = tabela([["Pedido", (p) => `<a onclick="verPedido(${p.id})">#${p.numero}</a>`], ["Fornecedor", (p) => esc(p.fornecedor_nome)],
+    ["Status", (p) => tag(p.status)], ["Itens", (p) => p.itens.length, 1], ["Total", (p) => brl(p.total), 1],
+    ["Previsão", (p) => dataBR(p.previsao)], ["Criado", (p) => new Date(p.criado_em).toLocaleDateString("pt-BR")]], peds);
+  $("lista-fornecedores").innerHTML = tabela([["Nome", (f) => esc(f.nome)], ["CNPJ", (f) => esc(f.documento || "—")],
+    ["Telefone", (f) => esc(f.telefone || "—")], ["E-mail", (f) => esc(f.email || "—")], ["Prazo", (f) => `${f.prazo_dias} dias`, 1]], forns);
+}
+
+async function gerarPedido() {
+  const itens = [...document.querySelectorAll(".sug-sel:checked")].map((c) => {
+    const id = c.dataset.id;
+    return {material_id: Number(id),
+      quantidade: Number(document.querySelector(`.sug-qtd[data-id="${id}"]`).value.replace(",", ".")),
+      custo_unitario: Number(document.querySelector(`.sug-custo[data-id="${id}"]`).value.replace(",", "."))};
+  });
+  if (!itens.length) { $("sug-msg").innerHTML = `<div class="msg err">Marque pelo menos um material.</div>`; return; }
+  if (!$("sug-fornecedor").value) { $("sug-msg").innerHTML = `<div class="msg err">Cadastre e escolha um fornecedor.</div>`; return; }
+  try {
+    const p = await api("/api/pedidos", {method: "POST", json: {fornecedor_id: Number($("sug-fornecedor").value),
+      previsao: $("sug-previsao").value || null, itens}});
+    $("sug-msg").innerHTML = `<div class="msg ok">Pedido #${p.numero} criado em rascunho (${brl(p.total)}).</div>`;
+    await carregarCompras(); verPedido(p.id);
+  } catch (e) { $("sug-msg").innerHTML = `<div class="msg err">${esc(e.message)}</div>`; }
+}
+
+async function verPedido(id) {
+  const p = await api(`/api/pedidos/${id}`);
+  const aberto = ["RASCUNHO", "ENVIADO", "PARCIAL"].includes(p.status);
+  $("det-pedido").hidden = false;
+  $("det-pedido").innerHTML = `<h2>Pedido #${p.numero} · ${esc(p.fornecedor_nome)} ${tag(p.status)}</h2>
+    <div class="linha">
+      ${p.status === "RASCUNHO" ? `<button class="btn" onclick="acaoPedido(${p.id}, 'enviar')">Marcar como enviado</button>` : ""}
+      ${["RASCUNHO", "ENVIADO"].includes(p.status) ? `<button class="btn sec" onclick="acaoPedido(${p.id}, 'cancelar')">Cancelar pedido</button>` : ""}
+    </div>
+    ${tabela([["Material", (i) => `<b>${esc(i.material_codigo)}</b> ${esc(i.descricao)}`], ["Pedido", (i) => `${q(i.quantidade)} ${esc(i.unidade)}`, 1],
+      ["Recebido", (i) => q(i.recebido), 1], ["Custo unit.", (i) => brl(i.custo_unitario), 1],
+      ["Receber agora", (i) => aberto && i.pendente > 0 ? `<input class="num rec-qtd" data-id="${i.id}" value="${i.pendente}" aria-label="Receber ${esc(i.material_codigo)}">` : "—", 1]], p.itens)}
+    ${aberto ? `<div class="linha" style="margin-top:10px"><button class="btn" onclick="receberPedido(${p.id})">Registrar recebimento</button></div>` : ""}
+    <div id="ped-msg"></div>`;
+}
+
+async function acaoPedido(id, acao) {
+  try { await api(`/api/pedidos/${id}/${acao}`, {method: "POST"}); await carregarCompras(); verPedido(id); }
+  catch (e) { $("ped-msg").innerHTML = `<div class="msg err">${esc(e.message)}</div>`; }
+}
+
+async function receberPedido(id) {
+  const itens = [...document.querySelectorAll(".rec-qtd")].map((i) => ({item_id: Number(i.dataset.id), quantidade: Number(i.value.replace(",", "."))}))
+    .filter((i) => i.quantidade > 0);
+  try {
+    const p = await api(`/api/pedidos/${id}/receber`, {method: "POST", json: {itens}});
+    await carregarCompras(); await verPedido(id);
+    $("ped-msg").innerHTML = `<div class="msg ok">Recebimento registrado. Pedido ${p.status === "RECEBIDO" ? "concluído" : "com saldo pendente"}; estoque e custo médio atualizados.</div>`;
+  } catch (e) { $("ped-msg").innerHTML = `<div class="msg err">${esc(e.message)}</div>`; }
+}
+
+async function criarFornecedor() {
+  try {
+    await api("/api/fornecedores", {method: "POST", json: {nome: $("f-nome").value.trim(), documento: $("f-doc").value.trim() || null,
+      telefone: $("f-tel").value.trim() || null, email: $("f-email").value.trim() || null, prazo_dias: Number($("f-prazo").value) || 7}});
+    ["f-nome", "f-doc", "f-tel", "f-email", "f-prazo"].forEach((id) => $(id).value = "");
+    $("f-msg").innerHTML = ""; carregarCompras();
+  } catch (e) { $("f-msg").innerHTML = `<div class="msg err">${esc(e.message)}</div>`; }
+}
+
 // --- Acesso -----------------------------------------------------------------
 const ABAS = {
-  ADMIN: ["painel", "projetos", "ops", "apontamento", "materiais", "usuarios"],
-  GESTOR: ["painel", "projetos", "ops", "apontamento", "materiais"],
-  ENGENHARIA: ["painel", "projetos", "ops", "materiais"],
-  PCP: ["painel", "projetos", "ops", "apontamento", "materiais"],
+  ADMIN: ["painel", "projetos", "ops", "apontamento", "estoque", "compras", "materiais", "usuarios"],
+  GESTOR: ["painel", "projetos", "ops", "apontamento", "estoque", "compras", "materiais"],
+  ENGENHARIA: ["painel", "projetos", "ops", "estoque", "materiais"],
+  PCP: ["painel", "projetos", "ops", "apontamento", "estoque", "materiais"],
+  COMPRAS: ["compras", "estoque", "materiais", "painel"],
   OPERADOR: ["apontamento", "ops", "painel"],
 };
-const NOME_PERFIL = {ADMIN: "Administrador", GESTOR: "Gestor", ENGENHARIA: "Engenharia", PCP: "PCP", OPERADOR: "Operador"};
+const NOME_PERFIL = {ADMIN: "Administrador", GESTOR: "Gestor", ENGENHARIA: "Engenharia", PCP: "PCP", COMPRAS: "Compras", OPERADOR: "Operador"};
 
 function mostrarAcesso(msg) {
   sessao = null; $("app").hidden = true; $("tela-acesso").hidden = false;

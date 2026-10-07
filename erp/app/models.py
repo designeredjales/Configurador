@@ -49,7 +49,22 @@ class Perfil(str, Enum):
     GESTOR = "GESTOR"          # engenharia + PCP + cadastros
     ENGENHARIA = "ENGENHARIA"  # projetos, importação, liberação, materiais
     PCP = "PCP"                # ordens de produção, centros, apontamento
+    COMPRAS = "COMPRAS"        # fornecedores, pedidos, recebimento, estoque
     OPERADOR = "OPERADOR"      # apontamento e consulta
+
+
+class StatusPedido(str, Enum):
+    RASCUNHO = "RASCUNHO"
+    ENVIADO = "ENVIADO"
+    PARCIAL = "PARCIAL"
+    RECEBIDO = "RECEBIDO"
+    CANCELADO = "CANCELADO"
+
+
+class OrigemMovimento(str, Enum):
+    RECEBIMENTO = "RECEBIMENTO"
+    CONSUMO = "CONSUMO"        # baixa da reserva quando o projeto conclui
+    INVENTARIO = "INVENTARIO"  # ajuste de contagem física
 
 
 class RegraCentro(str, Enum):
@@ -98,6 +113,18 @@ class Cliente(Base):
     cidade: Mapped[str | None] = mapped_column(String(100))
 
 
+class Fornecedor(Base):
+    __tablename__ = "fornecedores"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    empresa_id: Mapped[int] = mapped_column(ForeignKey("empresas.id"), index=True)
+    nome: Mapped[str] = mapped_column(String(200))
+    documento: Mapped[str | None] = mapped_column(String(20))
+    telefone: Mapped[str | None] = mapped_column(String(30))
+    email: Mapped[str | None] = mapped_column(String(200))
+    prazo_dias: Mapped[int] = mapped_column(Integer, default=7)
+
+
 class Material(Base):
     __tablename__ = "materiais"
     __table_args__ = (UniqueConstraint("empresa_id", "codigo"),)
@@ -112,6 +139,8 @@ class Material(Base):
     comprimento_mm: Mapped[float | None] = mapped_column(Float)
     largura_mm: Mapped[float | None] = mapped_column(Float)
     custo_unitario: Mapped[float] = mapped_column(Float, default=0.0)
+    estoque_minimo: Mapped[float] = mapped_column(Float, default=0.0)
+    fornecedor_id: Mapped[int | None] = mapped_column(ForeignKey("fornecedores.id"))
 
 
 class CentroTrabalho(Base):
@@ -295,3 +324,75 @@ class EtapaUnidade(Base):
 
     unidade: Mapped[UnidadePeca] = relationship(back_populates="etapas")
     centro: Mapped[CentroTrabalho] = relationship()
+
+
+class PedidoCompra(Base):
+    __tablename__ = "pedidos_compra"
+    __table_args__ = (UniqueConstraint("empresa_id", "numero"),)
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    empresa_id: Mapped[int] = mapped_column(ForeignKey("empresas.id"), index=True)
+    numero: Mapped[int] = mapped_column(Integer)
+    fornecedor_id: Mapped[int] = mapped_column(ForeignKey("fornecedores.id"))
+    status: Mapped[StatusPedido] = mapped_column(String(20), default=StatusPedido.RASCUNHO)
+    previsao: Mapped[date | None] = mapped_column(Date)
+    observacao: Mapped[str | None] = mapped_column(String(500))
+    criado_em: Mapped[datetime] = mapped_column(DateTime, default=agora)
+    usuario_id: Mapped[int | None] = mapped_column(ForeignKey("usuarios.id"))
+
+    fornecedor: Mapped[Fornecedor] = relationship()
+    itens: Mapped[list["ItemPedido"]] = relationship(
+        back_populates="pedido", cascade="all, delete-orphan", order_by="ItemPedido.id"
+    )
+
+
+class ItemPedido(Base):
+    __tablename__ = "itens_pedido"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    pedido_id: Mapped[int] = mapped_column(ForeignKey("pedidos_compra.id"), index=True)
+    material_id: Mapped[int] = mapped_column(ForeignKey("materiais.id"))
+    quantidade: Mapped[float] = mapped_column(Float)
+    recebido: Mapped[float] = mapped_column(Float, default=0.0)
+    custo_unitario: Mapped[float] = mapped_column(Float, default=0.0)
+
+    pedido: Mapped[PedidoCompra] = relationship(back_populates="itens")
+    material: Mapped[Material] = relationship()
+
+    @property
+    def pendente(self) -> float:
+        return max(0.0, self.quantidade - self.recebido)
+
+
+class MovimentoEstoque(Base):
+    """Toda mudança de saldo. Saldo = soma das quantidades (entrada +, saída -)."""
+    __tablename__ = "movimentos_estoque"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    empresa_id: Mapped[int] = mapped_column(ForeignKey("empresas.id"), index=True)
+    material_id: Mapped[int] = mapped_column(ForeignKey("materiais.id"), index=True)
+    quantidade: Mapped[float] = mapped_column(Float)
+    custo_unitario: Mapped[float] = mapped_column(Float, default=0.0)
+    origem: Mapped[OrigemMovimento] = mapped_column(String(20))
+    referencia: Mapped[str | None] = mapped_column(String(80))
+    observacao: Mapped[str | None] = mapped_column(String(300))
+    usuario_id: Mapped[int | None] = mapped_column(ForeignKey("usuarios.id"))
+    criado_em: Mapped[datetime] = mapped_column(DateTime, default=agora)
+
+    material: Mapped[Material] = relationship()
+    usuario: Mapped["Usuario | None"] = relationship()
+
+
+class Reserva(Base):
+    """Material comprometido com um projeto liberado, até a baixa na conclusão."""
+    __tablename__ = "reservas"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    empresa_id: Mapped[int] = mapped_column(ForeignKey("empresas.id"), index=True)
+    projeto_id: Mapped[int] = mapped_column(ForeignKey("projetos.id"), index=True)
+    material_id: Mapped[int] = mapped_column(ForeignKey("materiais.id"), index=True)
+    quantidade: Mapped[float] = mapped_column(Float)
+    baixada_em: Mapped[datetime | None] = mapped_column(DateTime)
+
+    material: Mapped[Material] = relationship()
+    projeto: Mapped[Projeto] = relationship()

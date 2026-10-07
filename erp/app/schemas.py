@@ -116,6 +116,8 @@ class MaterialIn(Schema):
     comprimento_mm: float | None = None
     largura_mm: float | None = None
     custo_unitario: float = 0.0
+    estoque_minimo: float = 0.0
+    fornecedor_id: int | None = None
 
 
 class MaterialOut(MaterialIn):
@@ -238,6 +240,101 @@ class ConsumoProjeto(Schema):
     custo_material_total: float
     total_pecas: int
     pendencias: list[str]
+
+
+# --- Compras e estoque ------------------------------------------------------
+
+class FornecedorIn(Schema):
+    nome: str = Field(min_length=2)
+    documento: str | None = None
+    telefone: str | None = None
+    email: str | None = None
+    prazo_dias: int = Field(7, ge=0)
+
+
+class FornecedorOut(FornecedorIn):
+    id: int
+
+
+class ItemPedidoIn(Schema):
+    material_id: int
+    quantidade: float = Field(gt=0)
+    custo_unitario: float | None = Field(None, ge=0)
+
+
+class PedidoIn(Schema):
+    fornecedor_id: int
+    previsao: date | None = None
+    observacao: str | None = None
+    itens: list[ItemPedidoIn] = Field(min_length=1)
+
+
+class ItemPedidoOut(Schema):
+    id: int
+    material_id: int
+    material_codigo: str
+    descricao: str
+    unidade: str
+    quantidade: float
+    recebido: float
+    pendente: float
+    custo_unitario: float
+
+
+class PedidoOut(Schema):
+    id: int
+    numero: int
+    fornecedor_id: int
+    fornecedor_nome: str
+    status: str
+    previsao: date | None
+    observacao: str | None
+    criado_em: datetime
+    total: float
+    itens: list[ItemPedidoOut]
+
+
+class RecebimentoItem(Schema):
+    item_id: int
+    quantidade: float
+
+
+class RecebimentoIn(Schema):
+    itens: list[RecebimentoItem] = Field(min_length=1)
+
+
+class PosicaoEstoque(Schema):
+    material_id: int
+    codigo: str
+    descricao: str
+    tipo: str
+    unidade: str
+    saldo: float
+    reservado: float
+    em_pedido: float
+    disponivel: float
+    estoque_minimo: float
+    sugestao_compra: float
+    custo_unitario: float
+    fornecedor_id: int | None
+
+
+class InventarioIn(Schema):
+    material_id: int
+    quantidade_contada: float = Field(ge=0)
+    observacao: str | None = None
+
+
+class MovimentoOut(Schema):
+    id: int
+    material_codigo: str
+    quantidade: float
+    custo_unitario: float
+    origem: str
+    referencia: str | None
+    observacao: str | None
+    usuario: str | None
+    criado_em: datetime
 
 
 # --- PCP ---------------------------------------------------------------------

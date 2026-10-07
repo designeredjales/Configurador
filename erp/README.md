@@ -18,6 +18,8 @@ Projeto (Promob) → Engenharia (BOM + consumo + gate) → Ordem de Produção �
 | **PCP** | Geração de OP com uma etiqueta (código de barras) por peça física e roteiro pelas operações do Promob: CORTE → BORDA (se a peça tem borda) → USINAGEM (se tem FURAR/RASGO) → EMBALAGEM |
 | **Apontamento** | Baixa por leitor de código de barras, registrada em nome do usuário logado: bloqueia etapa fora de ordem, centro fora do roteiro e baixa duplicada. Fecha a OP e o projeto sozinho |
 | **Painel** | OPs abertas, em produção e atrasadas, fila de peças por centro, baixas do dia, progresso por OP |
+| **Estoque** | Saldo por movimentação, reserva automática na liberação do projeto, baixa automática na conclusão, inventário com ajuste pela diferença, custo médio ponderado |
+| **Compras (MRP)** | Sugestão de compra = reservado + mínimo − saldo − em pedido; pedido ao fornecedor, envio, recebimento parcial ou total, cancelamento |
 
 ## Rodar
 
@@ -36,9 +38,10 @@ Abra `http://localhost:8000` e cadastre sua empresa, ou entre na demonstração 
 | Perfil | Pode |
 |---|---|
 | **Administrador** | Tudo, inclusive criar, desativar e trocar o perfil dos usuários |
-| **Gestor** | Engenharia, PCP, apontamento e cadastros |
+| **Gestor** | Engenharia, PCP, compras, estoque, apontamento e cadastros |
 | **Engenharia** | Importar o XML, criar e liberar projetos, cadastrar materiais e clientes |
 | **PCP** | Gerar e cancelar OPs, cadastrar centros de trabalho, apontar |
+| **Compras** | Fornecedores, pedidos, recebimento, inventário e cadastro de materiais |
 | **Operador** | Apontar (dar baixa) e consultar OPs e painel |
 
 Todos os perfis consultam os dados da própria empresa. Detalhes de segurança:
@@ -81,6 +84,18 @@ Limitações conhecidas desse relatório: ele não traz os lados da fita (C1/C2/
 
 O exemplo anonimizado fica em `exemplos/promob_cozinha.xml`. Os testes conferem que a área de chapa e a metragem de fita calculadas pelo ERP batem com os valores gravados pelo Promob.
 
+## Compras e estoque
+
+O estoque é a soma das movimentações de cada material, na unidade do cadastro (chapa por chapa `CH` ou por `M2`, fita em `M`, ferragem em `UN`).
+
+1. **Liberar o projeto** reserva o consumo calculado do XML, com a perda da empresa. Chapa cadastrada por chapa (com medidas) é reservada em fração de chapa.
+2. **Sugestão de compra** (`GET /api/estoque`): `reservado + estoque mínimo − saldo − em pedido`, arredondada para cima nos itens contáveis.
+3. **Pedido** (`POST /api/pedidos`) → **enviar** → **receber** (parcial ou total). O recebimento gera a entrada e recalcula o custo médio ponderado do material.
+4. **Projeto concluído** (última baixa da última OP): a reserva vira saída de estoque, ao custo médio, referenciada ao projeto.
+5. **Inventário** (`POST /api/estoque/inventario`): informa a quantidade contada e o ERP lança o ajuste pela diferença, com usuário e observação.
+
+Saldo negativo é permitido e aparece em vermelho: indica consumo sem entrada registrada, ou seja, recebimento que não foi lançado.
+
 ## Alternativa: CSV (somente pela API)
 
 Para projetos que não vêm do Promob, `POST /api/projetos/{id}/importar` aceita o CSV abaixo (e também o XML). Separador `;` (ou `,`), com cabeçalho. O decimal pode vir com vírgula. Exemplo completo em `exemplos/cozinha_silva.csv`.
@@ -112,6 +127,7 @@ erp/
       importacao.py    # XML/CSV → árvore do projeto, cadastro automático de materiais
       engenharia.py    # consumo, pendências, liberação
       pcp.py           # OP, roteiro, apontamento, filas
+      estoque.py       # reservas, MRP, recebimento, custo médio, inventário
     routers/           # API REST (cadastros, projetos, produção)
     static/index.html  # interface web (painel, projetos, OPs, apontamento, materiais)
   tests/               # fluxo completo, XML do Promob, gate, perfis, isolamento entre empresas
@@ -123,6 +139,6 @@ erp/
 1. **Segurança 2.0**: recuperação de senha por e-mail, limite de tentativas de login, registro de auditoria.
 2. **Lados da fita e furação**: ler o XML de máquina do Promob (ou o relatório com bordas) para etiquetas com C1/C2/L1/L2 e programas CNC.
 3. **Etiquetas** (PDF/ZPL) e **plano de corte** com integração à otimizadora.
-4. **Compras e estoque**: MRP a partir do consumo dos projetos liberados, reserva de chapas e almoxarifado.
+4. **Compras 2.0**: cotação entre fornecedores, envio do pedido por e-mail/WhatsApp, lotes e sobras de chapa reaproveitáveis.
 5. **Comercial e financeiro**: orçamento → pedido → contrato, contas a pagar e a receber, DRE por obra.
 6. **Alembic** para migrações e PostgreSQL como padrão.

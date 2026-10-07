@@ -141,4 +141,6 @@ def liberar(db: Session, projeto: Projeto) -> list[str]:
         item.material = materiais[item.material_codigo]
     projeto.status = StatusProjeto.LIBERADO
     db.flush()
+    from .estoque import reservar_projeto  # evita import circular
+    reservar_projeto(db, projeto)
     return []
