@@ -148,13 +148,13 @@ def calcular(db: Session, emp: Empresa, cfg: ConfigComercial, op: Oportunidade, 
     motivos = []
     if desconto > cfg.desconto_max_gerente:
         nivel = "ADMIN"
-        motivos.append(f"desconto de {desconto:g}% acima do limite do gerente ({cfg.desconto_max_gerente:g}%)")
+        motivos.append(f"desconto de {_g(desconto)}% acima do limite do gerente ({_g(cfg.desconto_max_gerente)}%)")
     elif desconto > cfg.desconto_max_vendedor:
         nivel = "GERENTE"
-        motivos.append(f"desconto de {desconto:g}% acima do limite do vendedor ({cfg.desconto_max_vendedor:g}%)")
+        motivos.append(f"desconto de {_g(desconto)}% acima do limite do vendedor ({_g(cfg.desconto_max_vendedor)}%)")
     if margem_pct < cfg.margem_minima:
         nivel = nivel or "GERENTE"
-        motivos.append(f"margem de {margem_pct:g}% abaixo do mínimo de {cfg.margem_minima:g}%")
+        motivos.append(f"margem de {_g(margem_pct)}% abaixo do mínimo de {_g(cfg.margem_minima)}%")
     m2 = r["m2_chapa"] or 0
     return {"preco_base": _r(base), "desconto_pct": desconto, "condicao": cond["nome"], "parcelas": cond["parcelas"],
             "ajuste_pct": cond["ajuste_pct"], "preco_final": preco, "parcela_valor": _r(preco / cond["parcelas"]),
@@ -289,6 +289,11 @@ def numero_oportunidade(db: Session, empresa_id: int) -> int:
 
 # --- Auditoria: projeto vendido × executivo de produção -------------------------------
 
+def _g(v: float) -> str:
+    """Número no formato brasileiro para mensagens (5,9 em vez de 5.9)."""
+    return f"{v:g}".replace(".", ",")
+
+
 def _pct(atual: float, vendido: float) -> float | None:
     return _r((atual - vendido) / vendido * 100, 1) if vendido else None
 
@@ -331,6 +336,6 @@ def auditoria(db: Session, projeto: Projeto) -> dict | None:
 def pendencia_auditoria(db: Session, projeto: Projeto) -> str | None:
     r = auditoria(db, projeto)
     if r and r["exige_ciencia"]:
-        return (f"Executivo diverge {r['divergencia_pct']:g}% do projeto vendido (limite {r['limite_pct']:g}%): "
+        return (f"Executivo diverge {_g(r['divergencia_pct'])}% do projeto vendido (limite {_g(r['limite_pct'])}%): "
                 f"quem aprova vendas precisa registrar ciência na auditoria da venda")
     return None

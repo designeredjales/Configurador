@@ -1736,7 +1736,7 @@ async function verOportunidade(id) {
       <button class="btn sec" onclick="pedirConfirmacao('op-msg', 'Marcar a oportunidade como perdida?', () => perderOportunidade(${o.id}))">Perdida</button></div>` : ""}
     <div class="renders" id="op-renders"></div>
     ${v ? `<h2>Negociação · versão ${v.numero} (${esc(v.arquivo)})</h2>
-      <p class="dica">${v.resumo.ambientes.map((a) => `${esc(a.nome)}: ${a.modulos} módulo(s), ${a.m2} m²`).join(" · ")} · total ${v.resumo.total_pecas} peças · ${v.resumo.m2_chapa} m² de chapa</p>
+      <p class="dica">${v.resumo.ambientes.map((a) => `${esc(a.nome)}: ${a.modulos} módulo(s), ${num(a.m2)} m²`).join(" · ")} · total ${v.resumo.total_pecas} peças · ${num(v.resumo.m2_chapa)} m² de chapa</p>
       ${aberta && !v.aceite_em ? `<div class="linha">
         <label class="dica">Desconto % <input id="ng-desc" type="number" min="0" max="100" step="0.5" value="${v.desconto_pct}" style="width:90px"></label>
         <select id="ng-cond" aria-label="Condição">${cfgCom.condicoes.map((c) => `<option ${c.nome === v.condicao ? "selected" : ""}>${esc(c.nome)}</option>`).join("")}</select>
@@ -1778,7 +1778,7 @@ async function salvarOportunidade(id, dados) {
 async function enviarVersao(id, input) {
   const f = input.files[0]; if (!f) return; const fd = new FormData(); fd.append("arquivo", f);
   try { const v = await api(`/api/oportunidades/${id}/versoes`, {method: "POST", body: fd}); await carregarComercial(); await verOportunidade(id);
-    msgOp(true, `Versão ${v.numero} recebida: ${v.resumo.total_modulos} módulo(s), ${v.resumo.m2_chapa} m² de chapa.`); }
+    msgOp(true, `Versão ${v.numero} recebida: ${v.resumo.total_modulos} módulo(s), ${num(v.resumo.m2_chapa)} m² de chapa.`); }
   catch (e) { msgOp(false, e.message); }
 }
 async function enviarRenders(id, input) {
@@ -1866,11 +1866,11 @@ async function mostrarAuditoriaVenda(pid) {
     <div class="tabela"><table><thead><tr><th></th><th class="n">Vendido (v${v.versao})</th><th class="n">Produção (executivo)</th><th class="n">Diferença</th></tr></thead><tbody>
     <tr><td>Módulos</td><td class="n">${v.modulos}</td><td class="n">${p.modulos}</td><td class="n">${sinal(d.modulos)}</td></tr>
     <tr><td>Peças</td><td class="n">${v.pecas}</td><td class="n">${p.pecas}</td><td class="n">${sinal(d.pecas)}</td></tr>
-    <tr><td>m² de chapa</td><td class="n">${v.m2}</td><td class="n">${p.m2}</td><td class="n">${sinal(d.m2)} (${pctTxt(d.m2_pct)})</td></tr>
+    <tr><td>m² de chapa</td><td class="n">${num(v.m2)}</td><td class="n">${num(p.m2)}</td><td class="n">${d.m2 > 0 ? "+" : ""}${num(d.m2)} (${pctTxt(d.m2_pct)})</td></tr>
     <tr><td>Valor de produção (pedido Promob)</td><td class="n">${brl(v.valor_pedido)}</td><td class="n">${brl(p.valor_pedido)}</td><td class="n">${brl(d.valor_pedido)} (${pctTxt(d.valor_pedido_pct)})</td></tr>
     <tr><td>Venda por m²</td><td class="n">${v.preco_m2 ? brl(v.preco_m2) : "—"}</td><td class="n">${p.venda_por_m2_produzido ? brl(p.venda_por_m2_produzido) : "—"}</td><td class="n">custo/m² ${p.custo_m2 ? brl(p.custo_m2) : "—"}</td></tr>
     </tbody></table></div>
-    <p class="dica">Venda de ${brl(v.preco_final)} em ${esc(v.fechado_em)} · desconto ${pctTxt(v.desconto_pct)} · ${esc(v.condicao)} · margem prevista ${pctTxt(v.margem_pct)}.</p>
+    <p class="dica">Venda de ${brl(v.preco_final)} em ${dataBR(v.fechado_em)} · desconto ${pctTxt(v.desconto_pct)} · ${esc(v.condicao)} · margem prevista ${pctTxt(v.margem_pct)}.</p>
     ${lista("Módulos acrescentados no executivo", a.modulos_acrescentados)}${lista("Módulos retirados", a.modulos_retirados)}
     ${a.exige_ciencia ? `<div class="msg err">Diferença de ${pctTxt(a.divergencia_pct)} acima da tolerância de ${pctTxt(a.limite_pct)}: a liberação para a fábrica exige ciência de quem aprova vendas.
       ${opera("aprovar_venda") ? `<button class="btn" onclick="cienciaAuditoria(${pid})">Registrar ciência</button>` : ""}</div>`
