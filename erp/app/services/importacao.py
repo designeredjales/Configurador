@@ -149,3 +149,106 @@ def importar_csv(db: Session, projeto: Projeto, conteudo: str, origem: str = "CS
         "itens": n_itens,
         "avisos": avisos,
     }
+
+
+def importar_promob_xml(db: Session, projeto: Projeto, conteudo: bytes) -> dict:
+    """Grava no projeto a engenharia lida do XML do Promob.
+
+    Materiais que ainda não existem no cadastro entram automaticamente com o
+    código, a descrição, a unidade e o preço de tabela do Promob.
+    """
+    from ..models import Cliente, TipoMaterial
+    from .promob_xml import ErroXMLPromob, ler_xml_promob
+
+    try:
+        lido = ler_xml_promob(conteudo)
+    except ErroXMLPromob as e:
+        raise ErroImportacao(str(e)) from e
+
+    materiais = {
+        m.codigo: m
+        for m in db.scalars(select(Material).where(Material.empresa_id == projeto.empresa_id))
+    }
+    criados: list[str] = []
+    for mx in lido.materiais.values():
+        if mx.codigo in materiais:
+            continue
+        material = Material(
+            empresa_id=projeto.empresa_id, codigo=mx.codigo, descricao=mx.descricao,
+            tipo=TipoMaterial(mx.tipo), unidade=mx.unidade, espessura_mm=mx.espessura_mm,
+            custo_unitario=mx.custo,
+        )
+        db.add(material)
+        materiais[mx.codigo] = material
+        criados.append(mx.codigo)
+
+    avisos = list(lido.avisos)
+    sem_custo = sorted(c for c in criados if not materiais[c].custo_unitario)
+    if sem_custo:
+        avisos.append(f"Material cadastrado sem custo (preencha no cadastro): {', '.join(sem_custo)}")
+
+    cliente_nome = None
+    if lido.cliente:
+        cliente_nome = lido.cliente
+        if projeto.cliente_id is None:
+            cliente = db.scalar(select(Cliente).where(
+                Cliente.empresa_id == projeto.empresa_id, Cliente.nome == lido.cliente))
+            if cliente is None:
+                cliente = Cliente(empresa_id=projeto.empresa_id, nome=lido.cliente, email=lido.email)
+                db.add(cliente)
+            projeto.cliente = cliente
+
+    projeto.ambientes.clear()
+    db.flush()
+
+    n_mod = n_pecas = n_itens = 0
+    for nome_amb, modulos in lido.ambientes.items():
+        amb = Ambiente(nome=nome_amb)
+        projeto.ambientes.append(amb)
+        for mx in modulos:
+            n_mod += 1
+            mod = Modulo(
+                codigo=mx.codigo, descricao=mx.descricao, largura_mm=mx.largura_mm,
+                altura_mm=mx.altura_mm, profundidade_mm=mx.profundidade_mm,
+                quantidade=max(1, round(mx.quantidade)),
+            )
+            amb.modulos.append(mod)
+            for px in mx.pecas:
+                mod.pecas.append(Peca(
+                    codigo=px.codigo, descricao=px.descricao,
+                    material=materiais.get(px.material_codigo), material_codigo=px.material_codigo,
+                    comprimento_mm=px.comprimento_mm, largura_mm=px.largura_mm,
+                    espessura_mm=px.espessura_mm, quantidade=max(1, round(px.quantidade)),
+                    fita_codigo=px.fita_codigo, fita_metros=px.fita_metros or None,
+                    operacoes=",".join(px.operacoes) or None,
+                ))
+                n_pecas += 1
+            # Ferragens repetidas peça a peça viram uma linha por código no módulo
+            somadas: dict[str, ItemModulo] = {}
+            for ix in mx.itens:
+                item = somadas.get(ix.codigo)
+                if item is None:
+                    item = ItemModulo(material=materiais.get(ix.codigo), material_codigo=ix.codigo,
+                                      descricao=ix.descricao, quantidade=0, unidade=ix.unidade)
+                    somadas[ix.codigo] = item
+                    mod.itens.append(item)
+                    n_itens += 1
+                item.quantidade += ix.quantidade
+
+    projeto.origem = "PROMOB_XML"
+    db.flush()
+    return {
+        "projeto_id": projeto.id,
+        "origem": "PROMOB_XML",
+        "cliente": cliente_nome,
+        "ambientes": len(lido.ambientes),
+        "modulos": n_mod,
+        "pecas": n_pecas,
+        "itens": n_itens,
+        "materiais_criados": criados,
+        "avisos": avisos,
+    }
+
+
+def eh_xml(conteudo: bytes) -> bool:
+    return conteudo.lstrip(b"\xef\xbb\xbf \t\r\n").startswith(b"<")

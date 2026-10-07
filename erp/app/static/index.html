@@ -48,6 +48,7 @@ button.sec { background: none; color: var(--brand); }
 #scan { font-size: 22px; padding: 14px; width: 100%; }
 .feito { color: var(--ok); } .pend { color: var(--muted); }
 a { color: var(--brand); cursor: pointer; }
+.dica { color: var(--muted); font-size: 13px; margin: 0 0 10px; }
 </style>
 </head>
 <body>
@@ -70,13 +71,15 @@ a { color: var(--brand); cursor: pointer; }
   </section>
 
   <section id="projetos">
-    <div class="card"><h2>Novo projeto</h2>
+    <div class="card"><h2>Novo projeto a partir do Promob</h2>
+      <p class="dica">No Promob, exporte o relatório <b>Orçamento-Explodido c/ Operação</b> em XML. O ERP lê módulos, peças, chapas, fitas, ferragens, roteiro de cada peça e cliente, e cadastra os materiais novos.</p>
       <div class="linha">
-        <input id="p-codigo" placeholder="Código (ex.: P-001)">
-        <input id="p-nome" placeholder="Nome / cliente">
-        <input id="p-entrega" type="date" title="Data de entrega">
-        <button class="btn" onclick="criarProjeto()">Criar</button>
+        <input type="file" id="xml-novo" accept=".xml">
+        <input id="p-codigo" placeholder="Código (opcional, ex.: P-0001)">
+        <input id="p-nome" placeholder="Nome (opcional)">
+        <button class="btn" onclick="novoPorXml()">Importar XML</button>
       </div>
+      <div id="novo-msg"></div>
     </div>
     <div class="card"><h2>Projetos</h2><div class="tabela" id="lista-projetos"></div></div>
     <div class="card" id="det-projeto" hidden></div>
@@ -184,13 +187,24 @@ async function carregarProjetos() {
     ["Entrega", (p) => dataBR(p.data_entrega)]], lista);
 }
 
-async function criarProjeto() {
+function resumoImportacao(r) {
+  return `Importado do ${r.origem === "PROMOB_XML" ? "Promob" : "CSV"}${r.cliente ? ` · cliente ${esc(r.cliente)}` : ""}: ${r.ambientes} ambiente(s), ${r.modulos} módulo(s), ${r.pecas} peça(s), ${r.itens} ferragem(ns).`
+    + (r.materiais_criados?.length ? `\nMateriais cadastrados automaticamente: ${r.materiais_criados.map(esc).join(", ")}` : "")
+    + (r.avisos.length ? "\n" + r.avisos.map(esc).join("\n") : "");
+}
+
+async function novoPorXml() {
+  const arquivo = $("xml-novo").files[0];
+  if (!arquivo) { $("novo-msg").innerHTML = `<div class="msg err">Escolha o arquivo XML exportado do Promob.</div>`; return; }
+  const fd = new FormData(); fd.append("arquivo", arquivo);
+  if ($("p-codigo").value.trim()) fd.append("codigo", $("p-codigo").value.trim());
+  if ($("p-nome").value.trim()) fd.append("nome", $("p-nome").value.trim());
   try {
-    const p = await api("/api/projetos", {method: "POST", json: {codigo: $("p-codigo").value.trim(),
-      nome: $("p-nome").value.trim(), data_entrega: $("p-entrega").value || null}});
-    $("p-codigo").value = $("p-nome").value = "";
-    await carregarProjetos(); verProjeto(p.id);
-  } catch (e) { alert(e.message); }
+    const r = await api("/api/projetos/importar-xml", {method: "POST", body: fd});
+    $("p-codigo").value = $("p-nome").value = ""; $("xml-novo").value = ""; $("novo-msg").innerHTML = "";
+    await carregarProjetos(); await verProjeto(r.projeto_id);
+    $("proj-msg").insertAdjacentHTML("afterbegin", `<div class="msg ok">${resumoImportacao(r)}</div>`);
+  } catch (e) { $("novo-msg").innerHTML = `<div class="msg err">${esc(e.message)}</div>`; }
 }
 
 async function verProjeto(id) {
@@ -204,7 +218,7 @@ async function verProjeto(id) {
   $("det-projeto").innerHTML = `
     <h2>${esc(p.codigo)} · ${esc(p.nome)} ${tag(p.status)}</h2>
     <div class="linha">
-      ${editavel ? `<input type="file" id="arq" accept=".csv,.txt"><button class="btn sec" onclick="importar(${id})">Importar lista de peças (CSV)</button>
+      ${editavel ? `<input type="file" id="arq" accept=".xml,.csv"><button class="btn sec" onclick="importar(${id})">Reimportar XML do Promob</button>
       <button class="btn" onclick="liberar(${id})">Liberar para a fábrica</button>` : ""}
       ${p.status === "LIBERADO" ? `<button class="btn" onclick="gerarOp(${id})">Gerar ordem de produção</button>` : ""}
     </div>
@@ -221,12 +235,12 @@ async function verProjeto(id) {
 
 async function importar(id) {
   const arquivo = $("arq").files[0];
-  if (!arquivo) return alert("Escolha o arquivo CSV.");
+  if (!arquivo) return alert("Escolha o XML exportado do Promob.");
   const fd = new FormData(); fd.append("arquivo", arquivo);
   try {
     const r = await api(`/api/projetos/${id}/importar`, {method: "POST", body: fd});
     await verProjeto(id);
-    $("proj-msg").insertAdjacentHTML("afterbegin", `<div class="msg ok">Importado: ${r.ambientes} ambiente(s), ${r.modulos} módulo(s), ${r.pecas} peça(s), ${r.itens} item(ns).${r.avisos.length ? "\n" + r.avisos.map(esc).join("\n") : ""}</div>`);
+    $("proj-msg").insertAdjacentHTML("afterbegin", `<div class="msg ok">${resumoImportacao(r)}</div>`);
   } catch (e) { $("proj-msg").innerHTML = `<div class="msg err">${esc(e.message)}</div>`; }
 }
 

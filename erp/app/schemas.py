@@ -80,7 +80,10 @@ class PecaOut(Schema):
     fita_c2: str | None
     fita_l1: str | None
     fita_l2: str | None
+    fita_codigo: str | None
+    fita_metros: float | None
     programa_usinagem: str | None
+    operacoes: str | None
 
 
 class ItemModuloOut(Schema):
@@ -134,6 +137,9 @@ class ProjetoOut(ProjetoResumo):
 
 class ResultadoImportacao(Schema):
     projeto_id: int
+    origem: str = "CSV"
+    cliente: str | None = None
+    materiais_criados: list[str] = []
     ambientes: int
     modulos: int
     pecas: int

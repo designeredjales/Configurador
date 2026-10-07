@@ -34,9 +34,8 @@ def pendencias(db: Session, projeto: Projeto) -> list[str]:
         ref = f"{mod.codigo}/{peca.codigo}"
         if peca.material_codigo not in materiais:
             erros.append(f"{ref}: chapa '{peca.material_codigo}' sem cadastro")
-        for lado in ("fita_c1", "fita_c2", "fita_l1", "fita_l2"):
-            fita = getattr(peca, lado)
-            if fita and fita not in materiais:
+        for fita in peca.fitas:
+            if fita not in materiais:
                 erros.append(f"{ref}: fita '{fita}' sem cadastro")
         if peca.comprimento_mm <= 0 or peca.largura_mm <= 0:
             erros.append(f"{ref}: medidas inválidas")
@@ -66,6 +65,8 @@ def consumo(db: Session, projeto: Projeto) -> dict:
         qtd = peca.quantidade * mod.quantidade
         total_pecas += qtd
         area_m2[peca.material_codigo] += peca.comprimento_mm * peca.largura_mm / 1e6 * qtd
+        if peca.fita_codigo and peca.fita_metros:
+            fita_m[peca.fita_codigo] += peca.fita_metros * qtd  # metragem do Promob
         for lado, medida in (("fita_c1", peca.comprimento_mm), ("fita_c2", peca.comprimento_mm),
                              ("fita_l1", peca.largura_mm), ("fita_l2", peca.largura_mm)):
             fita = getattr(peca, lado)

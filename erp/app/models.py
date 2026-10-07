@@ -12,6 +12,9 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 from .db import Base
 
 
+OPERACOES_USINAGEM = {"FURAR", "RASGO", "USINAR", "USINAGEM", "FRESAR", "CNC"}
+
+
 def agora() -> datetime:
     return datetime.now()
 
@@ -174,18 +177,31 @@ class Peca(Base):
     fita_c2: Mapped[str | None] = mapped_column(String(60))
     fita_l1: Mapped[str | None] = mapped_column(String(60))
     fita_l2: Mapped[str | None] = mapped_column(String(60))
+    # Vindo do Promob: fita da peça e metragem total já calculada (sem os lados)
+    fita_codigo: Mapped[str | None] = mapped_column(String(60))
+    fita_metros: Mapped[float | None] = mapped_column(Float)
     programa_usinagem: Mapped[str | None] = mapped_column(String(120))
+    # Operações do roteiro produtivo do Promob, separadas por vírgula (CORTE,BORDA,FURAR...)
+    operacoes: Mapped[str | None] = mapped_column(String(200))
 
     modulo: Mapped[Modulo] = relationship(back_populates="pecas")
     material: Mapped[Material | None] = relationship()
 
     @property
+    def lista_operacoes(self) -> list[str]:
+        return [o for o in (self.operacoes or "").split(",") if o]
+
+    @property
+    def fitas(self) -> list[str]:
+        return [f for f in (self.fita_c1, self.fita_c2, self.fita_l1, self.fita_l2, self.fita_codigo) if f]
+
+    @property
     def tem_fita(self) -> bool:
-        return any([self.fita_c1, self.fita_c2, self.fita_l1, self.fita_l2])
+        return bool(self.fitas) or "BORDA" in self.lista_operacoes
 
     @property
     def tem_usinagem(self) -> bool:
-        return bool(self.programa_usinagem)
+        return bool(self.programa_usinagem) or bool(OPERACOES_USINAGEM & set(self.lista_operacoes))
 
 
 class ItemModulo(Base):
