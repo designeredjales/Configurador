@@ -21,7 +21,7 @@ DOMINIO=erp.suaempresa.com.br EMAIL=ti@suaempresa.com.br RAMO=claude/adoring-hei
 # repositório privado: acrescente GIT_TOKEN=github_pat_... antes do bash (e baixe o script com o mesmo token)
 ```
 
-Depois que o PR for mesclado, use `RAMO=main` (o padrão). O script, em 7 etapas:
+Use sempre o ramo onde o ERP está: hoje é `claude/adoring-heisenberg-kzz1c6` (o PR aponta para `claude/espelhe-aplicacao-j03c7d`). Quando o ERP chegar ao `main`, o `RAMO` pode ser omitido (o padrão é `main`). O script, em 7 etapas:
 
 1. atualiza o sistema, liga as **atualizações de segurança automáticas**, o **fail2ban** e o **firewall** (só SSH, 80 e 443), cria swap em máquina pequena e ajusta o fuso;
 2. instala o **Docker**;
