@@ -26,6 +26,8 @@ CATALOGO: dict[str, tuple[str, str, str]] = {
     "financeiro": ("Financeiro", "Financeiro", "Contratos, contas a pagar e receber, fluxo de caixa, DRE"),
     "fiscal": ("Financeiro", "NF-e", "Emitir e consultar nota fiscal"),
     "conciliacao": ("Financeiro", "Conciliação bancária", "Importar extrato OFX e conciliar movimentos"),
+    "controladoria": ("Financeiro", "Planejamento e controladoria", "DRE gerencial, centros de custo, verbas, cenários de markup e consolidação"),
+    "aprovar_despesa": ("Financeiro", "Aprovar despesas", "Libera despesa acima da alçada ou da verba do centro de custo"),
     "usuarios": ("Administração", "Usuários e configurações", "Gerenciar equipe, funções e configurações da empresa"),
 }
 
@@ -37,7 +39,7 @@ PADRAO_PERFIL: dict[Perfil, frozenset[str]] = {
     Perfil.ENGENHARIA: frozenset({"projetos", "materiais", "clientes"}),
     Perfil.PCP: frozenset({"pcp", "apontamento", "estorno", "refugo", "expedicao", "montagem", "assistencia"}),
     Perfil.COMPRAS: frozenset({"compras", "estoque", "materiais"}),
-    Perfil.FINANCEIRO: frozenset({"financeiro", "fiscal", "conciliacao", "clientes"}),
+    Perfil.FINANCEIRO: frozenset({"financeiro", "fiscal", "conciliacao", "clientes", "controladoria"}),
     Perfil.MONTAGEM: frozenset({"montagem", "assistencia"}),
     Perfil.VENDEDOR: frozenset({"comercial", "clientes"}),
     Perfil.OPERADOR: frozenset({"apontamento"}),

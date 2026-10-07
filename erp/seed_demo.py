@@ -91,6 +91,45 @@ with TestClient(app) as c:
     c.post(f"/api/versoes/{v['id']}/negociar", json={"desconto_pct": 8, "condicao": "6x sem juros"}, headers=hv)
     c.post("/api/oportunidades", json={"titulo": "Dormitório casal", "cliente_nome": "Carlos Mendes",
                                        "proxima_acao": "Visita técnica para medição"}, headers=hv)
+    # Controladoria: centros de custo, verbas, alçada, histórico de antes do ERP, cenário de planejamento
+    c.post("/api/usuarios", json={"nome": "Rafael (financeiro)", "email": "financeiro@demo.com", "senha": "demo12345",
+                                  "perfil": "FINANCEIRO"}, headers=h)
+    hf = {"Authorization": "Bearer " + c.post("/api/auth/login", json={"email": "financeiro@demo.com", "senha": "demo12345"}).json()["token"]}
+    ccs = {}
+    for cod, nome, tipo, setor in (("ADM", "Administrativo", "ADMINISTRATIVO", None), ("COM", "Comercial e marketing", "COMERCIAL", None),
+                                   ("FAB", "Fábrica · corte", "PRODUTIVO", "CORTE")):
+        ccs[cod] = c.post("/api/centros-custo", json={"codigo": cod, "nome": nome, "tipo": tipo, "setor_codigo": setor,
+                                                     "responsavel_id": 1}, headers=h).json()["id"]
+    c.put("/api/controladoria/config", json={"alcada_valor": 5000, "centros_padrao": {"RECEITA": ccs["COM"], "MATERIAL": ccs["FAB"]}}, headers=h)
+    c.put("/api/verbas", json=[{"centro_custo_id": ccs[cc], "ano": hoje.year, "mes": hoje.month, "conta": conta, "valor": v}
+                               for cc, conta, v in (("ADM", "OCUPACAO", 4000), ("ADM", "ADMINISTRATIVAS", 1500), ("COM", "COMERCIAL", 3000),
+                                                    ("FAB", "PESSOAL", 14000), ("FAB", "MANUTENCAO", 1200))], headers=h)
+    for l in c.get("/api/lancamentos?tipo=PAGAR", headers=h).json():
+        if l["descricao"] == "Aluguel do galpão":
+            c.patch(f"/api/lancamentos/{l['id']}/classificar", json={"centro_custo_id": ccs["ADM"], "conta": "OCUPACAO"}, headers=h)
+    c.post("/api/lancamentos", json={"tipo": "PAGAR", "categoria": "DESPESA_FIXA", "descricao": "Campanha Instagram", "valor": 1800,
+                                     "vencimento": str(hoje), "centro_custo_id": ccs["COM"], "conta": "COMERCIAL"}, headers=hf)
+    c.post("/api/lancamentos", json={"tipo": "PAGAR", "categoria": "DESPESA_FIXA", "descricao": "Feira Movelsul (estande)", "valor": 6500,
+                                     "vencimento": str(hoje + timedelta(days=15)), "centro_custo_id": ccs["COM"], "conta": "COMERCIAL"}, headers=hf)
+    linhas = ["mes;conta;valor;regime;centro"]
+    for n in (3, 2, 1):
+        t = hoje.year * 12 + hoje.month - 1 - n
+        mes = f"{t // 12}-{t % 12 + 1:02d}"
+        for conta, v, cc in (("RECEITA", 118000 + 6000 * n, ""), ("IMPOSTOS", 7300, ""), ("MATERIAL", 61000, "FAB"), ("COMISSOES", 5900, "COM"),
+                             ("FRETE_MONTAGEM", 4200, ""), ("PESSOAL", 13500, "FAB"), ("PESSOAL", 14500, "ADM"), ("OCUPACAO", 6800, "ADM"),
+                             ("ADMINISTRATIVAS", 3400, "ADM"), ("COMERCIAL", 2600, "COM"), ("MANUTENCAO", 1100, "FAB")):
+            linhas.append(f"{mes};{conta};{v};COMPETENCIA;{cc}")
+    c.post("/api/controladoria/historico", files={"arquivo": ("historico.csv", "\n".join(linhas).encode())}, headers=h)
+    c.post("/api/cenarios", json={"nome": "Plano da fábrica", "premissas": {
+        "imovel": {"situacao": "LOCADO", "frente_m": 20, "fundo_m": 30, "locacao_m2": 30, "valor_m2": 3500},
+        "investimentos": [{"nome": "Seccionadora", "tipo": "MAQUINA", "valor": 180000}, {"nome": "Coladeira de borda", "tipo": "MAQUINA", "valor": 90000},
+                          {"nome": "Furadeira CNC", "tipo": "MAQUINA", "valor": 60000}, {"nome": "Caminhão", "tipo": "FROTA", "valor": 120000},
+                          {"nome": "Showroom", "tipo": "OUTRO", "valor": 40000}],
+        "pessoal": {"funcionarios": 9, "folha": 16000, "encargos_pct": 70, "pro_labore": 8000, "encargos_pro_labore_pct": 27.5},
+        "fixos": {"modo": "RESUMO", "resumo": 8500}, "crescimento": {"marketing": 2500},
+        "variaveis": {"dv_pct": 52, "rt_pct": 0, "comissoes_pct": 5, "imposto_pct": 6}, "lucro_pct": 15,
+        "maquinas": {"quantidade": 3, "dias": 21, "horas": 7, "operador": 2800, "horas_ociosas": 25}}}, headers=h)
+    c.post("/api/controladoria/consolidar", json={"meses": 2}, headers=h)
     print(f"Demonstração criada: {r['pecas']} peças importadas do XML.\n"
           "Abra http://localhost:8000 e entre com admin@demo.com / demo12345 "
-          "(operador: operador@demo.com, expedição: expedicao@demo.com, vendas: vendas@demo.com, senha demo12345)")
+          "(operador: operador@demo.com, expedição: expedicao@demo.com, vendas: vendas@demo.com, financeiro: financeiro@demo.com, senha demo12345)")

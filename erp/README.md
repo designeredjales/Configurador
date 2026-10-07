@@ -239,6 +239,21 @@ Em **Configurações → Capacidade, tempos padrão e custo-hora**, cada setor r
 
 No **Painel PCP**, a sequência mostra o **tambor** (setor com mais dias de carga em horas, ou fixado no setup), encaixa as obras pela data de entrega na capacidade dele, calcula a **saída prevista** (tambor + pulmão), a **folga** e a **corda** (até quando liberar cada obra). **Aplicar prioridades** ajusta as OPs; **Formar lote** junta as próximas obras liberadas que cabem em N dias de tambor. Sem tempos cadastrados, a carga é em m² e a capacidade vem da vazão dos últimos 7 dias. Pulmão e tambor ficam no setup (gestão à vista).
 
+## Planejamento e controladoria (DRE gerencial)
+
+Aba **Planejamento** (funções *Planejamento e controladoria* e *Aprovar despesas*).
+
+- **Centros de custo** (administrativo, produtivo, comercial, estrutura), com responsável e, nos produtivos, o setor da fábrica ligado. Lançamentos recebem centro e **conta gerencial** (receita, impostos, material, comissões, frete/montagem, pessoal, ocupação, administrativas, comercial, manutenção, financeiro, investimentos); sem conta, vale a da categoria.
+- **Verbas**: teto de despesa por centro, conta e mês. Edição em grade, ou geração pela média realizada dos últimos meses com reajuste.
+- **Fluxo de aprovação**: despesa que estoura a verba do centro vai para quem aprova despesas; despesa acima da alçada pode ser liberada pelo responsável do centro (nunca a própria). Pendente ou recusada não pode ser baixada. Regras por base: alçada, centro obrigatório, centro sem verba pede aprovação.
+- **Consolidação agendada**: todo dia, no horário das regras, o ERP recalcula os meses recentes em dois regimes: **competência** (operacional: receita das obras concluídas, impostos pela alíquota, material consumido, custos da obra no mês da conclusão, despesas pelo vencimento) e **caixa** (bancário: recebido e pago, mais o extrato ainda não conciliado). Também sob demanda ("Consolidar agora"), com histórico de execuções.
+- **Histórico mesclado**: importe o DRE de antes do ERP (`mes;conta;valor;regime;centro`). Meses sem dados do sistema usam o histórico, marcado com **H**.
+- **DRE gerencial realizado × previsto** por mês, empresa inteira ou por centro, com margem de contribuição, EBITDA, resultado e geração de caixa; o previsto vem das verbas e do cenário principal. Exportação em CSV.
+- **Relatório por centro**: verba, realizado, em aberto, saldo e consumo, por conta; CSV.
+- **Cenários de planejamento** (modelo "Ponto de equilíbrio 2.0" da consultoria): imóvel locado ou próprio, investimentos, retorno esperado sobre o capital, pessoal com encargos, fixos (resumo ou detalhado), crescimento (marketing, reserva de caixa, reinvestimento, depreciação), despesa variável, RT, comissões, imposto e lucro desejado. Resultado: venda necessária, faturamento de equilíbrio (total e por funcionário), **meta**, composição da meta, **markup divisor**, markup final e o **markup a cadastrar no Promob**, custo-hora de máquina e custo da ociosidade, projeção mensal com sazonalidade. Simulação ao vivo, vários cenários, **comparação com o histórico real** (e "usar o histórico nas premissas"), cenário principal e **aplicar a meta na gestão à vista**.
+- **Custo dos setores pelo realizado**: centros produtivos ligados a um setor atualizam o custo mensal do setor (e o custo-hora) com a média das despesas realizadas.
+- Tudo entra no **setup da base** (centros, regras, agenda e cenário principal).
+
 ## Comercial e financeiro
 
 - **Do XML do Promob**: `TOTALPRICES/@TABLE` (valor de tabela), `MARGINS/ORDER/@VALUE` (pedido à fábrica com ICMS, IPI e descontos), `MARGINS/BUDGET/@VALUE` (venda ao cliente), frete e montagem do orçamento e a condição de pagamento selecionada.

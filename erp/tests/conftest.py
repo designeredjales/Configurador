@@ -3,6 +3,7 @@ import os
 
 # SQLite em memória por padrão; ERP_TEST_DATABASE_URL roda a suíte em outro banco (ex.: PostgreSQL)
 os.environ["DATABASE_URL"] = os.getenv("ERP_TEST_DATABASE_URL", "sqlite://")
+os.environ["ERP_AGENDADOR"] = "0"  # os testes chamam o agendador diretamente
 
 import pytest  # noqa: E402
 from fastapi.testclient import TestClient  # noqa: E402

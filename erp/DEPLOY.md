@@ -69,6 +69,10 @@ O módulo Comercial puxa a tabela de preços ativa da conta Promob para conferir
 
 Os renders enviados nas negociações ficam no volume `arquivos`. O backup do banco **não** inclui esse volume: inclua `arquivos` na sua cópia para a nuvem se quiser preservá-los.
 
+## Consolidação financeira agendada
+
+O próprio servidor consolida o DRE gerencial de cada empresa uma vez por dia, no horário definido em **Planejamento → Regras** (fuso `TZ`). Com mais de uma instância do ERP, a consolidação não roda em dobro (uma execução agendada por empresa e dia). Para desligar o agendador interno e usar cron no lugar: `ERP_AGENDADOR=0` e, no cron do servidor, `docker compose exec erp python -m app.consolidar` uma vez por hora.
+
 ## Opção B: plataforma gerenciada (Render, Railway, Fly.io)
 
 1. Crie um PostgreSQL gerenciado e anote a URL de conexão.
@@ -90,6 +94,7 @@ Os renders enviados nas negociações ficam no volume `arquivos`. O backup do ba
 | `SMTP_HOST`, `SMTP_PORTA`, `SMTP_USUARIO`, `SMTP_SENHA`, `SMTP_REMETENTE` | não | E-mail de redefinição de senha |
 | `SENTRY_DSN` | não | Envia os erros para o Sentry |
 | `APP_VERSAO` | não | Versão exibida no painel (ex.: commit) |
+| `ERP_AGENDADOR` | não (1) | `0` desliga a consolidação diária interna (use cron com `python -m app.consolidar`) |
 | `ERP_PASTA_ARQUIVOS` | já vem no compose (`/app/arquivos`) | Renders e imagens das propostas. Em plataforma gerenciada, use um disco persistente |
 | `ERP_PASTA_BACKUP` | já vem no compose | Pasta lida pelo painel para mostrar o último backup |
 | `BACKUP_HORA`, `BACKUP_DIAS`, `TZ` | não (03, 14, America/Sao_Paulo) | Agenda e retenção do backup |

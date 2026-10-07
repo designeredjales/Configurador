@@ -92,7 +92,9 @@ td input.num { width: 90px; text-align: right; }
 .funil .col h3 { font-size: 13px; margin: 2px 4px 8px; color: var(--muted); display: flex; justify-content: space-between; }
 .funil .op { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; margin-bottom: 8px; cursor: pointer; font-size: 13px; }
 .funil .op:hover { border-color: var(--brand); } .funil .op b { display: block; font-size: 14px; } .funil .op .v { font-weight: 700; margin-top: 4px; }
-.tag.LIVRE { background: var(--line); } .tag.PENDENTE { background: var(--warn); color: #fff; } .tag.APROVADA, .tag.GANHA { background: var(--ok); color: #fff; } .tag.RECUSADA, .tag.PERDIDA { background: var(--err); color: #fff; }
+.tag.LIVRE { background: var(--line); } .pl-total td { font-weight: 700; border-top: 2px solid var(--line); } .pl-fonte { font-size: 10px; color: var(--warn); }
+.cen-form fieldset { border: 1px solid var(--line); border-radius: 8px; margin: 0 0 10px; padding: 8px 12px; min-width: 0; } .cen-form legend { font-weight: 600; font-size: 13px; }
+.cen-res { display: grid; gap: 10px; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); margin: 10px 0; } .tag.PENDENTE { background: var(--warn); color: #fff; } .tag.APROVADA, .tag.GANHA { background: var(--ok); color: #fff; } .tag.RECUSADA, .tag.PERDIDA { background: var(--err); color: #fff; }
 .calc td:first-child { color: var(--muted); } .calc tr.total td { font-weight: 700; border-top: 2px solid var(--line); }
 .renders { display: grid; gap: 10px; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); }
 .renders figure { margin: 0; } .renders img { width: 100%; border-radius: 8px; display: block; } .renders figcaption { font-size: 12px; color: var(--muted); }
@@ -216,6 +218,7 @@ body.tv #gv-kpis .kpi { font-size: 30px; } body.tv .andon div { font-size: 17px;
     <button data-aba="montagem">Montagem</button>
     <button data-aba="assistencia">Assistência</button>
     <button data-aba="financeiro">Financeiro</button>
+    <button data-aba="planejamento">Planejamento</button>
     <button data-aba="materiais">Materiais</button>
     <button data-aba="usuarios">Usuários</button>
     <button data-aba="configuracoes">Configurações</button>
@@ -625,9 +628,63 @@ body.tv #gv-kpis .kpi { font-size: 30px; } body.tv .andon div { font-size: 17px;
         <input id="l-valor" placeholder="Valor" size="10">
         <input id="l-venc" type="date" title="Vencimento">
         <select id="l-proj"></select>
+        <select id="l-centro" aria-label="Centro de custo"></select>
+        <select id="l-conta" aria-label="Conta gerencial"></select>
         <button class="btn" onclick="criarLancamento()">Lançar</button>
       </div>
       <div id="l-msg"></div>
+    </div>
+  </section>
+
+  <section id="planejamento">
+    <div class="linha gv-topo"><b>Planejamento e controladoria</b>
+      <label class="dica">Ano <input id="pl-ano" type="number" style="width:90px" aria-label="Ano"></label>
+      <select id="pl-regime" aria-label="Regime"><option value="COMPETENCIA">Competência (operacional)</option><option value="CAIXA">Caixa (bancário)</option></select>
+      <select id="pl-centro" aria-label="Centro de custo"></select>
+      <button class="btn sec" onclick="carregarPlanejamento()">Atualizar</button>
+      <button class="btn" onclick="consolidarAgora()">Consolidar agora</button>
+      <button class="btn sec" onclick="baixarArquivo(`/api/controladoria/dre.csv?ano=${$('pl-ano').value}&regime=${$('pl-regime').value}${$('pl-centro').value ? '&centro_custo_id=' + $('pl-centro').value : ''}`, 'dre-gerencial.csv')">Exportar CSV</button></div>
+    <div id="pl-msg"></div>
+    <div class="grid" id="pl-kpis"></div>
+    <div class="card"><h2>DRE gerencial: realizado × previsto</h2>
+      <p class="dica"><b>Competência</b>: receita das obras concluídas no mês, impostos pela alíquota, material consumido, custos da obra no mês da conclusão e despesas pelo vencimento. <b>Caixa</b>: o que foi recebido e pago, mais o extrato bancário ainda não conciliado. <b>Previsto</b>: verbas dos centros de custo; receita, variáveis e fixos sem verba vêm do cenário principal (meta × sazonalidade). O acumulado compara só os meses que já têm realizado. Meses marcados com <b>H</b> vêm do histórico importado.</p>
+      <div class="tabela" id="pl-dre"></div></div>
+    <div class="card" id="pl-aprov-card"><h2>Despesas aguardando aprovação</h2><div class="tabela" id="pl-aprov"></div></div>
+    <div class="card" id="pl-centros-card"><h2>Centros de custo: verba × realizado</h2>
+      <div class="linha"><select id="pl-mes" aria-label="Período" onchange="carregarRelCentros()"></select><span class="dica">Na competência, a despesa conta pelo vencimento (paga ou não); no caixa, o consumo soma o que está em aberto.</span></div>
+      <div class="tabela" id="pl-centros"></div>
+      <div class="linha" style="margin-top:8px"><button class="btn sec" onclick="baixarArquivo(`/api/controladoria/centros.csv?ano=${$('pl-ano').value}`, 'centros-de-custo.csv')">Exportar CSV</button></div></div>
+    <div class="card" id="pl-cen-card"><h2>Cenários: ponto de equilíbrio, meta e markup</h2>
+      <p class="dica">Modelo de planejamento da consultoria: imóvel, investimentos, retorno esperado sobre o capital, pessoal, fixos, crescimento, variáveis e lucro desejado. O resultado é a venda necessária, o faturamento de equilíbrio, a meta e o <b>markup</b> (divisor) com o valor a cadastrar no Promob. Compare com o histórico real e aplique a meta na gestão à vista.</p>
+      <div class="tabela" id="pl-cenarios"></div>
+      <div id="pl-editor"></div></div>
+    <div class="card" id="pl-cad-card"><h2>Centros de custo e verbas</h2>
+      <div class="linha"><input id="cc-cod" placeholder="Código (ex.: ADM)" size="10" aria-label="Código">
+        <input id="cc-nome" placeholder="Nome" size="18" aria-label="Nome">
+        <select id="cc-tipo" aria-label="Tipo"><option>ADMINISTRATIVO</option><option>PRODUTIVO</option><option>COMERCIAL</option><option>ESTRUTURA</option></select>
+        <select id="cc-resp" aria-label="Responsável"></select>
+        <select id="cc-setor" aria-label="Setor da fábrica"></select>
+        <button class="btn sec" onclick="novoCentroCusto()">Cadastrar centro</button></div>
+      <div class="tabela" id="pl-cadcentros"></div>
+      <h2>Verbas do ano (por centro e conta)</h2>
+      <p class="dica">A verba é o teto de despesa do centro no mês: lançamento que estoura vai para aprovação de quem aprova despesas. Edite e salve; ou gere a partir da média realizada.</p>
+      <div class="linha"><select id="vb-centro" aria-label="Centro"></select><select id="vb-conta" aria-label="Conta"></select><button class="btn sec" onclick="addLinhaVerba()">Adicionar linha</button>
+        <label class="dica">Gerar pela média dos últimos <input id="vb-base" type="number" min="1" max="12" value="3" style="width:60px"> meses, ajuste <input id="vb-aj" type="number" step="0.5" value="0" style="width:70px"> %</label>
+        <button class="btn sec" onclick="gerarVerbas()">Gerar meses seguintes</button></div>
+      <div class="tabela" id="pl-verbas"></div>
+      <div class="linha"><button class="btn" onclick="salvarVerbas()">Salvar verbas</button></div><div id="vb-msg"></div>
+    </div>
+    <div class="card" id="pl-cfg-card"><h2>Consolidação, histórico e regras</h2>
+      <div class="cfg" id="pl-cfg"></div>
+      <div class="linha" style="margin-top:8px"><button class="btn" onclick="salvarCfgCtl()">Salvar regras</button></div>
+      <h2>Histórico de execuções</h2><div class="tabela" id="pl-exec"></div>
+      <h2>Importar histórico (DRE de antes do ERP)</h2>
+      <p class="dica">CSV com <code>mes;conta;valor;regime;centro</code> (ex.: <code>2025-03;PESSOAL;48000;COMPETENCIA;ADM</code>). Contas: RECEITA, IMPOSTOS, MATERIAL, COMISSOES, FRETE_MONTAGEM, PESSOAL, OCUPACAO, ADMINISTRATIVAS, COMERCIAL, MANUTENCAO, FINANCEIRO, INVESTIMENTOS. Meses sem dados do ERP usam o histórico.</p>
+      <div class="linha"><input type="file" id="pl-hist" accept=".csv,text/csv" aria-label="Arquivo de histórico"><button class="btn sec" onclick="importarHistorico()">Importar</button></div>
+      <h2>Custo dos setores pelo realizado</h2>
+      <p class="dica">Para centros de custo ligados a um setor da fábrica: a média das despesas realizadas vira o custo mensal do setor, e o custo-hora se recalcula.</p>
+      <div class="linha"><button class="btn sec" onclick="custoSetores(false)">Ver</button><button class="btn sec" onclick="custoSetores(true)">Aplicar aos setores</button></div>
+      <div class="tabela" id="pl-custoset"></div><div id="pl-cfg-msg"></div>
     </div>
   </section>
 
@@ -728,7 +785,7 @@ function tabela(colunas, linhas) {
 const carregadores = {painel: carregarPainel, projetos: carregarProjetos, ops: carregarOps, usuarios: carregarUsuarios,
                       estoque: carregarEstoque, compras: carregarCompras, financeiro: carregarFinanceiro,
                       montagem: carregarMontagem, assistencia: carregarAssistencia, indicadores: carregarIndicadores,
-                      apontamento: carregarApontamento, materiais: carregarMateriais, producao: carregarProducao, expedicao: carregarExpedicao, configuracoes: carregarConfiguracoes, comercial: carregarComercial, gestao: carregarGestao};
+                      apontamento: carregarApontamento, materiais: carregarMateriais, producao: carregarProducao, expedicao: carregarExpedicao, configuracoes: carregarConfiguracoes, comercial: carregarComercial, gestao: carregarGestao, planejamento: carregarPlanejamento};
 function abrir(aba) {
   document.querySelectorAll("section").forEach((s) => s.classList.toggle("ativo", s.id === aba));
   document.querySelectorAll("#abas button").forEach((b) => b.classList.toggle("ativo", b.dataset.aba === aba));
@@ -1436,6 +1493,9 @@ async function carregarFinanceiro() {
     ["Recebido", (m) => brl(m.recebido), 1], ["Pago", (m) => brl(m.pago), 1], ["Saldo do mês", (m) => val(m.saldo_mes), 1], ["Acumulado", (m) => val(m.saldo_acumulado), 1]], fluxo.meses);
   $("l-proj").innerHTML = `<option value="">Sem projeto (despesa geral)</option>` + projetos.map((p) => `<option value="${p.id}">${esc(p.codigo)} · ${esc(p.nome)}</option>`).join("");
   $("l-venc").value ||= new Date().toISOString().slice(0, 10);
+  const [ccs, cfgCtl] = await Promise.all([api("/api/centros-custo"), api("/api/controladoria/config")]);
+  $("l-centro").innerHTML = `<option value="">Sem centro de custo</option>` + ccs.filter((c) => c.ativo).map((c) => `<option value="${c.id}">${esc(c.codigo)} · ${esc(c.nome)}</option>`).join("");
+  $("l-conta").innerHTML = `<option value="">Conta pela categoria</option>` + cfgCtl.contas.filter((c) => !["NAO_CONCILIADO"].includes(c.codigo)).map((c) => `<option value="${c.codigo}">${esc(c.nome)}</option>`).join("");
   await Promise.all([carregarLancamentos(), carregarConciliacao()]);
 }
 
@@ -1479,8 +1539,10 @@ async function carregarLancamentos() {
   $("lista-lanc").innerHTML = tabela([["Vencimento", (l) => dataBR(l.vencimento)], ["Tipo", (l) => l.tipo === "RECEBER" ? "Receber" : "Pagar"],
     ["Descrição", (l) => `${esc(l.descricao)}${l.projeto_codigo ? ` <span class="tag">${esc(l.projeto_codigo)}</span>` : ""}`],
     ["Cliente / fornecedor", (l) => esc(l.cliente_nome || l.fornecedor_nome || "—")], ["Categoria", (l) => l.categoria.replace(/_/g, " ").toLowerCase()],
-    ["Valor", (l) => `<span class="${l.tipo === "PAGAR" ? "neg" : "pos"}">${brl(l.valor)}</span>`, 1], ["Situação", (l) => tag(l.situacao)],
-    ["", (l) => l.pago_em ? `baixa ${dataBR(l.pago_em)}` : `<button class="btn sec" onclick="baixarLancamento(${l.id})">Baixar hoje</button>`]], lista);
+    ["Centro", (l) => l.centro_custo ? `<span class="tag">${esc(l.centro_custo)}</span>` : "—"],
+    ["Valor", (l) => `<span class="${l.tipo === "PAGAR" ? "neg" : "pos"}">${brl(l.valor)}</span>`, 1],
+    ["Situação", (l) => tag(l.situacao) + (l.aprovacao !== "LIVRE" ? ` <span class="tag ${l.aprovacao}" title="${esc(l.aprovacao_motivo || "")}">${l.aprovacao.toLowerCase()}</span>` : "")],
+    ["", (l) => l.pago_em ? `baixa ${dataBR(l.pago_em)}` : ["PENDENTE", "RECUSADA"].includes(l.aprovacao) ? '<span class="dica">aguarda aprovação</span>' : `<button class="btn sec" onclick="baixarLancamento(${l.id})">Baixar hoje</button>`]], lista);
 }
 $("fin-tipo").onchange = $("fin-sit").onchange = () => carregarLancamentos().catch((e) => alert(e.message));
 
@@ -1491,9 +1553,11 @@ async function baixarLancamento(id) {
 
 async function criarLancamento() {
   try {
-    await api("/api/lancamentos", {method: "POST", json: {tipo: $("l-tipo").value, categoria: $("l-cat").value, descricao: $("l-desc").value.trim(),
-      valor: Number($("l-valor").value.replace(",", ".")), vencimento: $("l-venc").value, projeto_id: Number($("l-proj").value) || null}});
-    $("l-desc").value = $("l-valor").value = ""; $("l-msg").innerHTML = `<div class="msg ok">Lançamento registrado.</div>`;
+    const l = await api("/api/lancamentos", {method: "POST", json: {tipo: $("l-tipo").value, categoria: $("l-cat").value, descricao: $("l-desc").value.trim(),
+      valor: Number($("l-valor").value.replace(",", ".")), vencimento: $("l-venc").value, projeto_id: Number($("l-proj").value) || null,
+      centro_custo_id: Number($("l-centro").value) || null, conta: $("l-conta").value || null}});
+    $("l-desc").value = $("l-valor").value = "";
+    $("l-msg").innerHTML = l.aprovacao === "PENDENTE" ? `<div class="msg err">Lançamento registrado e aguardando aprovação: ${esc(l.aprovacao_motivo.replace(/^\[\w+\] /, ""))}.</div>` : `<div class="msg ok">Lançamento registrado.</div>`;
     await carregarFinanceiro();
   } catch (e) { $("l-msg").innerHTML = `<div class="msg err">${esc(e.message.replace(/Value error, /g, ""))}</div>`; }
 }
@@ -1530,7 +1594,7 @@ const ABA_FUNCOES = {
   indicadores: ["indicadores"], gestao: ["indicadores"], comercial: ["comercial", "aprovar_venda"], painel: null, projetos: ["projetos", "pcp", "financeiro", "fiscal"], ops: null,
   apontamento: ["apontamento"], producao: ["pcp", "apontamento", "estorno", "refugo", "indicadores"], expedicao: ["expedicao"],
   estoque: ["estoque", "compras", "projetos", "pcp"], compras: ["compras"], montagem: ["montagem"], assistencia: ["assistencia"],
-  financeiro: ["financeiro", "fiscal", "conciliacao"], materiais: ["materiais", "projetos", "compras", "pcp"], usuarios: ["usuarios"], configuracoes: ["usuarios"],
+  financeiro: ["financeiro", "fiscal", "conciliacao"], planejamento: ["controladoria", "aprovar_despesa"], materiais: ["materiais", "projetos", "compras", "pcp"], usuarios: ["usuarios"], configuracoes: ["usuarios"],
 };
 const opera = (f) => !!sessao?.usuario.funcoes_efetivas?.includes(f);
 function abasDoLogin() {
@@ -2290,6 +2354,268 @@ async function iniciar() {
   if (!token) return mostrarAcesso();
   try { entrar(await api("/api/auth/eu")); } catch (e) { mostrarAcesso(); }
 }
+// --- Planejamento e controladoria --------------------------------------------------------------
+let plCfg = null, plCentros = [], plVerbas = [], cenarioEd = null, plHist = null;
+const MESES_CURTOS = ["jan", "fev", "mar", "abr", "mai", "jun", "jul", "ago", "set", "out", "nov", "dez"];
+async function carregarPlanejamento() {
+  if (!$("pl-ano").value) $("pl-ano").value = new Date().getFullYear();
+  const ctl = opera("controladoria");
+  ["pl-centros-card", "pl-cen-card", "pl-cad-card", "pl-cfg-card"].forEach((id) => $(id).hidden = !ctl);
+  carregarAprovacoes().catch(() => {});
+  if (!ctl) { $("pl-dre").innerHTML = `<p class="pend">Seu acesso aqui é só para aprovar despesas.</p>`; return; }
+  [plCfg, plCentros] = await Promise.all([api("/api/controladoria/config"), api("/api/centros-custo")]);
+  const atual = $("pl-centro").value;
+  $("pl-centro").innerHTML = `<option value="">Empresa inteira</option>` + plCentros.map((c) => `<option value="${c.id}" ${String(c.id) === atual ? "selected" : ""}>${esc(c.codigo)} · ${esc(c.nome)}</option>`).join("");
+  await Promise.all([carregarDreGerencial(), carregarRelCentros(), carregarCenarios(), carregarCadCentros(), carregarCfgCtl()]);
+}
+$("pl-regime").onchange = $("pl-centro").onchange = () => carregarDreGerencial().catch((e) => alert(e.message));
+async function carregarDreGerencial() {
+  const ano = $("pl-ano").value, qs = new URLSearchParams({ano, regime: $("pl-regime").value});
+  if ($("pl-centro").value) qs.set("centro_custo_id", $("pl-centro").value);
+  const d = await api(`/api/controladoria/dre?${qs}`), t = d.totais, tp = d.totais_previsto;
+  const rec = d.linhas.find((l) => l.conta === "RECEITA");
+  $("pl-kpis").innerHTML = [[brl(rec.realizado), `Receita realizada · previsto ${brl(rec.previsto)}`], [pct(t.margem_pct), `Margem de contribuição · previsto ${pct(tp.margem_pct)}`],
+    [brl(t.resultado), `Resultado · previsto ${brl(tp.resultado)}`], [pct(t.resultado_pct), "Resultado sobre a receita"], [brl(t.geracao_caixa), "Geração de caixa (após investimentos)"]]
+    .map(([v, l]) => `<div class="card kpi">${v}<small>${l}</small></div>`).join("");
+  const meses = d.meses.filter((m) => Object.keys(m.realizado).length);
+  const sinal = (l, v) => l.grupo === "RECEITA" ? v : -v;
+  const cel = (v) => v ? `<td class="n ${v < 0 ? "neg" : ""}">${num(v, 0)}</td>` : `<td class="n pend">—</td>`;
+  const linhas = [];
+  const total = (rotulo, chave) => linhas.push(`<tr class="pl-total"><td>${rotulo}</td>${meses.map((m) => cel(m.totais[chave])).join("")}<td class="n">${num(t[chave], 0)}</td><td class="n">${num(tp[chave], 0)}</td><td class="n ${t[chave] - tp[chave] < 0 ? "neg" : "pos"}">${num(t[chave] - tp[chave], 0)}</td><td></td></tr>`);
+  let grupoAnt = null;
+  for (const l of d.linhas) {
+    if (grupoAnt === "VARIAVEL" && l.grupo !== "VARIAVEL") total("Margem de contribuição", "margem_contribuicao");
+    if (grupoAnt === "FIXO" && l.grupo !== "FIXO") total("Resultado operacional (EBITDA)", "ebitda");
+    if (grupoAnt === "FINANCEIRO" && l.grupo !== "FINANCEIRO") total("Resultado", "resultado");
+    grupoAnt = l.grupo;
+    if (!l.realizado && !l.previsto && !meses.some((m) => m.realizado[l.conta])) continue;
+    const ruim = l.grupo === "RECEITA" ? l.variacao < 0 : l.variacao > 0;
+    linhas.push(`<tr><td>${l.grupo === "RECEITA" ? "" : "(−) "}${esc(l.nome)}</td>${meses.map((m) => cel(sinal(l, m.realizado[l.conta] || 0))).join("")}
+      <td class="n"><b>${num(sinal(l, l.realizado), 0)}</b></td><td class="n">${l.previsto ? num(sinal(l, l.previsto), 0) : "—"}</td>
+      <td class="n ${l.previsto ? (ruim ? "neg" : "pos") : ""}">${l.previsto ? num(sinal(l, l.variacao), 0) : "—"}</td><td class="n">${l.variacao_pct == null ? "—" : pct(l.variacao_pct)}</td></tr>`);
+  }
+  if (grupoAnt) total("Resultado", "resultado");
+  $("pl-dre").innerHTML = meses.length ? `<table><thead><tr><th>Conta</th>${meses.map((m) => `<th class="n">${MESES_CURTOS[Number(m.mes.slice(5)) - 1]}${m.fonte === "HISTORICO" ? ' <span class="pl-fonte">H</span>' : ""}</th>`).join("")}
+    <th class="n">Realizado</th><th class="n">Previsto</th><th class="n">Variação</th><th class="n">%</th></tr></thead><tbody>${linhas.join("")}</tbody></table>`
+    : `<p class="pend">Nada consolidado em ${ano}. Use "Consolidar agora" (o agendador consolida todo dia no horário das regras) ou importe o histórico.</p>`;
+}
+async function consolidarAgora() {
+  try { const ex = await api("/api/controladoria/consolidar", {method: "POST", json: {}});
+    $("pl-msg").innerHTML = `<div class="msg ok">Consolidado: ${ex.resumo.meses.map((m) => `${m.mes} receita ${brl(m.receita)}`).join(" · ")}${ex.resumo.nao_conciliados ? ` · ${ex.resumo.nao_conciliados} movimento(s) do banco sem conciliar` : ""}.</div>`;
+    carregarPlanejamento(); }
+  catch (e) { $("pl-msg").innerHTML = `<div class="msg err">${esc(e.message)}</div>`; }
+}
+async function carregarAprovacoes() {
+  const lista = await api("/api/controladoria/aprovacoes");
+  $("pl-aprov-card").hidden = !lista.length && !opera("aprovar_despesa");
+  $("pl-aprov").innerHTML = tabela([["Vencimento", (l) => dataBR(l.vencimento)], ["Despesa", (l) => `<b>${esc(l.descricao)}</b><br><span class="dica">${esc((l.aprovacao_motivo || "").replace(/^\[\w+\] /, ""))}</span>`],
+    ["Centro", (l) => esc(l.centro_custo || "—")], ["Valor", (l) => brl(l.valor), 1],
+    ["", (l) => `<button class="btn" onclick="decidirDespesa(${l.id}, true)">Aprovar</button> <button class="btn sec" onclick="decidirDespesa(${l.id}, false)">Recusar</button>`]], lista);
+}
+async function decidirDespesa(id, aprovar) {
+  try { await api(`/api/lancamentos/${id}/aprovar`, {method: "POST", json: {aprovar}}); carregarAprovacoes(); } catch (e) { alert(e.message); }
+}
+async function carregarRelCentros() {
+  if (!$("pl-mes").options.length) $("pl-mes").innerHTML = `<option value="0">Ano todo</option>` + MESES_CURTOS.map((m, i) => `<option value="${i + 1}" ${i === new Date().getMonth() ? "selected" : ""}>${m}</option>`).join("");
+  const mes = Number($("pl-mes").value), periodo = mes ? `&mes_de=${mes}&mes_ate=${mes}` : "";
+  const r = await api(`/api/controladoria/centros?ano=${$("pl-ano").value}&regime=${$("pl-regime").value}${periodo}`);
+  $("pl-centros").innerHTML = tabela([["Centro", (c) => `<a onclick="$('pl-centro').value='${c.centro_custo_id || ""}'; carregarDreGerencial()"><b>${esc(c.codigo)}</b></a> ${esc(c.nome)}${c.responsavel ? `<br><span class="dica">resp. ${esc(c.responsavel)}</span>` : ""}`],
+    ["Verba", (c) => c.verba ? brl(c.verba) : "—", 1], ["Realizado", (c) => brl(c.realizado), 1], ["Em aberto", (c) => brl(c.em_aberto), 1],
+    ["Saldo", (c) => c.saldo == null ? "—" : `<span class="${c.saldo < 0 ? "neg" : "pos"}">${brl(c.saldo)}</span>`, 1],
+    ["Consumo", (c) => c.consumo_pct == null ? "—" : `${barra(Math.min(100, c.consumo_pct))} ${pct(c.consumo_pct)}`],
+    ["Por conta", (c) => Object.entries(c.por_conta).map(([k, v]) => `${esc(plCfg.contas.find((x) => x.codigo === k)?.nome || k)}: ${brl(v)}`).join("<br>") || "—"]], r);
+}
+// Cenários
+async function carregarCenarios() {
+  const lista = await api("/api/cenarios");
+  $("pl-cenarios").innerHTML = tabela([["Cenário", (c) => `<b>${esc(c.nome)}</b> ${c.principal ? '<span class="tag OK">principal</span>' : ""}`],
+    ["Equilíbrio", (c) => c.resultado ? brl(c.resultado.faturamento_equilibrio) : esc(c.erro), 1], ["Meta", (c) => c.resultado ? brl(c.resultado.meta_faturamento) : "—", 1],
+    ["Markup", (c) => c.resultado ? num(c.resultado.markup.markup, 4) : "—", 1], ["Markup Promob", (c) => c.resultado ? pct(c.resultado.markup.markup_promob_pct) : "—", 1],
+    ["", (c) => `<button class="btn sec" onclick="editarCenario(${c.id})">Abrir</button>${c.principal ? "" : ` <button class="btn sec" onclick="principalCenario(${c.id})">Tornar principal</button>`}`]], lista);
+  window._cenarios = lista;
+  if (!cenarioEd) $("pl-editor").innerHTML = `<div class="linha"><button class="btn" onclick="novoCenario()">Novo cenário</button></div>`;
+}
+async function novoCenario() { cenarioEd = {id: null, nome: "Novo cenário", premissas: await api("/api/cenarios/padrao")}; desenharCenario(); }
+function editarCenario(id) { const c = window._cenarios.find((x) => x.id === id); cenarioEd = {id, nome: c.nome, premissas: JSON.parse(JSON.stringify(c.premissas))}; desenharCenario(); }
+async function principalCenario(id) { await api(`/api/cenarios/${id}/principal`, {method: "POST"}); carregarPlanejamento(); }
+const CAMPOS_CEN = [
+  ["Imóvel", [["imovel.situacao", "Situação", "sel:LOCADO=Locado,PROPRIO=Próprio"], ["imovel.frente_m", "Frente (m)"], ["imovel.fundo_m", "Fundo (m)"], ["imovel.locacao_m2", "Locação R$/m²"], ["imovel.valor_m2", "Valor do imóvel R$/m²"]]],
+  ["Retorno sobre o capital", [["retorno_mercado_pct", "Retorno de mercado (% a.m.)"], ["retorno_pretendido_pct", "Acima do mercado (%)"]]],
+  ["Pessoal", [["pessoal.funcionarios", "Funcionários"], ["pessoal.folha", "Folha mensal (R$)"], ["pessoal.encargos_pct", "Encargos (%)"], ["pessoal.pro_labore", "Pró-labore (R$)"], ["pessoal.encargos_pro_labore_pct", "Encargos do pró-labore (%)"]]],
+  ["Custos fixos", [["fixos.modo", "Forma", "sel:RESUMO=Valor resumido,DETALHADO=Detalhado"], ["fixos.resumo", "Valor resumido (R$)"]]],
+  ["Crescimento", [["crescimento.marketing", "Marketing (R$)"], ["crescimento.reserva_caixa", "Reserva de caixa", "chk"], ["crescimento.reserva_meses", "Meses de reserva"], ["crescimento.investimento", "Reinvestimento", "chk"],
+    ["crescimento.investimento_pct_ano", "Reinvestimento (% a.a.)"], ["crescimento.depreciacao", "Depreciação", "chk"], ["crescimento.vida_util_anos", "Vida útil (anos)"]]],
+  ["Variáveis e lucro", [["variaveis.dv_pct", "Despesa variável (% material e insumos)"], ["variaveis.rt_pct", "RT (%)"], ["variaveis.comissoes_pct", "Demais comissões (%)"], ["variaveis.imposto_pct", "Imposto (%)"], ["lucro_pct", "Lucro desejado (%)"]]],
+  ["Custo-hora de máquina", [["maquinas.quantidade", "Máquinas"], ["maquinas.dias", "Dias trabalhados"], ["maquinas.horas", "Horas produtivas/dia"], ["maquinas.taxa_retorno_pct", "Taxa de retorno (%)"],
+    ["maquinas.produtividade_pct", "Produtividade gerada (%)"], ["maquinas.operador", "Operador (R$)"], ["maquinas.horas_ociosas", "Horas ociosas/mês por máquina"]]],
+];
+const pegar = (o, k) => k.split(".").reduce((a, x) => a?.[x], o);
+const por = (o, k, v) => { const ks = k.split("."), u = ks.pop(); ks.reduce((a, x) => a[x] ||= {}, o)[u] = v; };
+function desenharCenario() {
+  const p = cenarioEd.premissas, idk = (k) => "cp-" + k.replace(/\./g, "_");
+  const campo = ([k, rot, tipo]) => {
+    const v = pegar(p, k);
+    if (tipo === "chk") return `<label class="dica"><input type="checkbox" id="${idk(k)}" ${v ? "checked" : ""} onchange="simularCenario()"> ${rot}</label>`;
+    if (tipo?.startsWith("sel:")) return `<label>${rot}<select id="${idk(k)}" onchange="simularCenario()">${tipo.slice(4).split(",").map((o) => { const [a, b] = o.split("="); return `<option value="${a}" ${a === v ? "selected" : ""}>${b}</option>`; }).join("")}</select></label>`;
+    return `<label>${rot}<input id="${idk(k)}" type="number" step="any" value="${v ?? 0}" onchange="simularCenario()"></label>`;
+  };
+  const inv = p.investimentos.map((i, n) => `<tr><td><input value="${esc(i.nome)}" onchange="cenarioEd.premissas.investimentos[${n}].nome=this.value" aria-label="Nome"></td>
+    <td><select onchange="cenarioEd.premissas.investimentos[${n}].tipo=this.value; simularCenario()" aria-label="Tipo">${["MAQUINA", "FROTA", "OUTRO"].map((t) => `<option ${t === i.tipo ? "selected" : ""}>${t}</option>`).join("")}</select></td>
+    <td><input type="number" step="any" value="${i.valor}" onchange="cenarioEd.premissas.investimentos[${n}].valor=Number(this.value); simularCenario()" style="width:120px" aria-label="Valor"></td>
+    <td><a onclick="cenarioEd.premissas.investimentos.splice(${n},1); desenharCenario()">remover</a></td></tr>`).join("");
+  const fixosDet = Object.entries(p.fixos.itens || {}).map(([k, v]) => `<label>${esc(k)}<input type="number" step="any" value="${v}" onchange="cenarioEd.premissas.fixos.itens['${k.replace(/'/g, "")}']=Number(this.value); simularCenario()"></label>`).join("");
+  $("pl-editor").innerHTML = `<div class="cen-form"><div class="linha"><input id="cp-nome" value="${esc(cenarioEd.nome)}" size="28" aria-label="Nome do cenário">
+      <button class="btn" onclick="salvarCenario(false)">${cenarioEd.id ? "Salvar" : "Criar cenário"}</button>${cenarioEd.id ? `<button class="btn sec" onclick="salvarCenario(true)">Salvar como novo</button>
+      <button class="btn sec" onclick="aplicarMetasCenario()">Aplicar meta à gestão à vista</button><button class="btn sec" onclick="apagarCenario()">Apagar</button>` : ""}
+      <button class="btn sec" onclick="compararHistorico()">Comparar com o histórico</button><button class="btn sec" onclick="cenarioEd = null; carregarCenarios()">Fechar</button></div>
+    <div id="cp-hist"></div><div class="cen-res" id="cp-res"></div><div id="cp-res2"></div>
+    ${CAMPOS_CEN.map(([g, cs]) => `<fieldset><legend>${g}</legend><div class="cfg">${cs.map(campo).join("")}${g === "Custos fixos" ? fixosDet : ""}</div></fieldset>`).join("")}
+    <fieldset><legend>Investimentos</legend><div class="tabela"><table><thead><tr><th>Bem</th><th>Tipo</th><th class="n">Valor</th><th></th></tr></thead><tbody>${inv}</tbody></table></div>
+      <button class="btn sec" onclick="cenarioEd.premissas.investimentos.push({nome:'Novo bem',tipo:'MAQUINA',valor:0}); desenharCenario()">Adicionar bem</button></fieldset>
+    <fieldset><legend>Sazonalidade da meta (peso por mês; 1 = média)</legend><div class="cfg">${p.sazonalidade.map((f, i) => `<label>${MESES_CURTOS[i]}<input type="number" step="0.05" value="${f}" onchange="cenarioEd.premissas.sazonalidade[${i}]=Number(this.value); simularCenario()"></label>`).join("")}</div></fieldset></div>`;
+  simularCenario();
+}
+function lerCenario() {
+  const p = cenarioEd.premissas;
+  CAMPOS_CEN.forEach(([, cs]) => cs.forEach(([k, , tipo]) => { const el = $("cp-" + k.replace(/\./g, "_")); if (!el) return;
+    por(p, k, tipo === "chk" ? el.checked : tipo?.startsWith("sel:") ? el.value : Number(el.value)); }));
+  cenarioEd.nome = $("cp-nome").value.trim();
+  return p;
+}
+async function simularCenario() {
+  try {
+    const r = await api("/api/cenarios/simular", {method: "POST", json: lerCenario()}), m = r.markup, c = r.composicao_meta;
+    $("cp-res").innerHTML = [[brl(r.venda_necessaria), "Venda necessária (sem imposto)"], [brl(r.faturamento_equilibrio), "Faturamento de equilíbrio"],
+      [brl(r.ponto_equilibrio_funcionario), "Equilíbrio por funcionário"], [brl(r.meta_faturamento), "Meta de faturamento"], [num(m.markup, 4), `Markup (divisor ${pct(m.divisor_pct)})`],
+      [pct(m.markup_promob_pct), `Markup a cadastrar no Promob (final ${num(m.markup_final, 4)})`], [brl(r.maquina.custo_hora), "Custo-hora de máquina"], [brl(r.maquina.ociosidade_valor), "Custo da ociosidade/mês"]]
+      .map(([v, l]) => `<div class="card kpi">${v}<small>${l}</small></div>`).join("");
+    $("cp-res2").innerHTML = `<div class="tabela"><table class="dre"><tbody>
+      <tr><td>Pessoal (folha com encargos e pró-labore)</td><td class="n">${brl(c.pessoal)}</td><td class="n">${pct(100 * c.pessoal / r.meta_faturamento)}</td></tr>
+      <tr><td>Retorno sobre o capital (${r.premissas.imovel.situacao === "PROPRIO" ? "imóvel próprio" : "locação"} + estrutura)</td><td class="n">${brl(c.retorno)}</td><td class="n">${pct(100 * c.retorno / r.meta_faturamento)}</td></tr>
+      <tr><td>Fixos e crescimento</td><td class="n">${brl(c.fixos_e_crescimento)}</td><td class="n">${pct(100 * c.fixos_e_crescimento / r.meta_faturamento)}</td></tr>
+      <tr><td>Despesa variável</td><td class="n">${brl(c.variaveis)}</td><td class="n">${pct(r.premissas.variaveis.dv_pct)}</td></tr>
+      <tr><td>Lucro</td><td class="n">${brl(c.lucro)}</td><td class="n">${pct(m.lucro_pct)}</td></tr>
+      <tr><td>Imposto</td><td class="n">${brl(c.imposto)}</td><td class="n">${pct(r.premissas.variaveis.imposto_pct)}</td></tr>
+      <tr class="total"><td>Meta com imposto</td><td class="n">${brl(c.meta_com_imposto)}</td><td></td></tr></tbody></table></div>
+      <p class="dica">Projeção mensal: ${r.meses.map((x) => `${MESES_CURTOS[x.mes - 1]} ${brl(x.faturamento)} (lucro ${brl(x.lucro)})`).join(" · ")}</p>`;
+  } catch (e) { $("cp-res").innerHTML = `<div class="msg err">${esc(e.message)}</div>`; $("cp-res2").innerHTML = ""; }
+}
+async function salvarCenario(comoNovo) {
+  const dados = {nome: $("cp-nome").value.trim() + (comoNovo ? " (cópia)" : ""), premissas: lerCenario()};
+  try { const c = await api(cenarioEd.id && !comoNovo ? `/api/cenarios/${cenarioEd.id}` : "/api/cenarios", {method: cenarioEd.id && !comoNovo ? "PUT" : "POST", json: dados});
+    cenarioEd.id = c.id; cenarioEd.nome = c.nome; await carregarCenarios(); desenharCenario(); }
+  catch (e) { $("cp-res").innerHTML = `<div class="msg err">${esc(e.message)}</div>`; }
+}
+async function apagarCenario() { await api(`/api/cenarios/${cenarioEd.id}`, {method: "DELETE"}); cenarioEd = null; carregarCenarios(); }
+async function aplicarMetasCenario() {
+  try { const r = await api(`/api/cenarios/${cenarioEd.id}/aplicar-metas`, {method: "POST"});
+    $("cp-hist").innerHTML = `<div class="msg ok">Gestão à vista: meta de faturamento ${brl(r.metas.faturamento_mes)}/mês e margem mínima ${pct(r.metas.margem_pct)}.</div>`; }
+  catch (e) { $("cp-hist").innerHTML = `<div class="msg err">${esc(e.message)}</div>`; }
+}
+async function compararHistorico() {
+  const h = plHist = await api("/api/controladoria/historico-premissas?meses=6"), p = lerCenario();
+  if (!h.meses_com_dados) { $("cp-hist").innerHTML = `<div class="msg err">Sem meses consolidados com receita no período ${h.periodo[0]} a ${h.periodo.at(-1)}. Consolide ou importe o histórico.</div>`; return; }
+  const folhaPlan = p.pessoal.folha * (1 + p.pessoal.encargos_pct / 100) + p.pessoal.pro_labore * (1 + p.pessoal.encargos_pro_labore_pct / 100);
+  const linha = (rot, plan, real, fmt) => `<tr><td>${rot}</td><td class="n">${fmt(plan)}</td><td class="n">${fmt(real)}</td></tr>`;
+  $("cp-hist").innerHTML = `<h2>Premissas × histórico real (média de ${h.meses_com_dados} mês(es))</h2><div class="tabela"><table><thead><tr><th></th><th class="n">Cenário</th><th class="n">Histórico</th></tr></thead><tbody>
+    ${linha("Receita mensal", null, h.receita_media, (v) => v == null ? "—" : brl(v))}${linha("Pessoal total", folhaPlan, h.pessoal_medio, brl)}
+    ${linha("Fixos (ocupação, administrativas, manutenção)", p.fixos.modo === "RESUMO" ? p.fixos.resumo : null, h.fixos_medio, (v) => v == null ? "detalhado" : brl(v))}
+    ${linha("Marketing", p.crescimento.marketing, h.marketing_medio, brl)}${linha("Despesa variável %", p.variaveis.dv_pct, h.dv_pct, pct)}
+    ${linha("Comissões e RT %", p.variaveis.comissoes_pct + p.variaveis.rt_pct, h.comissoes_pct, pct)}${linha("Imposto %", p.variaveis.imposto_pct, h.imposto_pct, pct)}</tbody></table></div>
+    <div class="linha"><button class="btn sec" onclick="usarHistorico()">Usar o histórico nas premissas</button></div>`;
+}
+function usarHistorico() {
+  const h = plHist, p = cenarioEd.premissas;
+  p.pessoal.folha = Math.round(Math.max(0, h.pessoal_medio - p.pessoal.pro_labore * (1 + p.pessoal.encargos_pro_labore_pct / 100)) / (1 + p.pessoal.encargos_pct / 100));
+  p.fixos.modo = "RESUMO"; p.fixos.resumo = h.fixos_medio; p.crescimento.marketing = h.marketing_medio;
+  p.variaveis.dv_pct = h.dv_pct; p.variaveis.comissoes_pct = Math.max(0, h.comissoes_pct - p.variaveis.rt_pct); p.variaveis.imposto_pct = h.imposto_pct;
+  desenharCenario();
+}
+// Centros de custo e verbas
+async function carregarCadCentros() {
+  const [usuarios, setores] = await Promise.all([opera("usuarios") ? api("/api/usuarios") : Promise.resolve([]), api("/api/centros")]);
+  $("cc-resp").innerHTML = `<option value="">Sem responsável</option>` + usuarios.filter((u) => u.ativo).map((u) => `<option value="${u.id}">${esc(u.nome)}</option>`).join("");
+  $("cc-setor").innerHTML = `<option value="">Sem setor da fábrica</option>` + setores.map((c) => `<option value="${c.codigo}">${esc(c.codigo)}</option>`).join("");
+  $("pl-cadcentros").innerHTML = tabela([["Centro", (c) => `<b>${esc(c.codigo)}</b> ${esc(c.nome)}`], ["Tipo", (c) => esc(c.tipo)], ["Responsável", (c) => esc(c.responsavel || "—")],
+    ["Setor", (c) => esc(c.setor_codigo || "—")], ["Ativo", (c) => `<input type="checkbox" ${c.ativo ? "checked" : ""} onchange="alterarCentroCusto(${c.id}, {ativo: this.checked})" aria-label="Ativo">`]], plCentros);
+  const contasDesp = plCfg.contas.filter((c) => ["FIXO", "VARIAVEL", "INVESTIMENTO"].includes(c.grupo));
+  $("vb-centro").innerHTML = plCentros.map((c) => `<option value="${c.id}">${esc(c.codigo)}</option>`).join("");
+  $("vb-conta").innerHTML = contasDesp.map((c) => `<option value="${c.codigo}">${esc(c.nome)}</option>`).join("");
+  plVerbas = await api(`/api/verbas?ano=${$("pl-ano").value}`);
+  desenharVerbas();
+}
+function desenharVerbas() {
+  const linhas = {};
+  plVerbas.forEach((v) => { (linhas[`${v.centro_custo_id}|${v.conta}`] ||= Array(12).fill(0))[v.mes - 1] = v.valor; });
+  window._linhasVerba = linhas;
+  const nomeC = (id) => plCentros.find((c) => c.id === Number(id))?.codigo || id, nomeK = (k) => plCfg.contas.find((c) => c.codigo === k)?.nome || k;
+  const ks = Object.keys(linhas).sort();
+  $("pl-verbas").innerHTML = ks.length ? `<table><thead><tr><th>Centro · conta</th>${MESES_CURTOS.map((m) => `<th class="n">${m}</th>`).join("")}<th class="n">Ano</th></tr></thead><tbody>${ks.map((k) => {
+    const [c, conta] = k.split("|"), vs = linhas[k];
+    return `<tr><td><b>${esc(nomeC(c))}</b> ${esc(nomeK(conta))}</td>${vs.map((v, i) => `<td><input type="number" min="0" step="100" value="${v || ""}" style="width:84px" onchange="window._linhasVerba['${k}'][${i}] = Number(this.value) || 0" aria-label="Verba ${MESES_CURTOS[i]}"></td>`).join("")}<td class="n">${num(vs.reduce((a, b) => a + b, 0), 0)}</td></tr>`;
+  }).join("")}</tbody></table>` : `<p class="pend">Sem verbas em ${$("pl-ano").value}. Adicione linhas ou gere pela média realizada.</p>`;
+}
+function addLinhaVerba() { const k = `${$("vb-centro").value}|${$("vb-conta").value}`; if (!$("vb-centro").value) return;
+  if (!plVerbas.some((v) => `${v.centro_custo_id}|${v.conta}` === k)) plVerbas.push({centro_custo_id: Number($("vb-centro").value), conta: $("vb-conta").value, mes: 1, valor: 0}); desenharVerbas(); }
+async function salvarVerbas() {
+  const ano = Number($("pl-ano").value), dados = [];
+  Object.entries(window._linhasVerba).forEach(([k, vs]) => { const [c, conta] = k.split("|"); vs.forEach((valor, i) => dados.push({centro_custo_id: Number(c), conta, ano, mes: i + 1, valor})); });
+  try { await api("/api/verbas", {method: "PUT", json: dados}); $("vb-msg").innerHTML = `<div class="msg ok">Verbas salvas.</div>`; carregarCadCentros(); carregarRelCentros(); }
+  catch (e) { $("vb-msg").innerHTML = `<div class="msg err">${esc(e.message)}</div>`; }
+}
+async function gerarVerbas() {
+  const ano = Number($("pl-ano").value), hoje = new Date(), inicio = ano === hoje.getFullYear() ? hoje.getMonth() + 1 : 1;
+  const meses = Array.from({length: 13 - inicio}, (_, i) => inicio + i);
+  try { const r = await api("/api/verbas/gerar", {method: "POST", json: {ano, meses, meses_base: Number($("vb-base").value), ajuste_pct: Number($("vb-aj").value)}});
+    $("vb-msg").innerHTML = `<div class="msg ok">${r.verbas} verba(s) geradas de ${MESES_CURTOS[inicio - 1]} a dez.</div>`; carregarCadCentros(); }
+  catch (e) { $("vb-msg").innerHTML = `<div class="msg err">${esc(e.message)}</div>`; }
+}
+async function novoCentroCusto() {
+  try { await api("/api/centros-custo", {method: "POST", json: {codigo: $("cc-cod").value.trim(), nome: $("cc-nome").value.trim(), tipo: $("cc-tipo").value,
+      responsavel_id: Number($("cc-resp").value) || null, setor_codigo: $("cc-setor").value || null}});
+    $("cc-cod").value = $("cc-nome").value = ""; carregarPlanejamento(); }
+  catch (e) { $("vb-msg").innerHTML = `<div class="msg err">${esc(e.message)}</div>`; }
+}
+async function alterarCentroCusto(id, dados) {
+  const c = plCentros.find((x) => x.id === id);
+  try { await api(`/api/centros-custo/${id}`, {method: "PUT", json: {...c, ...dados}}); carregarPlanejamento(); } catch (e) { alert(e.message); }
+}
+// Regras, agenda e histórico
+async function carregarCfgCtl() {
+  const c = plCfg, opc = (conta) => `<option value="">—</option>` + plCentros.map((x) => `<option value="${x.id}" ${c.centros_padrao[conta] === x.id ? "selected" : ""}>${esc(x.codigo)}</option>`).join("");
+  $("pl-cfg").innerHTML = `<label>Alçada: despesa acima de (R$) pede aprovação<input id="cf-alcada" type="number" min="0" value="${c.alcada_valor ?? ""}" placeholder="sem alçada"></label>
+    <label class="dica"><input type="checkbox" id="cf-exige" ${c.exige_centro ? "checked" : ""}> Exigir centro de custo nas despesas</label>
+    <label class="dica"><input type="checkbox" id="cf-semverba" ${c.bloqueia_sem_verba ? "checked" : ""}> Centro sem verba no mês pede aprovação</label>
+    <label class="dica"><input type="checkbox" id="cf-ativa" ${c.consolidacao_ativa ? "checked" : ""}> Consolidação automática diária</label>
+    <label>Horário da consolidação (0 a 23 h)<input id="cf-hora" type="number" min="0" max="23" value="${c.consolidacao_hora}"></label>
+    <label>Meses recalculados a cada execução<input id="cf-meses" type="number" min="1" max="24" value="${c.consolidacao_meses}"></label>
+    ${["RECEITA", "MATERIAL", "IMPOSTOS"].map((k) => `<label>Centro padrão de ${esc(c.contas.find((x) => x.codigo === k).nome.toLowerCase())}<select id="cf-cp-${k}">${opc(k)}</select></label>`).join("")}`;
+  if (!opera("usuarios")) $("pl-cfg").querySelectorAll("input,select").forEach((e) => e.disabled = true);
+  const ex = await api("/api/controladoria/execucoes");
+  $("pl-exec").innerHTML = tabela([["Quando", (e) => quando(e.iniciado_em)], ["Origem", (e) => e.origem === "AGENDADA" ? "agendada" : `manual · ${esc(e.usuario || "")}`], ["Situação", (e) => tag(e.status)],
+    ["Resumo", (e) => e.resumo ? `${e.resumo.meses.map((m) => `${m.mes}: ${brl(m.receita)}`).join(" · ")}${e.resumo.nao_conciliados ? ` · ${e.resumo.nao_conciliados} sem conciliar` : ""}${e.resumo.aprovacoes_pendentes ? ` · ${e.resumo.aprovacoes_pendentes} aprovação(ões) pendente(s)` : ""}` : "—"]], ex);
+}
+async function salvarCfgCtl() {
+  const centros_padrao = Object.fromEntries(["RECEITA", "MATERIAL", "IMPOSTOS"].map((k) => [k, Number($("cf-cp-" + k).value) || null]));
+  try { plCfg = await api("/api/controladoria/config", {method: "PUT", json: {alcada_valor: Number($("cf-alcada").value) || null, exige_centro: $("cf-exige").checked,
+      bloqueia_sem_verba: $("cf-semverba").checked, consolidacao_ativa: $("cf-ativa").checked, consolidacao_hora: Number($("cf-hora").value), consolidacao_meses: Number($("cf-meses").value), centros_padrao}});
+    $("pl-cfg-msg").innerHTML = `<div class="msg ok">Regras salvas.</div>`; }
+  catch (e) { $("pl-cfg-msg").innerHTML = `<div class="msg err">${esc(e.message)}</div>`; }
+}
+async function importarHistorico() {
+  const f = $("pl-hist").files[0]; if (!f) return;
+  const fd = new FormData(); fd.append("arquivo", f);
+  try { const r = await api("/api/controladoria/historico", {method: "POST", body: fd}); $("pl-cfg-msg").innerHTML = `<div class="msg ok">${r.linhas} linha(s) de histórico: ${r.meses.join(", ")}.</div>`; carregarDreGerencial(); }
+  catch (e) { $("pl-cfg-msg").innerHTML = `<div class="msg err">${esc(e.message)}</div>`; }
+}
+async function custoSetores(aplicar) {
+  try { const r = await api("/api/controladoria/custo-setores", {method: "POST", json: {meses: 3, aplicar}});
+    $("pl-custoset").innerHTML = tabela([["Centro de custo", (x) => esc(x.centro_custo)], ["Setor", (x) => esc(x.setor)], ["Custo mensal atual", (x) => brl(x.custo_mensal_atual), 1],
+      ["Média realizada (3 meses)", (x) => brl(x.custo_mensal_realizado), 1]], r.setores);
+    if (aplicar) $("pl-cfg-msg").innerHTML = `<div class="msg ok">Custo mensal dos setores atualizado; o custo-hora já usa o novo valor.</div>`; }
+  catch (e) { $("pl-cfg-msg").innerHTML = `<div class="msg err">${esc(e.message)}</div>`; }
+}
+
 // --- De-para Promob → estoque ------------------------------------------------------------------
 const SIT_DP = {SEM_CADASTRO: ["FALTA", "sem cadastro"], MESMO_CODIGO: ["AGUARDANDO", "mesmo código"], VINCULADO: ["OK", "vinculado"]};
 async function carregarDePara() {

@@ -512,6 +512,8 @@ class LancamentoIn(Schema):
     vencimento: date
     projeto_id: int | None = None
     fornecedor_id: int | None = None
+    centro_custo_id: int | None = None
+    conta: str | None = Field(None, max_length=30)
 
 
 class LancamentoOut(Schema):
@@ -529,6 +531,12 @@ class LancamentoOut(Schema):
     fornecedor_nome: str | None
     cliente_nome: str | None
     situacao: str
+    centro_custo_id: int | None = None
+    centro_custo: str | None = None
+    conta: str | None = None
+    aprovacao: str = "LIVRE"
+    aprovacao_motivo: str | None = None
+    aprovado_por: str | None = None
 
 
 class BaixaIn(Schema):

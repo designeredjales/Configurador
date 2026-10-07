@@ -15,8 +15,17 @@ from pydantic import BaseModel, ConfigDict, Field, ValidationError
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from ..models import CentroTrabalho, ClasseSeparacao, Empresa, Material, Parceiro, RegraCentro
-from . import comercial, depara, gestao, promob_prices, separacao
+from ..models import (
+    CenarioPlanejamento,
+    CentroCusto,
+    CentroTrabalho,
+    ClasseSeparacao,
+    Empresa,
+    Material,
+    Parceiro,
+    RegraCentro,
+)
+from . import comercial, controladoria, depara, gestao, markup, promob_prices, separacao
 
 FORMATO = "erp-moveleiro-setup"
 VERSAO = 1
@@ -30,6 +39,7 @@ SECOES = {
     "parceiros": "Parceiros e RT",
     "gestao": "Metas, WIP do kanban, calendário, tambor e pulmão",
     "depara": "De-para Promob → estoque (casado pelo código do material nesta base)",
+    "controladoria": "Centros de custo, regras de aprovação, agenda de consolidação e cenário de planejamento",
 }
 CAMPOS_SETOR = ["pessoas", "horas_dia", "eficiencia_pct", "custo_mensal", "minutos_peca", "minutos_m2"]
 CAMPOS_FABRICA = ["perda_chapa_pct", "perda_fita_pct", "chapa_comprimento_mm", "chapa_largura_mm", "serra_mm",
@@ -138,6 +148,26 @@ class DeParaSetup(_M):
     observacao: str | None = Field(None, max_length=200)
 
 
+class CentroCustoSetup(_M):
+    codigo: str = Field(min_length=2, max_length=20, pattern=r"^[A-Za-z0-9_.-]+$")
+    nome: str = Field(min_length=2, max_length=100)
+    tipo: str = Field("ADMINISTRATIVO", pattern=r"^(PRODUTIVO|ADMINISTRATIVO|COMERCIAL|ESTRUTURA)$")
+    setor_codigo: str | None = Field(None, max_length=20)
+    ativo: bool = True
+
+
+class Controladoria(_M):
+    centros_custo: list[CentroCustoSetup] | None = None
+    alcada_valor: float | None = Field(None, ge=0)
+    exige_centro: bool | None = None
+    bloqueia_sem_verba: bool | None = None
+    centros_padrao: dict[str, str] | None = None  # {conta: código do centro}
+    consolidacao_ativa: bool | None = None
+    consolidacao_hora: int | None = Field(None, ge=0, le=23)
+    consolidacao_meses: int | None = Field(None, ge=1, le=24)
+    cenario: dict | None = None  # {"nome", "premissas"} vira o cenário principal
+
+
 class Setup(_M):
     formato: str = FORMATO
     versao: int = VERSAO
@@ -151,6 +181,7 @@ class Setup(_M):
     parceiros: list[ParceiroSetup] | None = None
     gestao: Gestao | None = None
     depara: list[DeParaSetup] | None = None
+    controladoria: Controladoria | None = None
 
 
 def validar(dados: dict) -> Setup:
@@ -188,9 +219,24 @@ def exportar(db: Session, emp: Empresa, nome: str | None = None) -> dict:
                       for p in parceiros],
         "gestao": {"metas": cg.metas or {}, "limites_wip": cg.limites_wip or {}, "dias_uteis_mes": cg.dias_uteis_mes,
                    "horas_turno": cg.horas_turno, "pulmao_dias": cg.pulmao_dias, "tambor_codigo": cg.tambor_codigo},
+        "controladoria": _exportar_controladoria(db, emp.id),
         "depara": [{"codigo_promob": d.codigo_promob, "material_codigo": d.material.codigo, "fator": d.fator,
                     "observacao": d.observacao} for d in sorted(depara.mapa(db, emp.id).values(), key=lambda d: d.codigo_promob)],
     }
+
+
+def _exportar_controladoria(db: Session, empresa_id: int) -> dict:
+    cf = controladoria.config(db, empresa_id)
+    centros = list(db.scalars(select(CentroCusto).where(CentroCusto.empresa_id == empresa_id).order_by(CentroCusto.codigo)))
+    por_id = {c.id: c.codigo for c in centros}
+    cen = controladoria.cenario_principal(db, empresa_id)
+    return {"centros_custo": [{"codigo": c.codigo, "nome": c.nome, "tipo": c.tipo, "setor_codigo": c.setor_codigo, "ativo": c.ativo}
+                              for c in centros],
+            "alcada_valor": cf.alcada_valor, "exige_centro": cf.exige_centro, "bloqueia_sem_verba": cf.bloqueia_sem_verba,
+            "centros_padrao": {k: por_id[v] for k, v in (cf.centros_padrao or {}).items() if v in por_id},
+            "consolidacao_ativa": cf.consolidacao_ativa, "consolidacao_hora": cf.consolidacao_hora,
+            "consolidacao_meses": cf.consolidacao_meses,
+            "cenario": {"nome": cen.nome, "premissas": cen.premissas} if cen else None}
 
 
 # --- Aplicar ------------------------------------------------------------------------------------
@@ -309,6 +355,57 @@ def aplicar(db: Session, emp: Empresa, s: Setup, secoes: list[str] | None = None
         else:
             dados.pop("tambor_codigo", None)
         _campos(cfg, dados, "", mud, "gestao")
+    if "controladoria" in escolhidas:
+        ct = s.controladoria
+        setores_ok = {c.codigo for c in db.scalars(select(CentroTrabalho).where(CentroTrabalho.empresa_id == emp.id))}
+        existentes = {c.codigo: c for c in db.scalars(select(CentroCusto).where(CentroCusto.empresa_id == emp.id))}
+        for cs in ct.centros_custo or []:
+            dados = cs.model_dump() | {"codigo": cs.codigo.upper(), "setor_codigo": (cs.setor_codigo or "").upper() or None}
+            if dados["setor_codigo"] and dados["setor_codigo"] not in setores_ok:
+                raise ErroSetup(f"Centro de custo {dados['codigo']} aponta para o setor {dados['setor_codigo']}, que não existe nesta base")
+            c = existentes.get(dados["codigo"])
+            if c is None:
+                c = CentroCusto(empresa_id=emp.id, **dados)
+                db.add(c)
+                existentes[c.codigo] = c
+                mud.append({"secao": "controladoria", "texto": f"Novo centro de custo {c.codigo} · {c.nome} ({c.tipo})"})
+            else:
+                if c.setor_codigo != dados["setor_codigo"]:
+                    mud.append({"secao": "controladoria", "texto": f"Centro {c.codigo} · setor_codigo: {c.setor_codigo or '—'} → {dados['setor_codigo'] or '—'}"})
+                    c.setor_codigo = dados["setor_codigo"]
+                _campos(c, {k: v for k, v in dados.items() if k not in ("codigo", "setor_codigo")}, f"Centro {c.codigo} · ", mud, "controladoria")
+        db.flush()
+        cf = controladoria.config(db, emp.id)
+        regras = ct.model_dump(include={"alcada_valor", "exige_centro", "bloqueia_sem_verba", "consolidacao_ativa",
+                                        "consolidacao_hora", "consolidacao_meses"})
+        _campos(cf, regras, "", mud, "controladoria")
+        if ct.centros_padrao is not None:
+            mapa = {}
+            for conta, cod in ct.centros_padrao.items():
+                c = existentes.get((cod or "").upper())
+                if conta in controladoria.NOMES and c is not None:
+                    mapa[conta] = c.id
+            if (cf.centros_padrao or {}) != mapa:
+                mud.append({"secao": "controladoria", "texto": f"centros_padrao: {len(cf.centros_padrao or {})} → {len(mapa)} conta(s)"})
+                cf.centros_padrao = mapa
+        if ct.cenario and ct.cenario.get("premissas"):
+            try:
+                markup.calcular(ct.cenario["premissas"])
+            except markup.ErroPremissas as e:
+                raise ErroSetup(f"Cenário do setup: {e}")
+            nome = (ct.cenario.get("nome") or "Cenário do setup")[:120]
+            cen = db.scalar(select(CenarioPlanejamento).where(CenarioPlanejamento.empresa_id == emp.id, CenarioPlanejamento.nome == nome))
+            novas = markup.completar(ct.cenario["premissas"])
+            if cen is None:
+                cen = CenarioPlanejamento(empresa_id=emp.id, nome=nome, premissas=novas, criado_por="Setup da base")
+                db.add(cen)
+                mud.append({"secao": "controladoria", "texto": f"Novo cenário principal: {nome}"})
+            elif cen.premissas != novas or not cen.principal:
+                cen.premissas = novas
+                mud.append({"secao": "controladoria", "texto": f"Cenário {nome} atualizado e marcado como principal"})
+            db.flush()
+            for outro in db.scalars(select(CenarioPlanejamento).where(CenarioPlanejamento.empresa_id == emp.id)):
+                outro.principal = outro.id == cen.id
     if "depara" in escolhidas:
         materiais = {m.codigo: m for m in db.scalars(select(Material).where(Material.empresa_id == emp.id))}
         atuais = depara.mapa(db, emp.id)

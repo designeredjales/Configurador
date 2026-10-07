@@ -44,7 +44,7 @@ def test_validacao_e_regras(client, empresa):
     client.patch(f"/api/usuarios/{id_c}", json={"funcoes": ["compras"]}, headers=empresa)
     # Trocar o perfil reaplica o modelo do perfil novo
     r = client.patch(f"/api/usuarios/{id_c}", json={"perfil": "FINANCEIRO"}, headers=empresa).json()
-    assert r["funcoes_efetivas"] == ["clientes", "conciliacao", "financeiro", "fiscal"]
+    assert r["funcoes_efetivas"] == ["clientes", "conciliacao", "controladoria", "financeiro", "fiscal"]
     # Administrador opera tudo, sempre (a empresa nunca fica sem quem administre)
     id_admin = uid(client, empresa, "admin@marcenaria.com")
     r = client.patch(f"/api/usuarios/{id_admin}", json={"funcoes": []}, headers=empresa).json()

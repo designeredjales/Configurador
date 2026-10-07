@@ -6,7 +6,7 @@ from sqlalchemy.orm import Session
 
 from ..db import get_db
 from ..deps import CONCILIACAO, FINANCEIRO, FISCAL, INDICADORES
-from ..models import Fornecedor, Lancamento, MovimentoBancario, NotaFiscal, Projeto, TipoLancamento, Usuario
+from ..models import CentroCusto, Fornecedor, Lancamento, MovimentoBancario, NotaFiscal, Projeto, TipoLancamento, Usuario
 from ..schemas import (
     BaixaIn,
     ConciliarIn,
@@ -21,7 +21,7 @@ from ..schemas import (
     NotaOut,
     ProjetoResumo,
 )
-from ..services import conciliacao, financeiro, fiscal, indicadores
+from ..services import conciliacao, controladoria, financeiro, fiscal, indicadores
 
 router = APIRouter(prefix="/api", tags=["financeiro"])
 # Valores financeiros só para administrador, gestor e financeiro (leitura inclusive)
@@ -43,6 +43,9 @@ def _out(l: Lancamento) -> dict:
         "projeto_id": l.projeto_id, "projeto_codigo": l.projeto.codigo if l.projeto else None,
         "pedido_id": l.pedido_id, "fornecedor_nome": l.fornecedor.nome if l.fornecedor else None,
         "cliente_nome": l.cliente.nome if l.cliente else None, "situacao": situacao,
+        "centro_custo_id": l.centro_custo_id, "centro_custo": l.centro_custo.codigo if l.centro_custo else None,
+        "conta": controladoria.conta_de(l), "aprovacao": l.aprovacao or "LIVRE", "aprovacao_motivo": l.aprovacao_motivo,
+        "aprovado_por": l.aprovado_por,
     }
 
 
@@ -67,12 +70,14 @@ def dre(projeto_id: int, usuario: Usuario = Depends(FINANCEIRO), db: Session = D
 
 @router.get("/lancamentos", response_model=list[LancamentoOut])
 def listar(tipo: TipoLancamento | None = None, situacao: str | None = None, projeto_id: int | None = None,
-           usuario: Usuario = Depends(FINANCEIRO), db: Session = Depends(get_db)):
+           centro_custo_id: int | None = None, usuario: Usuario = Depends(FINANCEIRO), db: Session = Depends(get_db)):
     consulta = select(Lancamento).where(Lancamento.empresa_id == usuario.empresa_id)
     if tipo:
         consulta = consulta.where(Lancamento.tipo == tipo)
     if projeto_id:
         consulta = consulta.where(Lancamento.projeto_id == projeto_id)
+    if centro_custo_id:
+        consulta = consulta.where(Lancamento.centro_custo_id == centro_custo_id)
     saida = [_out(l) for l in db.scalars(consulta.order_by(Lancamento.vencimento, Lancamento.id))]
     if situacao:
         saida = [l for l in saida if l["situacao"] == situacao.upper()
@@ -88,10 +93,26 @@ def criar(dados: LancamentoIn, usuario: Usuario = Depends(FINANCEIRO), db: Sessi
         f = db.get(Fornecedor, dados.fornecedor_id)
         if f is None or f.empresa_id != usuario.empresa_id:
             raise HTTPException(404, "Fornecedor não encontrado")
+    _validar_classificacao(db, usuario.empresa_id, dados.centro_custo_id, dados.conta)
     lanc = Lancamento(empresa_id=usuario.empresa_id, usuario_id=usuario.id, **dados.model_dump())
     db.add(lanc)
+    db.flush()
+    try:
+        controladoria.avaliar(db, usuario, lanc)  # alçada e verba do centro de custo
+    except controladoria.ErroControladoria as e:
+        db.rollback()
+        raise HTTPException(e.status, str(e))
     db.commit()
     return _out(lanc)
+
+
+def _validar_classificacao(db: Session, empresa_id: int, centro_id: int | None, conta: str | None) -> None:
+    if centro_id is not None:
+        c = db.get(CentroCusto, centro_id)
+        if c is None or c.empresa_id != empresa_id or not c.ativo:
+            raise HTTPException(422, "Centro de custo não encontrado ou inativo")
+    if conta and conta not in controladoria.NOMES:
+        raise HTTPException(422, f"Conta gerencial '{conta}' não existe")
 
 
 def _carregar(db: Session, empresa_id: int, lanc_id: int) -> Lancamento:
@@ -104,6 +125,8 @@ def _carregar(db: Session, empresa_id: int, lanc_id: int) -> Lancamento:
 @router.post("/lancamentos/{lanc_id}/baixar", response_model=LancamentoOut)
 def baixar(lanc_id: int, dados: BaixaIn, usuario: Usuario = Depends(FINANCEIRO), db: Session = Depends(get_db)):
     lanc = _carregar(db, usuario.empresa_id, lanc_id)
+    if lanc.aprovacao in ("PENDENTE", "RECUSADA"):
+        raise HTTPException(409, "Despesa aguardando aprovação" if lanc.aprovacao == "PENDENTE" else "Despesa recusada na aprovação")
     try:
         financeiro.baixar(lanc, dados.data, dados.valor)
     except financeiro.ErroFinanceiro as e:

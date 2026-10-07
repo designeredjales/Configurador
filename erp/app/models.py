@@ -591,10 +591,17 @@ class Lancamento(Base):
     fornecedor_id: Mapped[int | None] = mapped_column(ForeignKey("fornecedores.id"))
     usuario_id: Mapped[int | None] = mapped_column(ForeignKey("usuarios.id"))
     criado_em: Mapped[datetime] = mapped_column(DateTime, default=agora)
+    # Controladoria: centro de custo, conta do DRE gerencial (vazio = pela categoria) e aprovação da despesa
+    centro_custo_id: Mapped[int | None] = mapped_column(ForeignKey("centros_custo.id"), index=True)
+    conta: Mapped[str | None] = mapped_column(String(30))
+    aprovacao: Mapped[str] = mapped_column(String(10), default="LIVRE", server_default="LIVRE")
+    aprovacao_motivo: Mapped[str | None] = mapped_column(String(300))
+    aprovado_por: Mapped[str | None] = mapped_column(String(120))
 
     projeto: Mapped[Projeto | None] = relationship()
     fornecedor: Mapped[Fornecedor | None] = relationship()
     cliente: Mapped[Cliente | None] = relationship()
+    centro_custo: Mapped["CentroCusto | None"] = relationship()
 
 
 CHECKLIST_PADRAO = [
@@ -1026,3 +1033,94 @@ class DeParaMaterial(Base):
     criado_em: Mapped[datetime] = mapped_column(DateTime, default=agora)
 
     material: Mapped[Material] = relationship()
+
+
+# --- Controladoria: centros de custo, verbas, planejamento e consolidação -------------------------
+
+class CentroCusto(Base):
+    __tablename__ = "centros_custo"
+    __table_args__ = (UniqueConstraint("empresa_id", "codigo"),)
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    empresa_id: Mapped[int] = mapped_column(ForeignKey("empresas.id"), index=True)
+    codigo: Mapped[str] = mapped_column(String(20))
+    nome: Mapped[str] = mapped_column(String(100))
+    tipo: Mapped[str] = mapped_column(String(20), default="ADMINISTRATIVO")  # PRODUTIVO, ADMINISTRATIVO, COMERCIAL, ESTRUTURA
+    responsavel_id: Mapped[int | None] = mapped_column(ForeignKey("usuarios.id"))
+    setor_codigo: Mapped[str | None] = mapped_column(String(20))  # setor da fábrica (custo-hora)
+    ativo: Mapped[bool] = mapped_column(default=True)
+
+    responsavel: Mapped[Usuario | None] = relationship()
+
+
+class VerbaCentro(Base):
+    """Orçamento (verba) de um centro de custo por mês e conta do DRE gerencial."""
+    __tablename__ = "verbas_centro"
+    __table_args__ = (UniqueConstraint("empresa_id", "centro_custo_id", "ano", "mes", "conta"),)
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    empresa_id: Mapped[int] = mapped_column(ForeignKey("empresas.id"), index=True)
+    centro_custo_id: Mapped[int] = mapped_column(ForeignKey("centros_custo.id"), index=True)
+    ano: Mapped[int] = mapped_column(Integer)
+    mes: Mapped[int] = mapped_column(Integer)
+    conta: Mapped[str] = mapped_column(String(30))
+    valor: Mapped[float] = mapped_column(Float, default=0.0)
+
+
+class ConfigFinanceira(Base):
+    """Regras da controladoria por empresa: alçadas, centros padrão e agenda de consolidação."""
+    __tablename__ = "config_financeira"
+
+    empresa_id: Mapped[int] = mapped_column(ForeignKey("empresas.id"), primary_key=True)
+    alcada_valor: Mapped[float | None] = mapped_column(Float)  # despesa acima disso sempre pede aprovação
+    exige_centro: Mapped[bool] = mapped_column(default=False)
+    bloqueia_sem_verba: Mapped[bool] = mapped_column(default=False)
+    centros_padrao: Mapped[dict | None] = mapped_column(JSON)  # {conta: centro_custo_id}
+    consolidacao_ativa: Mapped[bool] = mapped_column(default=True)
+    consolidacao_hora: Mapped[int] = mapped_column(Integer, default=6)
+    consolidacao_meses: Mapped[int] = mapped_column(Integer, default=2)  # mês atual e anteriores
+
+
+class CenarioPlanejamento(Base):
+    """Premissas do ponto de equilíbrio, meta e markup (modelo de planejamento da consultoria)."""
+    __tablename__ = "cenarios_planejamento"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    empresa_id: Mapped[int] = mapped_column(ForeignKey("empresas.id"), index=True)
+    nome: Mapped[str] = mapped_column(String(120))
+    premissas: Mapped[dict] = mapped_column(JSON)
+    principal: Mapped[bool] = mapped_column(default=False)
+    criado_por: Mapped[str | None] = mapped_column(String(120))
+    criado_em: Mapped[datetime] = mapped_column(DateTime, default=agora)
+    atualizado_em: Mapped[datetime] = mapped_column(DateTime, default=agora, onupdate=agora)
+
+
+class ConsolidacaoDRE(Base):
+    """Valor consolidado de uma conta do DRE gerencial no mês (por regime, centro e fonte)."""
+    __tablename__ = "consolidacao_dre"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    empresa_id: Mapped[int] = mapped_column(ForeignKey("empresas.id"), index=True)
+    ano: Mapped[int] = mapped_column(Integer, index=True)
+    mes: Mapped[int] = mapped_column(Integer)
+    regime: Mapped[str] = mapped_column(String(12))  # COMPETENCIA (operacional) ou CAIXA (bancário)
+    centro_custo_id: Mapped[int | None] = mapped_column(ForeignKey("centros_custo.id"))
+    conta: Mapped[str] = mapped_column(String(30))
+    valor: Mapped[float] = mapped_column(Float)
+    fonte: Mapped[str] = mapped_column(String(10), default="ERP")  # ERP ou HISTORICO (importado)
+    gerado_em: Mapped[datetime] = mapped_column(DateTime, default=agora)
+
+
+class ExecucaoConsolidacao(Base):
+    __tablename__ = "execucoes_consolidacao"
+    __table_args__ = (UniqueConstraint("empresa_id", "chave"),)
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    empresa_id: Mapped[int] = mapped_column(ForeignKey("empresas.id"), index=True)
+    chave: Mapped[str] = mapped_column(String(40))  # AGENDADA-AAAA-MM-DD (uma por dia) ou MANUAL-<instante>
+    origem: Mapped[str] = mapped_column(String(10))
+    iniciado_em: Mapped[datetime] = mapped_column(DateTime, default=agora)
+    concluido_em: Mapped[datetime | None] = mapped_column(DateTime)
+    status: Mapped[str] = mapped_column(String(10), default="RODANDO")
+    usuario: Mapped[str | None] = mapped_column(String(120))
+    resumo: Mapped[dict | None] = mapped_column(JSON)
