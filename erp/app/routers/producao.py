@@ -1,14 +1,19 @@
+import html
+import io
 from datetime import date
 
+import barcode
+from barcode.writer import SVGWriter
 from fastapi import APIRouter, Depends, HTTPException
+from fastapi.responses import HTMLResponse, PlainTextResponse
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from ..db import get_db
 from ..deps import APONTAR, PCP, empresa_atual
 from ..models import Empresa, OrdemProducao, StatusOP, Usuario
-from ..schemas import ApontamentoIn, ApontamentoOut, GerarOPIn, OPDetalhe, OPResumo, Painel
-from ..services import pcp
+from ..schemas import ApontamentoIn, ApontamentoOut, GerarOPIn, OPDetalhe, OPResumo, Painel, PlanoCorte
+from ..services import corte, pcp
 from .projetos import carregar
 
 router = APIRouter(prefix="/api", tags=["pcp"])
@@ -135,3 +140,116 @@ def painel(emp: Empresa = Depends(empresa_atual), db: Session = Depends(get_db))
         "centros": pcp.fila_por_centro(db, emp.id),
         "ops": [resumo(o) for o in ops],
     }
+
+
+@router.get("/ops/{op_id}/plano-corte", response_model=PlanoCorte)
+def plano_corte(op_id: int, emp: Empresa = Depends(empresa_atual), db: Session = Depends(get_db)):
+    op = carregar_op(db, emp, op_id)
+    grupos: dict[str, list] = {}
+    for u in op.unidades:
+        grupos.setdefault(u.peca.material_codigo, []).append(u)
+    materiais = []
+    for codigo, unidades in sorted(grupos.items()):
+        mat = unidades[0].peca.material
+        medida_padrao = not (mat and mat.comprimento_mm and mat.largura_mm)
+        comp = emp.chapa_comprimento_mm if medida_padrao else mat.comprimento_mm
+        larg = emp.chapa_largura_mm if medida_padrao else mat.largura_mm
+        descricoes = {u.codigo_barras: f"{u.peca.modulo.codigo}/{u.peca.descricao}" for u in unidades}
+        chapas, nao_cabem = corte.otimizar(
+            [corte.PecaCorte(u.codigo_barras, u.peca.comprimento_mm, u.peca.largura_mm, u.peca.veio)
+             for u in unidades],
+            comp, larg, emp.serra_mm, emp.refilo_mm,
+        )
+        area_total = sum(c.comprimento * c.largura for c in chapas)
+        materiais.append({
+            "material_codigo": codigo,
+            "descricao": mat.descricao if mat else codigo,
+            "espessura_mm": unidades[0].peca.espessura_mm,
+            "chapa_comprimento_mm": comp, "chapa_largura_mm": larg, "medida_padrao": medida_padrao,
+            "total_pecas": len(unidades), "total_chapas": len(chapas),
+            "aproveitamento_pct": round(100 * sum(c.area_usada for c in chapas) / area_total, 1) if area_total else 0,
+            "chapas": [{
+                "numero": i, "aproveitamento_pct": round(100 * c.aproveitamento, 1),
+                "pecas": [{**vars(pos), "descricao": descricoes[pos.ref]} for pos in c.pecas],
+            } for i, c in enumerate(chapas, start=1)],
+            "nao_cabem": [f"{r} {descricoes[r]}" for r in nao_cabem],
+        })
+    return {"op_numero": op.numero, "serra_mm": emp.serra_mm, "refilo_mm": emp.refilo_mm,
+            "total_chapas": sum(m["total_chapas"] for m in materiais), "materiais": materiais}
+
+
+@router.get("/ops/{op_id}/etiquetas.zpl", response_class=PlainTextResponse)
+def etiquetas_zpl(op_id: int, emp: Empresa = Depends(empresa_atual), db: Session = Depends(get_db)):
+    """Etiquetas 100 x 50 mm (203 dpi) para impressora Zebra, uma por peça."""
+    op = carregar_op(db, emp, op_id)
+
+    def limpo(texto: str, n: int) -> str:
+        # ^ e ~ são comandos ZPL; acentos saem com ^CI28 (UTF-8)
+        return (texto or "").replace("^", " ").replace("~", " ")[:n]
+
+    blocos = []
+    for u in op.unidades:
+        p = u.peca
+        roteiro = " > ".join(e.centro.codigo for e in u.etapas)
+        blocos.append("\n".join([
+            "^XA^CI28^PW800^LL400",
+            f"^FO20,15^A0N,28,28^FD{limpo(op.projeto.nome, 48)}^FS",
+            f"^FO20,50^A0N,34,34^FD{limpo(p.descricao, 40)}^FS",
+            f"^FO20,92^A0N,26,26^FD{limpo(p.modulo.codigo + ' - ' + p.modulo.descricao, 52)}^FS",
+            f"^FO20,126^A0N,30,30^FD{p.comprimento_mm:g} x {p.largura_mm:g} x {(p.espessura_mm or 0):g} mm^FS",
+            f"^FO20,162^A0N,24,24^FD{limpo(p.material_codigo, 40)}  OP {op.numero}  {u.sequencial}/{len(op.unidades)}^FS",
+            f"^FO20,192^A0N,22,22^FD{limpo(roteiro, 60)}^FS",
+            f"^FO20,225^BY3^BCN,120,Y,N,N^FD{u.codigo_barras}^FS",
+            "^XZ",
+        ]))
+    return PlainTextResponse("\n".join(blocos) + "\n", headers={
+        "Content-Disposition": f'attachment; filename="op{op.numero}_etiquetas.zpl"'})
+
+
+def _codigo_barras_svg(codigo: str) -> str:
+    buffer = io.BytesIO()
+    barcode.get("code128", codigo, writer=SVGWriter()).write(
+        buffer, {"write_text": False, "module_height": 11, "module_width": 0.33, "quiet_zone": 2})
+    svg = buffer.getvalue().decode()
+    return svg[svg.index("<svg"):]
+
+
+@router.get("/ops/{op_id}/etiquetas.html", response_class=HTMLResponse)
+def etiquetas_html(op_id: int, emp: Empresa = Depends(empresa_atual), db: Session = Depends(get_db)):
+    """Etiquetas 100 x 50 mm para imprimir pelo navegador (térmica ou A4 de etiquetas)."""
+    op = carregar_op(db, emp, op_id)
+    e = html.escape
+    etiquetas = []
+    for u in op.unidades:
+        p = u.peca
+        roteiro = " › ".join(et.centro.codigo for et in u.etapas)
+        etiquetas.append(f"""<section class="etq">
+  <div class="topo"><span>{e(op.projeto.nome)}</span><span>OP {op.numero} · {u.sequencial}/{len(op.unidades)}</span></div>
+  <div class="peca">{e(p.descricao)}</div>
+  <div class="mod">{e(p.modulo.codigo)} · {e(p.modulo.descricao)}</div>
+  <div class="med">{p.comprimento_mm:g} × {p.largura_mm:g} × {(p.espessura_mm or 0):g} mm <small>{e(p.material_codigo)}</small></div>
+  <div class="rot">{e(roteiro)}</div>
+  <div class="cb">{_codigo_barras_svg(u.codigo_barras)}<span>{u.codigo_barras}</span></div>
+</section>""")
+    pagina = f"""<!doctype html><html lang="pt-BR"><head><meta charset="utf-8">
+<title>Etiquetas OP {op.numero}</title>
+<style>
+@page {{ size: 100mm 50mm; margin: 0; }}
+* {{ box-sizing: border-box; }}
+body {{ margin: 0; font: 9pt/1.2 system-ui, Arial, sans-serif; color: #000; background: #fff; }}
+.barra {{ padding: 10px; background: #eee; font-size: 12pt; display: flex; gap: 12px; align-items: center; }}
+.etq {{ width: 100mm; height: 50mm; padding: 2.5mm 3mm; page-break-after: always; overflow: hidden;
+        display: grid; grid-template-rows: auto auto auto auto auto 1fr; gap: .6mm; border-bottom: 1px dashed #bbb; }}
+.topo {{ display: flex; justify-content: space-between; font-size: 7pt; }}
+.peca {{ font-size: 12pt; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }}
+.mod, .rot {{ font-size: 7.5pt; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }}
+.med {{ font-size: 11pt; font-weight: 700; }} .med small {{ font-size: 7.5pt; font-weight: 400; }}
+.cb {{ display: flex; align-items: center; gap: 2mm; }} .cb svg {{ height: 12mm; width: auto; }}
+.cb span {{ font: 8pt monospace; }}
+@media print {{ .barra {{ display: none; }} .etq {{ border: 0; }} }}
+</style></head><body>
+<div class="barra"><b>OP {op.numero}</b> · {len(etiquetas)} etiquetas de 100 × 50 mm
+<button onclick="print()">Imprimir</button></div>
+{''.join(etiquetas)}
+</body></html>"""
+    return HTMLResponse(pagina)

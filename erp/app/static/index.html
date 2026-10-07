@@ -64,6 +64,14 @@ a { color: var(--brand); cursor: pointer; }
 .tag.OK, .tag.RECEBIDO { background: var(--ok); color: #fff; }
 td input.num { width: 90px; text-align: right; }
 .neg { color: var(--err); font-weight: 600; }
+.chapas { display: grid; gap: 14px; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); }
+.chapa { margin: 0; min-width: 0; } .chapa figcaption { font-size: 12px; color: var(--muted); margin-bottom: 4px; }
+.chapa svg { width: 100%; height: auto; display: block; }
+.chapa .ch { fill: var(--line); stroke: var(--muted); stroke-width: 6; }
+.chapa .pc { fill: color-mix(in srgb, var(--brand) 22%, var(--panel)); stroke: var(--brand); stroke-width: 4; }
+.chapa .pt { font: 600 64px system-ui, sans-serif; fill: var(--ink); text-anchor: middle; }
+.chapa .pm { font: 54px system-ui, sans-serif; fill: var(--muted); text-anchor: middle; }
+#camera { width: 100%; max-width: 420px; border-radius: 8px; background: #000; margin-top: 10px; }
 </style>
 </head>
 <body>
@@ -142,6 +150,8 @@ td input.num { width: 90px; text-align: right; }
         <span class="dica" id="ap-quem"></span>
       </div>
       <input id="scan" placeholder="Bipe a etiqueta da peça e tecle Enter" autocomplete="off">
+      <div class="linha" style="margin-top:10px"><button class="btn sec" id="btn-camera" type="button" hidden>Ler pela câmera do celular</button></div>
+      <video id="camera" playsinline muted hidden></video>
       <div id="ap-msg"></div>
     </div>
   </section>
@@ -382,11 +392,66 @@ async function verOp(id) {
   $("det-op").hidden = false;
   $("det-op").innerHTML = `<h2>OP #${op.numero} · ${esc(op.projeto_nome)} ${tag(op.status)}</h2>
     <div class="linha">${barra(op.progresso_pct)} ${op.etapas_concluidas}/${op.etapas_total} etapas (${op.progresso_pct}%)</div>
+    <div class="linha">
+      <button class="btn" onclick="imprimirEtiquetas(${op.id})">Imprimir etiquetas</button>
+      <button class="btn sec" onclick="baixarZpl(${op.id}, ${op.numero})">Baixar ZPL (Zebra)</button>
+      <button class="btn sec" onclick="verPlanoCorte(${op.id})">Plano de corte</button>
+    </div>
+    <div id="op-extra"></div>
     ${tabela([["Etiqueta", (u) => `<code>${u.codigo_barras}</code>`], ["Ambiente", (u) => esc(u.ambiente)],
       ["Peça", (u) => `${esc(u.modulo)}/<b>${esc(u.peca_codigo)}</b> ${esc(u.peca_descricao)}`],
       ["Material", (u) => esc(u.material_codigo)], ["Medida", (u) => `${num(u.comprimento_mm, 1)} × ${num(u.largura_mm, 1)}`, 1],
       ["Roteiro", (u) => u.etapas.map((e) => `<span class="${e.concluida_em ? "feito" : "pend"}">${e.concluida_em ? "✔" : "○"} ${e.centro_codigo}</span>`).join(" › ")]],
       op.unidades)}`;
+}
+
+async function arquivo(caminho) {
+  const r = await fetch(caminho, {headers: {Authorization: `Bearer ${token}`}});
+  if (!r.ok) throw new Error(`Erro ${r.status} ao gerar o arquivo`);
+  return r.blob();
+}
+
+async function imprimirEtiquetas(id) {
+  try { const url = URL.createObjectURL(await arquivo(`/api/ops/${id}/etiquetas.html`)); window.open(url, "_blank"); }
+  catch (e) { alert(e.message); }
+}
+
+async function baixarZpl(id, numero) {
+  try {
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(await arquivo(`/api/ops/${id}/etiquetas.zpl`)); a.download = `op${numero}_etiquetas.zpl`;
+    document.body.append(a); a.click(); a.remove();
+  } catch (e) { alert(e.message); }
+}
+
+// Texto dentro da peça: só o que cabe na largura (≈ 0,6 da altura da fonte por caractere)
+function rotulo(p) {
+  const fonte = Math.min(64, p.largura / 3.2), cabe = Math.floor(p.comprimento / (fonte * 0.6)) - 1;
+  if (fonte < 26 || cabe < 5) return "";
+  const nome = p.descricao.split("/").pop(), medida = `${p.comprimento} × ${p.largura}`;
+  const corta = (t) => t.length > cabe ? t.slice(0, cabe - 1) + "…" : t;
+  const cx = p.x + p.comprimento / 2, cy = p.y + p.largura / 2;
+  return `<text x="${cx}" y="${cy}" class="pt" style="font-size:${fonte}px">${esc(corta(nome))}</text>
+    <text x="${cx}" y="${cy + fonte * 1.05}" class="pm" style="font-size:${fonte * 0.85}px">${esc(corta(medida))}</text>`;
+}
+
+function desenhoChapa(m, ch) {
+  const C = m.chapa_comprimento_mm, L = m.chapa_largura_mm;
+  const pecas = ch.pecas.map((p) => `<g><rect x="${p.x}" y="${p.y}" width="${p.comprimento}" height="${p.largura}" class="pc"><title>${esc(p.descricao)} · ${p.comprimento} × ${p.largura}${p.girada ? " (girada)" : ""} · ${p.ref}</title></rect>
+    ${rotulo(p)}</g>`).join("");
+  return `<figure class="chapa"><figcaption>Chapa ${ch.numero} · aproveitamento ${ch.aproveitamento_pct}%</figcaption>
+    <svg viewBox="0 0 ${C} ${L}" role="img" aria-label="Chapa ${ch.numero} com ${ch.pecas.length} peças"><rect width="${C}" height="${L}" class="ch"/>${pecas}</svg></figure>`;
+}
+
+async function verPlanoCorte(id) {
+  const plano = await api(`/api/ops/${id}/plano-corte`);
+  $("op-extra").innerHTML = `<h2>Plano de corte · ${plano.total_chapas} chapa(s)</h2>
+    <p class="dica">Serra ${plano.serra_mm} mm, refilo ${plano.refilo_mm} mm. Passe o mouse sobre a peça para ver a etiqueta.</p>` +
+    plano.materiais.map((m) => `<h2>${esc(m.material_codigo)} · ${esc(m.descricao)}</h2>
+      <p class="dica">${m.total_pecas} peças em ${m.total_chapas} chapa(s) de ${m.chapa_comprimento_mm} × ${m.chapa_largura_mm} mm · aproveitamento ${m.aproveitamento_pct}%
+      ${m.medida_padrao ? " · medida padrão da empresa (cadastre a medida da chapa no material para usar a real)" : ""}</p>
+      ${m.nao_cabem.length ? `<div class="msg err">Não cabem na chapa: ${m.nao_cabem.map(esc).join(", ")}</div>` : ""}
+      <div class="chapas">${m.chapas.map((ch) => desenhoChapa(m, ch)).join("")}</div>`).join("");
 }
 
 // --- Apontamento ------------------------------------------------------------
@@ -398,9 +463,41 @@ async function carregarApontamento() {
   $("scan").focus();
 }
 
+// Leitura pela câmera (Chrome/Android e Safari recentes têm BarcodeDetector)
+let cameraAtiva = null;
+if ("BarcodeDetector" in window) $("btn-camera").hidden = false;
+$("btn-camera").onclick = async () => {
+  if (cameraAtiva) { pararCamera(); return; }
+  try {
+    const detector = new BarcodeDetector({formats: ["code_128"]});
+    const stream = await navigator.mediaDevices.getUserMedia({video: {facingMode: "environment"}});
+    const video = $("camera"); video.srcObject = stream; video.hidden = false; await video.play();
+    $("btn-camera").textContent = "Parar câmera";
+    let ultimo = "", quando = 0;
+    cameraAtiva = {stream, timer: setInterval(async () => {
+      const lidos = await detector.detect(video).catch(() => []);
+      const codigo = lidos[0]?.rawValue;
+      if (codigo && (codigo !== ultimo || Date.now() - quando > 3000)) {
+        ultimo = codigo; quando = Date.now(); navigator.vibrate?.(80);
+        await registrarBaixa(codigo);
+      }
+    }, 350)};
+  } catch (e) { $("ap-msg").innerHTML = `<div class="msg err">Não foi possível abrir a câmera: ${esc(e.message)}</div>`; }
+};
+function pararCamera() {
+  if (!cameraAtiva) return;
+  clearInterval(cameraAtiva.timer); cameraAtiva.stream.getTracks().forEach((t) => t.stop());
+  cameraAtiva = null; $("camera").hidden = true; $("btn-camera").textContent = "Ler pela câmera do celular";
+}
+
 $("scan").addEventListener("keydown", async (ev) => {
   if (ev.key !== "Enter") return;
   const codigo = $("scan").value.trim(); $("scan").value = "";
+  await registrarBaixa(codigo);
+  $("scan").focus();
+});
+
+async function registrarBaixa(codigo) {
   if (!codigo) return;
   try {
     const r = await api("/api/apontamentos", {method: "POST", json: {codigo_barras: codigo,
@@ -408,8 +505,7 @@ $("scan").addEventListener("keydown", async (ev) => {
     $("ap-msg").innerHTML = `<div class="msg ok">✔ ${esc(r.peca)} baixada em ${r.centro_codigo}.
 Próxima etapa: ${r.proxima_etapa ?? "peça finalizada"} · OP #${r.op_numero} ${r.op_progresso_pct}% (${r.op_status})</div>`;
   } catch (e) { $("ap-msg").innerHTML = `<div class="msg err">✖ ${esc(codigo)}: ${esc(e.message)}</div>`; }
-  $("scan").focus();
-});
+}
 
 // --- Materiais --------------------------------------------------------------
 async function carregarMateriais() {

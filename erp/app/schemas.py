@@ -339,6 +339,44 @@ class MovimentoOut(Schema):
 
 # --- PCP ---------------------------------------------------------------------
 
+class PosicaoCorte(Schema):
+    ref: str
+    descricao: str
+    x: float
+    y: float
+    comprimento: float
+    largura: float
+    girada: bool
+
+
+class ChapaCorte(Schema):
+    numero: int
+    aproveitamento_pct: float
+    pecas: list[PosicaoCorte]
+
+
+class PlanoMaterial(Schema):
+    material_codigo: str
+    descricao: str
+    espessura_mm: float | None
+    chapa_comprimento_mm: float
+    chapa_largura_mm: float
+    medida_padrao: bool
+    total_pecas: int
+    total_chapas: int
+    aproveitamento_pct: float
+    chapas: list[ChapaCorte]
+    nao_cabem: list[str]
+
+
+class PlanoCorte(Schema):
+    op_numero: int
+    serra_mm: float
+    refilo_mm: float
+    total_chapas: int
+    materiais: list[PlanoMaterial]
+
+
 class GerarOPIn(Schema):
     prioridade: int = Field(3, ge=1, le=5)
     data_entrega: date | None = None

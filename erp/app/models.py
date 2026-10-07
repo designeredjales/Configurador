@@ -82,6 +82,11 @@ class Empresa(Base):
     cnpj: Mapped[str | None] = mapped_column(String(20))
     perda_chapa_pct: Mapped[float] = mapped_column(Float, default=15.0)
     perda_fita_pct: Mapped[float] = mapped_column(Float, default=10.0)
+    # Padrões da seccionadora para o plano de corte
+    chapa_comprimento_mm: Mapped[float] = mapped_column(Float, default=2750.0)
+    chapa_largura_mm: Mapped[float] = mapped_column(Float, default=1850.0)
+    serra_mm: Mapped[float] = mapped_column(Float, default=4.0)
+    refilo_mm: Mapped[float] = mapped_column(Float, default=10.0)
     criado_em: Mapped[datetime] = mapped_column(DateTime, default=agora)
 
 

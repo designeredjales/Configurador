@@ -18,6 +18,7 @@ Projeto (Promob) → Engenharia (BOM + consumo + gate) → Ordem de Produção �
 | **PCP** | Geração de OP com uma etiqueta (código de barras) por peça física e roteiro pelas operações do Promob: CORTE → BORDA (se a peça tem borda) → USINAGEM (se tem FURAR/RASGO) → EMBALAGEM |
 | **Apontamento** | Baixa por leitor de código de barras, registrada em nome do usuário logado: bloqueia etapa fora de ordem, centro fora do roteiro e baixa duplicada. Fecha a OP e o projeto sozinho |
 | **Painel** | OPs abertas, em produção e atrasadas, fila de peças por centro, baixas do dia, progresso por OP |
+| **Chão de fábrica** | Plano de corte guilhotinado por material (serra, refilo, veio) com desenho de cada chapa; etiquetas 100 × 50 mm com código de barras para imprimir no navegador ou em ZPL (Zebra); apontamento pela câmera do celular |
 | **Estoque** | Saldo por movimentação, reserva automática na liberação do projeto, baixa automática na conclusão, inventário com ajuste pela diferença, custo médio ponderado |
 | **Compras (MRP)** | Sugestão de compra = reservado + mínimo − saldo − em pedido; pedido ao fornecedor, envio, recebimento parcial ou total, cancelamento |
 
@@ -84,6 +85,12 @@ Limitações conhecidas desse relatório: ele não traz os lados da fita (C1/C2/
 
 O exemplo anonimizado fica em `exemplos/promob_cozinha.xml`. Os testes conferem que a área de chapa e a metragem de fita calculadas pelo ERP batem com os valores gravados pelo Promob.
 
+## Chão de fábrica
+
+- **Plano de corte** (`GET /api/ops/{id}/plano-corte`): agrupa as peças da OP por material e encaixa com corte guilhotina (melhor ajuste por área). Usa a medida de chapa do cadastro do material; sem ela, a medida padrão da empresa (2750 × 1850 mm). Serra (4 mm) e refilo (10 mm) também são da empresa. Peça com veio não gira. Num lote de 150 peças o aproveitamento fica em 86 a 87%, a 1 ou 2 chapas do mínimo teórico. Para chegar a 90% ou mais, integre a otimizadora da fábrica: o plano já sai por etiqueta.
+- **Etiquetas**: `GET /api/ops/{id}/etiquetas.html` (100 × 50 mm, Code128, para impressora térmica ou folha de etiquetas) e `GET /api/ops/{id}/etiquetas.zpl` (Zebra, 203 dpi).
+- **Câmera**: no Chrome do Android e no Safari recente, o apontamento ganha o botão "Ler pela câmera do celular" (API `BarcodeDetector`).
+
 ## Compras e estoque
 
 O estoque é a soma das movimentações de cada material, na unidade do cadastro (chapa por chapa `CH` ou por `M2`, fita em `M`, ferragem em `UN`).
@@ -128,6 +135,7 @@ erp/
       engenharia.py    # consumo, pendências, liberação
       pcp.py           # OP, roteiro, apontamento, filas
       estoque.py       # reservas, MRP, recebimento, custo médio, inventário
+      corte.py         # otimizador de plano de corte
     routers/           # API REST (cadastros, projetos, produção)
     static/index.html  # interface web (painel, projetos, OPs, apontamento, materiais)
   tests/               # fluxo completo, XML do Promob, gate, perfis, isolamento entre empresas
@@ -138,7 +146,7 @@ erp/
 
 1. **Segurança 2.0**: recuperação de senha por e-mail, limite de tentativas de login, registro de auditoria.
 2. **Lados da fita e furação**: ler o XML de máquina do Promob (ou o relatório com bordas) para etiquetas com C1/C2/L1/L2 e programas CNC.
-3. **Etiquetas** (PDF/ZPL) e **plano de corte** com integração à otimizadora.
+3. **Integração com a otimizadora** (Corte Certo, Optiplanning) e programas CNC por peça.
 4. **Compras 2.0**: cotação entre fornecedores, envio do pedido por e-mail/WhatsApp, lotes e sobras de chapa reaproveitáveis.
 5. **Comercial e financeiro**: orçamento → pedido → contrato, contas a pagar e a receber, DRE por obra.
 6. **Alembic** para migrações e PostgreSQL como padrão.
