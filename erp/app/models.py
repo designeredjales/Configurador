@@ -801,3 +801,36 @@ class ItemCarrinho(Base):
 
     carrinho: Mapped[Carrinho] = relationship(back_populates="itens")
     unidade: Mapped[UnidadePeca] = relationship()
+
+
+class RegistroAuditoria(Base):
+    """Quem alterou o quê: uma linha por requisição que muda dados (gravada pelo middleware)."""
+    __tablename__ = "auditoria"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    empresa_id: Mapped[int | None] = mapped_column(ForeignKey("empresas.id"), index=True)
+    usuario_id: Mapped[int | None] = mapped_column(Integer)
+    usuario_nome: Mapped[str | None] = mapped_column(String(120))
+    quando: Mapped[datetime] = mapped_column(DateTime, default=agora, index=True)
+    metodo: Mapped[str] = mapped_column(String(8))
+    rota: Mapped[str] = mapped_column(String(200))
+    acao: Mapped[str] = mapped_column(String(160))
+    entidade_id: Mapped[str | None] = mapped_column(String(40))
+    status: Mapped[int] = mapped_column(Integer)
+    ip: Mapped[str | None] = mapped_column(String(64))
+    detalhes: Mapped[dict | None] = mapped_column(JSON)
+
+
+class RegistroErro(Base):
+    """Erro inesperado no servidor, com código para o suporte localizar."""
+    __tablename__ = "erros_sistema"
+
+    id: Mapped[str] = mapped_column(String(12), primary_key=True)
+    empresa_id: Mapped[int | None] = mapped_column(Integer, index=True)
+    usuario_id: Mapped[int | None] = mapped_column(Integer)
+    quando: Mapped[datetime] = mapped_column(DateTime, default=agora, index=True)
+    metodo: Mapped[str] = mapped_column(String(8))
+    rota: Mapped[str] = mapped_column(String(200))
+    tipo: Mapped[str] = mapped_column(String(120))
+    mensagem: Mapped[str] = mapped_column(String(500))
+    rastreio: Mapped[str] = mapped_column(String(8000))

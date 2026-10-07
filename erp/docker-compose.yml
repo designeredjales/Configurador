@@ -31,8 +31,36 @@ services:
       SMTP_USUARIO: ${SMTP_USUARIO:-}
       SMTP_SENHA: ${SMTP_SENHA:-}
       SMTP_REMETENTE: ${SMTP_REMETENTE:-}
+      SENTRY_DSN: ${SENTRY_DSN:-}
+      APP_VERSAO: ${APP_VERSAO:-}
+      ERP_PASTA_BACKUP: /backups
+      TZ: ${TZ:-America/Sao_Paulo}
+    volumes:
+      - backups:/backups:ro   # só para o painel "Saúde do sistema" mostrar o último backup
     ports:
       - "8000:8000"
 
+  # Backup diário do banco (pg_dump), com retenção e cópia opcional para a nuvem (rclone)
+  backup:
+    image: postgres:16
+    restart: unless-stopped
+    depends_on:
+      banco:
+        condition: service_healthy
+    env_file: .env            # RCLONE_DESTINO e RCLONE_CONFIG_* (cópia na nuvem) vêm daqui
+    environment:
+      PGHOST: banco
+      PGUSER: erp
+      PGDATABASE: erp
+      PGPASSWORD: ${POSTGRES_PASSWORD}
+      BACKUP_HORA: ${BACKUP_HORA:-03}
+      BACKUP_DIAS: ${BACKUP_DIAS:-14}
+      TZ: ${TZ:-America/Sao_Paulo}
+    volumes:
+      - backups:/backups
+      - ./scripts:/scripts:ro
+    entrypoint: ["bash", "/scripts/backup.sh"]
+
 volumes:
   dados:
+  backups:

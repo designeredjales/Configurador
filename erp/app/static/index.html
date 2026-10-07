@@ -73,7 +73,8 @@ td input.num { width: 90px; text-align: right; }
 .tag.ENTREGUE, .tag.RESOLVIDO { background: var(--ok); color: #fff; }
 .tag.AGUARDANDO { background: var(--line); } .tag.EM_PROCESSO { background: var(--warn); color: #fff; }
 .tag.REFUGADA, .tag.REFUGO { background: var(--err); color: #fff; } .tag.ESTORNO { background: var(--warn); color: #fff; } .tag.REPOSICAO { background: var(--brand); color: var(--brand-ink); }
-.tag.ABERTO, .tag.ABERTA { background: var(--line); } .tag.CANCELADO { background: var(--err); color: #fff; } .tag.FECHADA { background: var(--warn); color: #fff; } .tag.EXPEDIDA { background: var(--ok); color: #fff; }
+.tag.ABERTO, .tag.ABERTA { background: var(--line); } .tag.ok { background: var(--ok); color: #fff; } .tag.recusado { background: var(--warn); color: #fff; } .tag.erro { background: var(--err); color: #fff; }
+.det-au { max-width: 420px; white-space: normal; font-size: 12px; color: var(--muted); word-break: break-word; } .tag.CANCELADO { background: var(--err); color: #fff; } .tag.FECHADA { background: var(--warn); color: #fff; } .tag.EXPEDIDA { background: var(--ok); color: #fff; }
 .alerta-ex { padding: 14px 16px; border-radius: 8px; margin-top: 12px; font-size: 16px; font-weight: 600; white-space: pre-wrap; border: 2px solid transparent; }
 .alerta-ex.ok { background: color-mix(in srgb, var(--ok) 16%, transparent); border-color: var(--ok); }
 .alerta-ex.err { background: color-mix(in srgb, var(--err) 18%, transparent); border-color: var(--err); }
@@ -345,6 +346,20 @@ td input.num { width: 90px; text-align: right; }
   </section>
 
   <section id="configuracoes">
+    <div class="card"><h2>Saúde do sistema</h2>
+      <div class="grid" id="sis-kpis"></div>
+      <div id="sis-detalhe"></div>
+    </div>
+    <div class="card"><h2>Registro de alterações (auditoria)</h2>
+      <p class="dica">Quem alterou o quê: toda criação, alteração, liberação, cancelamento, baixa, embalagem e login, com o resultado. Senhas e tokens nunca são gravados.</p>
+      <div class="linha">
+        <input id="au-de" type="date" aria-label="De"> até <input id="au-ate" type="date" aria-label="Até">
+        <select id="au-usuario" aria-label="Usuário"><option value="">Todos os usuários</option></select>
+        <input id="au-busca" placeholder="Ação ou registro (ex.: Cancelou, 12)" size="24" aria-label="Buscar">
+        <button class="btn sec" onclick="carregarAuditoria()">Filtrar</button>
+      </div>
+      <div class="tabela" id="au-lista"></div>
+    </div>
     <div class="card"><h2>Processos da fábrica (setores)</h2>
       <p class="dica"><b>Conferência obrigatória</b> desmarcada: o setor não é bipado; a etapa fecha sozinha quando a peça passa no setor seguinte e ele some da fila do painel. <b>Só peças separadas</b>: o setor entra no roteiro apenas das peças cuja separação pede por ele (ex.: tupia). Mudanças de regra valem para as OPs geradas daqui em diante; a conferência vale na hora.</p>
       <div class="tabela" id="cfg-centros"></div>
@@ -1596,6 +1611,9 @@ async function carregarOcorrencias() {
 const REGRAS = {TODAS: "Todas as peças", COM_FITA: "Peças com fita", COM_USINAGEM: "Peças com furação", SOB_DEMANDA: "Só peças separadas"};
 async function carregarConfiguracoes() {
   carregarEmpresa().catch(() => {});
+  carregarSistema().catch((e) => $("sis-detalhe").innerHTML = `<div class="msg err">${esc(e.message)}</div>`);
+  if (!$("au-de").value) { const d = new Date(); $("au-ate").value = d.toISOString().slice(0, 10); d.setDate(d.getDate() - 7); $("au-de").value = d.toISOString().slice(0, 10); }
+  carregarAuditoria().catch(() => {});
   const [centros, classes, carros] = await Promise.all([api("/api/centros"), api("/api/separacoes"), api("/api/carrinhos")]);
   separacoesCache = classes;
   $("cfg-centros").innerHTML = tabela([["Ordem", (c) => `<input type="number" value="${c.sequencia}" style="width:70px" onchange="salvarSetor(${c.id}, {sequencia: Number(this.value)})" aria-label="Ordem">`],
@@ -1644,6 +1662,39 @@ async function criarCarrinhos() {
     msgCfg("cfg-centros-msg", true, `${n.length} carrinho(s) cadastrado(s). Imprima as etiquetas e cole nos carrinhos.`); }
   catch (e) { alert(e.message); }
 }
+
+// --- Saúde do sistema e auditoria --------------------------------------------
+const quando = (t) => new Date(t).toLocaleString("pt-BR", {dateStyle: "short", timeStyle: "short"});
+async function carregarSistema() {
+  const s = await api("/api/sistema"), b = s.backup;
+  const backup = !b.configurado ? ["—", "Backup automático", esc(b.mensagem) + " (veja o DEPLOY.md)", true]
+    : !b.arquivo ? ["Nenhum", "Backup automático", b.mensagem, true]
+    : [b.idade_horas < 1 ? "agora há pouco" : `há ${b.idade_horas.toFixed(0)} h`, "Último backup", `${b.quantidade} guardado(s) · ${b.tamanho_mb} MB`, b.alerta];
+  $("sis-kpis").innerHTML = [backup, [String(s.erros_24h), "Erros nas últimas 24 h", s.sentry ? "também enviados ao Sentry" : "Sentry desligado", s.erros_24h > 0],
+    [String(s.alteracoes_24h), "Alterações nas últimas 24 h", "ver o registro abaixo", false],
+    [esc(s.versao), "Versão", `${esc(s.banco)} · migração ${esc(String(s.migracao))}`, false]]
+    .map(([v, t, sub, alerta]) => `<div class="card kpi ${alerta ? "alerta" : ""}">${v}<small>${t}</small><span class="sub">${sub}</span></div>`).join("");
+  $("sis-detalhe").innerHTML = s.erros.length ? `<h2>Erros recentes</h2><p class="dica">Quando alguém relatar um erro, peça o código que aparece na tela e procure aqui.</p>
+    <div class="tabela">${tabela([["Código", (e) => `<code>${e.codigo}</code>`], ["Quando", (e) => quando(e.quando)], ["Onde", (e) => `${esc(e.metodo)} ${esc(e.rota)}`],
+      ["Erro", (e) => `<b>${esc(e.tipo)}</b> <span class="det-au">${esc(e.mensagem)}</span>`]], s.erros)}</div>`
+    : `<p class="dica">Nenhum erro registrado. No ar desde ${quando(s.no_ar_desde)}.</p>`;
+}
+function resumoDetalhes(d) {
+  if (!d) return "";
+  const t = Object.entries(d).filter(([k]) => !k.startsWith("_")).map(([k, v]) => `${k}: ${typeof v === "object" ? JSON.stringify(v) : v}`).join(" · ");
+  return t.length > 160 ? t.slice(0, 160) + "…" : t;
+}
+async function carregarAuditoria() {
+  const q = new URLSearchParams({de: $("au-de").value, ate: $("au-ate").value});
+  if ($("au-usuario").value) q.set("usuario", $("au-usuario").value);
+  if ($("au-busca").value.trim()) q.set("busca", $("au-busca").value.trim());
+  const r = await api(`/api/auditoria?${q}`), atual = $("au-usuario").value;
+  $("au-usuario").innerHTML = `<option value="">Todos os usuários</option>` + r.usuarios.map((u) => `<option ${u === atual ? "selected" : ""}>${esc(u)}</option>`).join("");
+  $("au-lista").innerHTML = tabela([["Quando", (x) => quando(x.quando)], ["Quem", (x) => esc(x.usuario || "—")], ["Ação", (x) => `<b>${esc(x.acao)}</b>`],
+    ["Registro", (x) => x.entidade_id ? `#${esc(x.entidade_id)}` : "—"], ["Resultado", (x) => `<span class="tag ${x.resultado}">${x.resultado}</span>`],
+    ["Detalhes", (x) => `<span class="det-au" title="${esc(JSON.stringify(x.detalhes || {}))}">${esc(resumoDetalhes(x.detalhes))}</span>`]], r.registros);
+}
+$("au-busca").addEventListener("keydown", (ev) => { if (ev.key === "Enter") carregarAuditoria().catch((e) => alert(e.message)); });
 
 // --- Lotes de produção -----------------------------------------------------
 async function carregarLotes(projetos) {

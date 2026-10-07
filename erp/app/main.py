@@ -7,10 +7,10 @@ from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 from sqlalchemy import text
 
-from . import models  # noqa: F401  (registra as tabelas)
+from . import models, observabilidade  # noqa: F401  (registra as tabelas)
 from .db import Base, engine
 from .routers import (
-    auth, cadastros, carrinhos, compras, configuracoes, expedicao, financeiro, lotes, pos_obra, producao, projetos,
+    auth, cadastros, carrinhos, compras, configuracoes, expedicao, financeiro, lotes, pos_obra, producao, projetos, sistema,
 )
 
 STATIC = Path(__file__).parent / "static"
@@ -31,6 +31,11 @@ app = FastAPI(
     version="1.0.0",
     lifespan=lifespan,
 )
+
+
+# Auditoria e erros ficam por dentro dos cabeçalhos de segurança (a resposta de erro também os recebe)
+app.middleware("http")(observabilidade.observar)
+observabilidade.configurar_sentry()
 
 
 @app.middleware("http")
@@ -56,6 +61,7 @@ app.include_router(lotes.router)
 app.include_router(expedicao.router)
 app.include_router(carrinhos.router)
 app.include_router(configuracoes.router)
+app.include_router(sistema.router)
 app.mount("/static", StaticFiles(directory=STATIC), name="static")
 
 

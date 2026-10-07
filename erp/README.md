@@ -30,6 +30,13 @@ Projeto (Promob) → Engenharia (BOM + consumo + gate) → Ordem de Produção �
 | **Montagem e pós-obra** | Agenda de montagem (só inicia com a produção concluída), checklist de entrega com quem conferiu, entrega com nome de quem recebeu; assistência técnica com garantia, causa raiz e custo lançado no DRE da obra |
 | **Compras (MRP)** | Sugestão de compra = reservado + mínimo − saldo − em pedido; pedido ao fornecedor, envio, recebimento parcial ou total, cancelamento |
 
+## Pronto para produção
+
+- **Auditoria:** quem alterou o quê, com ação em português, registro afetado, resultado (ok, recusado, erro) e resumo do que foi enviado, sem senhas ou tokens. Fica em Configurações → Registro de alterações, com filtro por período, usuário e ação.
+- **Erros com código:** erro inesperado mostra ao usuário um código de 8 caracteres e fica registrado com rota e rastreio. O Sentry é opcional (`SENTRY_DSN`).
+- **Backup diário:** serviço `backup` no docker-compose, com retenção, cópia opcional na nuvem (rclone) e script de restauração. O último backup aparece em Configurações → Saúde do sistema, com alerta depois de 26 horas.
+- **Logs JSON** por requisição e `/api/saude` para monitor externo. Detalhes no [DEPLOY.md](DEPLOY.md).
+
 ## Rodar
 
 ```bash
@@ -282,7 +289,7 @@ erp/
 
 ## Próximas camadas (roadmap)
 
-1. **Auditoria**: registro de quem alterou o quê (preços, contratos, baixas), limite de tentativas em Redis para várias instâncias.
+1. **Escala**: limite de tentativas de login em Redis para rodar várias instâncias; retenção configurável da auditoria.
 2. **Lados da fita e furação**: ler o XML de máquina do Promob (ou o relatório com bordas) para etiquetas com C1/C2/L1/L2 e programas CNC.
 3. **Integração com a otimizadora** (Corte Certo, Optiplanning) e programas CNC por peça.
 4. **Compras 2.0**: cotação entre fornecedores, envio do pedido por e-mail/WhatsApp, lotes e sobras de chapa reaproveitáveis.

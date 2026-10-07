@@ -21,12 +21,35 @@ Uma VPS de 2 GB de RAM (Hostinger, Contabo, DigitalOcean, AWS Lightsail) atende 
    ```
 5. Acesse o endereço e cadastre a empresa. O primeiro usuário vira administrador.
 
-**Backup diário do banco** (agende no cron do servidor e copie para fora dele):
+**Atualizar a versão:** `APP_VERSAO=$(git rev-parse --short HEAD) docker compose up -d --build` depois do `git pull`. As migrações novas rodam sozinhas na subida.
+
+## Backup automático
+
+O serviço `backup` do `docker-compose.yml` já vem ligado:
+
+- faz um backup assim que sobe e depois **todo dia às `BACKUP_HORA`** (padrão 03h, no fuso `TZ`);
+- guarda **`BACKUP_DIAS` dias** (padrão 14) no volume `backups`, em arquivos `erp_AAAAMMDD_HHMM.dump`;
+- com `RCLONE_DESTINO` preenchido, **envia cada backup para a nuvem** (S3, Backblaze B2, Google Drive, Dropbox... qualquer destino do rclone, configurado pelas variáveis `RCLONE_CONFIG_*` no `.env`). Backup que fica só no próprio servidor não protege contra a perda do servidor: ligue a nuvem.
+
+O painel **Configurações → Saúde do sistema** mostra o último backup e acende alerta se ele tiver mais de 26 horas.
+
 ```bash
-docker compose exec -T banco pg_dump -U erp erp | gzip > backup_$(date +%F).sql.gz
+docker compose exec backup bash /scripts/backup.sh agora         # backup manual
+docker compose exec backup ls -lh /backups                       # listar
+docker compose stop erp                                          # restaurar (apaga os dados atuais!)
+docker compose exec backup bash /scripts/restaurar.sh erp_20261007_0300.dump
+docker compose start erp
 ```
 
-**Atualizar a versão:** `git pull && docker compose up -d --build`. As migrações novas rodam sozinhas na subida.
+Teste a restauração uma vez por mês num banco à parte: backup que nunca foi restaurado não é backup.
+
+## Auditoria e monitoramento
+
+- **Auditoria:** toda alteração (criar, alterar, liberar, cancelar, baixar, apontar, embalar, login...) fica registrada com quem fez, quando, a ação, o registro afetado, o resultado (ok, recusado ou erro) e um resumo do que foi enviado. Senhas e tokens nunca são gravados. O administrador consulta em **Configurações → Registro de alterações**.
+- **Erros:** todo erro inesperado recebe um código (ex.: `7F3A9C21`), que o usuário vê na tela. O suporte localiza o código em **Saúde do sistema**, com rota, horário e tipo do erro. O rastreio completo fica no banco (tabela `erros_sistema`).
+- **Sentry (opcional):** com `SENTRY_DSN` definido, cada erro também vai para o Sentry com o mesmo código, sem dados pessoais. O Sentry avisa por e-mail ou Slack.
+- **Logs:** cada requisição gera uma linha JSON (método, rota, status, tempo em ms) no log do contêiner: `docker compose logs -f erp`.
+- **Disponibilidade:** `GET /api/saude` responde só quando a aplicação e o banco estão de pé. Aponte para ela um monitor externo gratuito (UptimeRobot, Better Stack) para receber alerta se o ERP cair.
 
 ## Opção B: plataforma gerenciada (Render, Railway, Fly.io)
 
@@ -34,6 +57,7 @@ docker compose exec -T banco pg_dump -U erp erp | gzip > backup_$(date +%F).sql.
 2. Crie um serviço web a partir do repositório, com raiz em `erp/` e o `Dockerfile`.
 3. Variáveis de ambiente: `DATABASE_URL` (no formato `postgresql+psycopg://usuario:senha@host:5432/banco`), `ERP_SECRET`, `ERP_URL_PUBLICA` e, se quiser e-mail, as `SMTP_*`.
 4. Verificação de saúde: `GET /api/saude`. A plataforma fornece o HTTPS.
+5. Backup: ative o backup automático do PostgreSQL gerenciado (todas essas plataformas oferecem) e, se quiser alertas de erro, defina `SENTRY_DSN`.
 
 ## Variáveis de ambiente
 
@@ -46,6 +70,11 @@ docker compose exec -T banco pg_dump -U erp erp | gzip > backup_$(date +%F).sql.
 | `ERP_URL_PUBLICA` | recomendada | Base do link de redefinição de senha |
 | `ERP_SESSAO_HORAS` | não (12) | Validade do login |
 | `SMTP_HOST`, `SMTP_PORTA`, `SMTP_USUARIO`, `SMTP_SENHA`, `SMTP_REMETENTE` | não | E-mail de redefinição de senha |
+| `SENTRY_DSN` | não | Envia os erros para o Sentry |
+| `APP_VERSAO` | não | Versão exibida no painel (ex.: commit) |
+| `ERP_PASTA_BACKUP` | já vem no compose | Pasta lida pelo painel para mostrar o último backup |
+| `BACKUP_HORA`, `BACKUP_DIAS`, `TZ` | não (03, 14, America/Sao_Paulo) | Agenda e retenção do backup |
+| `RCLONE_DESTINO`, `RCLONE_CONFIG_*` | não | Cópia do backup na nuvem |
 
 ## Limites conhecidos desta versão
 
