@@ -33,7 +33,8 @@ class StatusProjeto(str, Enum):
     ENGENHARIA = "ENGENHARIA"
     LIBERADO = "LIBERADO"
     PRODUCAO = "PRODUCAO"
-    CONCLUIDO = "CONCLUIDO"
+    CONCLUIDO = "CONCLUIDO"   # produção concluída
+    ENTREGUE = "ENTREGUE"     # montado e entregue ao cliente
     CANCELADO = "CANCELADO"
 
 
@@ -51,6 +52,7 @@ class Perfil(str, Enum):
     PCP = "PCP"                # ordens de produção, centros, apontamento
     COMPRAS = "COMPRAS"        # fornecedores, pedidos, recebimento, estoque
     FINANCEIRO = "FINANCEIRO"  # contratos, contas a pagar e receber, DRE
+    MONTAGEM = "MONTAGEM"      # agenda de montagem, checklist de entrega, assistência
     OPERADOR = "OPERADOR"      # apontamento e consulta
 
 
@@ -82,7 +84,38 @@ class Categoria(str, Enum):
     COMISSAO = "COMISSAO"
     IMPOSTO = "IMPOSTO"
     DESPESA_FIXA = "DESPESA_FIXA"
+    ASSISTENCIA = "ASSISTENCIA"
     OUTROS = "OUTROS"
+
+
+class StatusMontagem(str, Enum):
+    AGENDADA = "AGENDADA"
+    EM_ANDAMENTO = "EM_ANDAMENTO"
+    CONCLUIDA = "CONCLUIDA"
+    CANCELADA = "CANCELADA"
+
+
+class TipoChamado(str, Enum):
+    GARANTIA = "GARANTIA"
+    AJUSTE = "AJUSTE"
+    DANO = "DANO"
+    PECA_FALTANTE = "PECA_FALTANTE"
+    OUTRO = "OUTRO"
+
+
+class CausaChamado(str, Enum):
+    """Causa raiz. As internas (todas menos CLIENTE) contam como retrabalho."""
+    PRODUCAO = "PRODUCAO"
+    PROJETO = "PROJETO"
+    MONTAGEM = "MONTAGEM"
+    MATERIAL = "MATERIAL"
+    CLIENTE = "CLIENTE"
+
+
+class StatusChamado(str, Enum):
+    ABERTO = "ABERTO"
+    AGENDADO = "AGENDADO"
+    RESOLVIDO = "RESOLVIDO"
 
 
 class RegraCentro(str, Enum):
@@ -107,6 +140,7 @@ class Empresa(Base):
     refilo_mm: Mapped[float] = mapped_column(Float, default=10.0)
     # Imposto sobre a venda (ex.: alíquota do Simples) usado no DRE por obra
     imposto_venda_pct: Mapped[float] = mapped_column(Float, default=0.0)
+    garantia_meses: Mapped[int] = mapped_column(Integer, default=12)
     criado_em: Mapped[datetime] = mapped_column(DateTime, default=agora)
 
 
@@ -205,6 +239,10 @@ class Projeto(Base):
     parcelas_sugeridas: Mapped[int | None] = mapped_column(Integer)
     entrada_sugerida: Mapped[bool | None] = mapped_column()
     contrato_em: Mapped[date | None] = mapped_column(Date)
+    # Marcos do projeto (base dos indicadores de prazo)
+    liberado_em: Mapped[datetime | None] = mapped_column(DateTime)
+    producao_concluida_em: Mapped[datetime | None] = mapped_column(DateTime)
+    entregue_em: Mapped[datetime | None] = mapped_column(DateTime)
 
     cliente: Mapped[Cliente | None] = relationship()
     ambientes: Mapped[list["Ambiente"]] = relationship(
@@ -458,3 +496,73 @@ class Lancamento(Base):
     projeto: Mapped[Projeto | None] = relationship()
     fornecedor: Mapped[Fornecedor | None] = relationship()
     cliente: Mapped[Cliente | None] = relationship()
+
+
+CHECKLIST_PADRAO = [
+    "Módulos nivelados, alinhados e fixados",
+    "Portas e frentes reguladas, sem desnível",
+    "Gavetas e corrediças correndo sem atrito",
+    "Ferragens, puxadores e acessórios instalados",
+    "Acabamentos, fitas e tampos sem avarias",
+    "Ambiente limpo e sobras recolhidas",
+    "Cliente orientado sobre uso, limpeza e garantia",
+]
+
+
+class Montagem(Base):
+    __tablename__ = "montagens"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    empresa_id: Mapped[int] = mapped_column(ForeignKey("empresas.id"), index=True)
+    projeto_id: Mapped[int] = mapped_column(ForeignKey("projetos.id"), index=True)
+    data_inicio: Mapped[date] = mapped_column(Date, index=True)
+    data_fim: Mapped[date] = mapped_column(Date)
+    equipe: Mapped[str] = mapped_column(String(200))
+    endereco: Mapped[str | None] = mapped_column(String(300))
+    observacao: Mapped[str | None] = mapped_column(String(500))
+    status: Mapped[StatusMontagem] = mapped_column(String(20), default=StatusMontagem.AGENDADA)
+    iniciada_em: Mapped[datetime | None] = mapped_column(DateTime)
+    concluida_em: Mapped[datetime | None] = mapped_column(DateTime)
+    recebido_por: Mapped[str | None] = mapped_column(String(120))
+
+    projeto: Mapped[Projeto] = relationship()
+    itens: Mapped[list["ItemChecklist"]] = relationship(
+        back_populates="montagem", cascade="all, delete-orphan", order_by="ItemChecklist.id"
+    )
+
+
+class ItemChecklist(Base):
+    __tablename__ = "itens_checklist"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    montagem_id: Mapped[int] = mapped_column(ForeignKey("montagens.id"), index=True)
+    descricao: Mapped[str] = mapped_column(String(200))
+    ok: Mapped[bool] = mapped_column(default=False)
+    observacao: Mapped[str | None] = mapped_column(String(300))
+    conferido_por: Mapped[str | None] = mapped_column(String(120))
+
+    montagem: Mapped[Montagem] = relationship(back_populates="itens")
+
+
+class Chamado(Base):
+    """Assistência técnica / pós-obra."""
+    __tablename__ = "chamados"
+    __table_args__ = (UniqueConstraint("empresa_id", "numero"),)
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    empresa_id: Mapped[int] = mapped_column(ForeignKey("empresas.id"), index=True)
+    numero: Mapped[int] = mapped_column(Integer)
+    projeto_id: Mapped[int] = mapped_column(ForeignKey("projetos.id"), index=True)
+    tipo: Mapped[TipoChamado] = mapped_column(String(20))
+    descricao: Mapped[str] = mapped_column(String(500))
+    status: Mapped[StatusChamado] = mapped_column(String(20), default=StatusChamado.ABERTO)
+    aberto_em: Mapped[datetime] = mapped_column(DateTime, default=agora)
+    agendado_para: Mapped[date | None] = mapped_column(Date)
+    causa: Mapped[CausaChamado | None] = mapped_column(String(20))
+    solucao: Mapped[str | None] = mapped_column(String(500))
+    custo: Mapped[float] = mapped_column(Float, default=0.0)
+    resolvido_em: Mapped[datetime | None] = mapped_column(DateTime)
+    em_garantia: Mapped[bool] = mapped_column(default=False)
+    usuario_id: Mapped[int | None] = mapped_column(ForeignKey("usuarios.id"))
+
+    projeto: Mapped[Projeto] = relationship()

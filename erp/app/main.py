@@ -7,7 +7,7 @@ from fastapi.staticfiles import StaticFiles
 
 from . import models  # noqa: F401  (registra as tabelas)
 from .db import Base, engine
-from .routers import auth, cadastros, compras, financeiro, producao, projetos
+from .routers import auth, cadastros, compras, financeiro, pos_obra, producao, projetos
 
 STATIC = Path(__file__).parent / "static"
 
@@ -31,6 +31,7 @@ app.include_router(projetos.router)
 app.include_router(producao.router)
 app.include_router(compras.router)
 app.include_router(financeiro.router)
+app.include_router(pos_obra.router)
 app.mount("/static", StaticFiles(directory=STATIC), name="static")
 
 

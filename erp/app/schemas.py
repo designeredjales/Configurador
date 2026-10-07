@@ -2,7 +2,7 @@ from datetime import date, datetime
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
-from .models import Categoria, Perfil, RegraCentro, StatusOP, StatusProjeto, TipoLancamento, TipoMaterial
+from .models import CausaChamado, Categoria, Perfil, StatusChamado, StatusMontagem, TipoChamado, RegraCentro, StatusOP, StatusProjeto, TipoLancamento, TipoMaterial
 from .security import SENHA_MINIMA
 
 
@@ -22,6 +22,7 @@ class EmpresaIn(Schema):
     serra_mm: float = Field(4.0, ge=0)
     refilo_mm: float = Field(10.0, ge=0)
     imposto_venda_pct: float = Field(0.0, ge=0, le=100)
+    garantia_meses: int = Field(12, ge=0, le=120)
 
 
 class EmpresaOut(EmpresaIn):
@@ -39,6 +40,7 @@ class EmpresaAtualizar(Schema):
     serra_mm: float | None = Field(None, ge=0)
     refilo_mm: float | None = Field(None, ge=0)
     imposto_venda_pct: float | None = Field(None, ge=0, le=100)
+    garantia_meses: int | None = Field(None, ge=0, le=120)
 
 
 # --- Acesso -------------------------------------------------------------------
@@ -229,6 +231,9 @@ class ProjetoResumo(Schema):
     parcelas_sugeridas: int | None = None
     entrada_sugerida: bool | None = None
     contrato_em: date | None = None
+    liberado_em: datetime | None = None
+    producao_concluida_em: datetime | None = None
+    entregue_em: datetime | None = None
 
 
 class ProjetoOut(ProjetoResumo):
@@ -440,6 +445,87 @@ class FluxoCaixa(Schema):
     meses: list[MesFluxo]
     vencido_receber: float
     vencido_pagar: float
+
+
+# --- Montagem e pós-obra --------------------------------------------------------
+
+class MontagemIn(Schema):
+    projeto_id: int
+    data_inicio: date
+    data_fim: date
+    equipe: str = Field(min_length=2)
+    endereco: str | None = None
+    observacao: str | None = None
+
+
+class ItemChecklistOut(Schema):
+    id: int
+    descricao: str
+    ok: bool
+    observacao: str | None
+    conferido_por: str | None
+
+
+class MontagemOut(Schema):
+    id: int
+    projeto_id: int
+    projeto_codigo: str
+    projeto_nome: str
+    data_inicio: date
+    data_fim: date
+    equipe: str
+    endereco: str | None
+    observacao: str | None
+    status: StatusMontagem
+    producao_concluida: bool
+    iniciada_em: datetime | None
+    concluida_em: datetime | None
+    recebido_por: str | None
+    itens: list[ItemChecklistOut]
+
+
+class ConferenciaIn(Schema):
+    ok: bool
+    observacao: str | None = None
+
+
+class ConclusaoMontagemIn(Schema):
+    recebido_por: str
+
+
+class ChamadoIn(Schema):
+    projeto_id: int
+    tipo: TipoChamado
+    descricao: str = Field(min_length=3)
+
+
+class ChamadoAtualizar(Schema):
+    agendado_para: date | None = None
+
+
+class ResolucaoIn(Schema):
+    causa: CausaChamado
+    solucao: str
+    custo: float = Field(0.0, ge=0)
+
+
+class ChamadoOut(Schema):
+    id: int
+    numero: int
+    projeto_id: int
+    projeto_codigo: str
+    projeto_nome: str
+    tipo: TipoChamado
+    descricao: str
+    status: StatusChamado
+    aberto_em: datetime
+    agendado_para: date | None
+    causa: CausaChamado | None
+    solucao: str | None
+    custo: float
+    resolvido_em: datetime | None
+    em_garantia: bool
+    retrabalho: bool
 
 
 # --- PCP ---------------------------------------------------------------------

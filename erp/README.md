@@ -22,6 +22,7 @@ Projeto (Promob) → Engenharia (BOM + consumo + gate) → Ordem de Produção �
 | **Estoque** | Saldo por movimentação, reserva automática na liberação do projeto, baixa automática na conclusão, inventário com ajuste pela diferença, custo médio ponderado |
 | **Comercial** | Valor de tabela, pedido à fábrica, venda ao cliente, frete, montagem e condição de pagamento lidos do XML; contrato gera as parcelas a receber |
 | **Financeiro** | Contas a receber e a pagar (a compra recebida vira conta a pagar no prazo do fornecedor), baixas, fluxo de caixa de 6 meses, **DRE por obra** (receita − impostos − material − custos diretos = margem de contribuição) |
+| **Montagem e pós-obra** | Agenda de montagem (só inicia com a produção concluída), checklist de entrega com quem conferiu, entrega com nome de quem recebeu; assistência técnica com garantia, causa raiz e custo lançado no DRE da obra |
 | **Compras (MRP)** | Sugestão de compra = reservado + mínimo − saldo − em pedido; pedido ao fornecedor, envio, recebimento parcial ou total, cancelamento |
 
 ## Rodar
@@ -46,6 +47,7 @@ Abra `http://localhost:8000` e cadastre sua empresa, ou entre na demonstração 
 | **PCP** | Gerar e cancelar OPs, cadastrar centros de trabalho, apontar |
 | **Compras** | Fornecedores, pedidos, recebimento, inventário e cadastro de materiais |
 | **Financeiro** | Contrato, contas a pagar e receber, fluxo de caixa e DRE (valores financeiros só para Administrador, Gestor e Financeiro) |
+| **Montagem** | Agenda de montagem, checklist de entrega e assistência técnica (Gestor e PCP também) |
 | **Operador** | Apontar (dar baixa) e consultar OPs e painel |
 
 Todos os perfis consultam os dados da própria empresa. Detalhes de segurança:
@@ -115,6 +117,13 @@ Saldo negativo é permitido e aparece em vermelho: indica consumo sem entrada re
 - **Fluxo de caixa** (`GET /api/financeiro/fluxo`): previsto por vencimento (atrasado entra no mês atual) e realizado por data de baixa, com saldo acumulado.
 - **Configurações** (`PUT /api/empresas/atual`, administrador): perdas, imposto sobre a venda, chapa padrão, serra e refilo.
 
+## Montagem e pós-obra
+
+- **Agenda** (`POST /api/montagens`): a partir da liberação, uma montagem ativa por projeto, com o checklist padrão de 7 itens.
+- **Iniciar** exige o projeto com produção concluída. **Concluir** exige todos os itens conferidos e o nome de quem recebeu, e o projeto passa a `ENTREGUE`.
+- **Assistência** (`POST /api/chamados`): aberta para projeto entregue, marca se está na garantia (`garantia_meses` da empresa, contada da entrega). Ao resolver, registra a causa raiz e o custo, que vira lançamento `ASSISTENCIA` no DRE da obra. Causas internas (produção, projeto, montagem, material) contam como retrabalho.
+- **Marcos do projeto**: `liberado_em`, `producao_concluida_em` e `entregue_em` ficam gravados para os indicadores de prazo.
+
 ## Alternativa: CSV (somente pela API)
 
 Para projetos que não vêm do Promob, `POST /api/projetos/{id}/importar` aceita o CSV abaixo (e também o XML). Separador `;` (ou `,`), com cabeçalho. O decimal pode vir com vírgula. Exemplo completo em `exemplos/cozinha_silva.csv`.
@@ -149,6 +158,7 @@ erp/
       estoque.py       # reservas, MRP, recebimento, custo médio, inventário
       corte.py         # otimizador de plano de corte
       financeiro.py    # contrato, contas, DRE por obra, fluxo de caixa
+      pos_obra.py      # montagem, checklist de entrega, assistência técnica
     routers/           # API REST (cadastros, projetos, produção)
     static/index.html  # interface web (painel, projetos, OPs, apontamento, materiais)
   tests/               # fluxo completo, XML do Promob, gate, perfis, isolamento entre empresas
@@ -161,6 +171,6 @@ erp/
 2. **Lados da fita e furação**: ler o XML de máquina do Promob (ou o relatório com bordas) para etiquetas com C1/C2/L1/L2 e programas CNC.
 3. **Integração com a otimizadora** (Corte Certo, Optiplanning) e programas CNC por peça.
 4. **Compras 2.0**: cotação entre fornecedores, envio do pedido por e-mail/WhatsApp, lotes e sobras de chapa reaproveitáveis.
-5. **Montagem e pós-obra**: agenda de montagem, checklist de entrega e assistência técnica.
+5. **Pós-obra 2.0**: fotos da obra no checklist, assinatura do cliente na tela e peça de reposição gerando OP.
 6. **Fiscal**: NF-e via emissor integrado (Focus NFe, eNotas) e conciliação bancária.
 7. **Alembic** para migrações e PostgreSQL como padrão.

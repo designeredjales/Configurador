@@ -65,7 +65,12 @@ a { color: var(--brand); cursor: pointer; }
 td input.num { width: 90px; text-align: right; }
 .neg { color: var(--err); font-weight: 600; }
 .pos { color: var(--ok); font-weight: 600; }
-.tag.VENCIDO { background: var(--err); color: #fff; } .tag.PAGO { background: var(--ok); color: #fff; }
+.tag.VENCIDO, .tag.ABERTO.atrasado { background: var(--err); color: #fff; }
+.tag.AGENDADA, .tag.AGENDADO { background: var(--line); }
+.tag.EM_ANDAMENTO { background: var(--warn); color: #fff; }
+.tag.ENTREGUE, .tag.RESOLVIDO { background: var(--ok); color: #fff; }
+.check { display: grid; gap: 6px; } .check label { display: flex; gap: 10px; align-items: center; padding: 8px 10px; border: 1px solid var(--line); border-radius: 8px; }
+.check input[type=checkbox] { width: 20px; height: 20px; accent-color: var(--ok); } .check small { color: var(--muted); margin-left: auto; } .tag.PAGO { background: var(--ok); color: #fff; }
 .cfg { display: grid; gap: 10px; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); }
 .cfg label { display: grid; gap: 4px; font-size: 13px; color: var(--muted); }
 .dre td:first-child { color: var(--muted); } .dre tr.total td { font-weight: 700; color: var(--ink); border-top: 2px solid var(--line); }
@@ -116,6 +121,8 @@ td input.num { width: 90px; text-align: right; }
     <button data-aba="apontamento">Apontamento</button>
     <button data-aba="estoque">Estoque</button>
     <button data-aba="compras">Compras</button>
+    <button data-aba="montagem">Montagem</button>
+    <button data-aba="assistencia">Assistência</button>
     <button data-aba="financeiro">Financeiro</button>
     <button data-aba="materiais">Materiais</button>
     <button data-aba="usuarios">Usuários</button>
@@ -207,6 +214,38 @@ td input.num { width: 90px; text-align: right; }
     </div>
   </section>
 
+  <section id="montagem">
+    <div class="card"><h2>Agendar montagem</h2>
+      <p class="dica">Agende a partir da liberação. A equipe só inicia com a produção concluída, e a entrega fecha com o checklist completo.</p>
+      <div class="linha">
+        <select id="mt-proj" aria-label="Projeto"></select>
+        <input id="mt-ini" type="date" aria-label="Início"> até <input id="mt-fim" type="date" aria-label="Fim">
+        <input id="mt-equipe" placeholder="Equipe (ex.: Paulo e Jonas)">
+        <input id="mt-end" placeholder="Endereço da obra">
+        <button class="btn" onclick="agendarMontagem()">Agendar</button>
+      </div>
+      <div id="mt-msg"></div>
+    </div>
+    <div class="card"><h2>Agenda</h2><div class="tabela" id="lista-montagens"></div></div>
+    <div class="card" id="det-montagem" hidden></div>
+  </section>
+
+  <section id="assistencia">
+    <div class="grid" id="kpis-assist"></div>
+    <div class="card"><h2>Abrir chamado</h2>
+      <div class="linha">
+        <select id="ch-proj" aria-label="Projeto"></select>
+        <select id="ch-tipo" aria-label="Tipo"><option value="AJUSTE">Ajuste</option><option value="GARANTIA">Garantia</option>
+          <option value="DANO">Dano</option><option value="PECA_FALTANTE">Peça faltante</option><option value="OUTRO">Outro</option></select>
+        <input id="ch-desc" placeholder="O que o cliente relatou" size="40">
+        <button class="btn" onclick="abrirChamado()">Abrir chamado</button>
+      </div>
+      <div id="ch-msg"></div>
+    </div>
+    <div class="card"><h2>Chamados</h2><div class="tabela" id="lista-chamados"></div></div>
+    <div class="card" id="det-chamado" hidden></div>
+  </section>
+
   <section id="financeiro">
     <div class="grid" id="kpis-fin"></div>
     <div class="card"><h2>Fluxo de caixa</h2>
@@ -249,6 +288,7 @@ td input.num { width: 90px; text-align: right; }
           <option value="PCP">PCP: ordens e apontamento</option>
           <option value="COMPRAS">Compras: pedidos e estoque</option>
           <option value="FINANCEIRO">Financeiro: contratos, contas e DRE</option>
+          <option value="MONTAGEM">Montagem: agenda, checklist e assistência</option>
           <option value="ENGENHARIA">Engenharia: projetos e materiais</option>
           <option value="GESTOR">Gestor: engenharia + PCP</option>
           <option value="ADMIN">Administrador: tudo</option>
@@ -325,6 +365,7 @@ function tabela(colunas, linhas) {
 // --- Navegação --------------------------------------------------------------
 const carregadores = {painel: carregarPainel, projetos: carregarProjetos, ops: carregarOps, usuarios: carregarUsuarios,
                       estoque: carregarEstoque, compras: carregarCompras, financeiro: carregarFinanceiro,
+                      montagem: carregarMontagem, assistencia: carregarAssistencia,
                       apontamento: carregarApontamento, materiais: carregarMateriais};
 function abrir(aba) {
   document.querySelectorAll("section").forEach((s) => s.classList.toggle("ativo", s.id === aba));
@@ -726,6 +767,114 @@ async function criarFornecedor() {
   } catch (e) { $("f-msg").innerHTML = `<div class="msg err">${esc(e.message)}</div>`; }
 }
 
+// --- Montagem ---------------------------------------------------------------
+const PODE_MONTAR = ["LIBERADO", "PRODUCAO", "CONCLUIDO"];
+async function carregarMontagem() {
+  const [agenda, projetos] = await Promise.all([api("/api/montagens"), api("/api/projetos")]);
+  const elegiveis = projetos.filter((p) => PODE_MONTAR.includes(p.status));
+  $("mt-proj").innerHTML = elegiveis.length ? elegiveis.map((p) => `<option value="${p.id}">${esc(p.codigo)} · ${esc(p.nome)} (${p.status})</option>`).join("")
+    : `<option value="">Nenhum projeto liberado</option>`;
+  const hoje = new Date().toISOString().slice(0, 10);
+  $("mt-ini").value ||= hoje; $("mt-fim").value ||= hoje;
+  $("lista-montagens").innerHTML = tabela([["Data", (m) => `<a onclick="verMontagem(${m.id})">${dataBR(m.data_inicio)}${m.data_fim !== m.data_inicio ? ` a ${dataBR(m.data_fim)}` : ""}</a>`],
+    ["Projeto", (m) => `<b>${esc(m.projeto_codigo)}</b> ${esc(m.projeto_nome)}`], ["Equipe", (m) => esc(m.equipe)], ["Endereço", (m) => esc(m.endereco || "—")],
+    ["Produção", (m) => m.producao_concluida ? `<span class="tag OK">Pronta</span>` : `<span class="tag MINIMO">Em produção</span>`],
+    ["Checklist", (m) => `${m.itens.filter((i) => i.ok).length}/${m.itens.length}`, 1], ["Status", (m) => tag(m.status)]], agenda);
+}
+
+async function agendarMontagem() {
+  try {
+    const m = await api("/api/montagens", {method: "POST", json: {projeto_id: Number($("mt-proj").value), data_inicio: $("mt-ini").value,
+      data_fim: $("mt-fim").value, equipe: $("mt-equipe").value.trim(), endereco: $("mt-end").value.trim() || null}});
+    $("mt-equipe").value = $("mt-end").value = ""; $("mt-msg").innerHTML = "";
+    await carregarMontagem(); verMontagem(m.id);
+  } catch (e) { $("mt-msg").innerHTML = `<div class="msg err">${esc(e.message.replace(/Value error, /g, ""))}</div>`; }
+}
+
+async function verMontagem(id) {
+  const m = await api(`/api/montagens/${id}`);
+  const andamento = m.status === "EM_ANDAMENTO";
+  $("det-montagem").hidden = false;
+  $("det-montagem").innerHTML = `<h2>Montagem ${esc(m.projeto_codigo)} · ${esc(m.projeto_nome)} ${tag(m.status)}</h2>
+    <p class="dica">${dataBR(m.data_inicio)}${m.data_fim !== m.data_inicio ? ` a ${dataBR(m.data_fim)}` : ""} · ${esc(m.equipe)}${m.endereco ? ` · ${esc(m.endereco)}` : ""}
+    ${m.recebido_por ? ` · recebido por <b>${esc(m.recebido_por)}</b> em ${new Date(m.concluida_em).toLocaleString("pt-BR")}` : ""}</p>
+    <div class="linha">
+      ${m.status === "AGENDADA" ? `<button class="btn" onclick="acaoMontagem(${m.id}, 'iniciar')">Iniciar montagem</button>` : ""}
+      ${["AGENDADA", "EM_ANDAMENTO"].includes(m.status) ? `<button class="btn sec" onclick="acaoMontagem(${m.id}, 'cancelar')">Cancelar</button>` : ""}
+    </div>
+    <h2>Checklist de entrega</h2>
+    <div class="check">${m.itens.map((i) => `<label><input type="checkbox" ${i.ok ? "checked" : ""} ${andamento ? "" : "disabled"}
+      onchange="conferirItem(${m.id}, ${i.id}, this.checked)"> ${esc(i.descricao)}<small>${i.conferido_por ? esc(i.conferido_por) : ""}</small></label>`).join("")}</div>
+    ${andamento ? `<div class="linha" style="margin-top:12px"><input id="mt-recebido" placeholder="Nome de quem recebeu a obra" size="30">
+      <button class="btn" onclick="concluirMontagem(${m.id})">Concluir e entregar</button></div>` : ""}
+    <div id="mtd-msg"></div>`;
+}
+
+async function acaoMontagem(id, acao) {
+  try { await api(`/api/montagens/${id}/${acao}`, {method: "POST"}); await carregarMontagem(); verMontagem(id); }
+  catch (e) { $("mtd-msg").innerHTML = `<div class="msg err">${esc(e.message)}</div>`; }
+}
+async function conferirItem(id, item, ok) {
+  try { await api(`/api/montagens/${id}/checklist/${item}`, {method: "POST", json: {ok}}); await verMontagem(id); carregarMontagem(); }
+  catch (e) { $("mtd-msg").innerHTML = `<div class="msg err">${esc(e.message)}</div>`; }
+}
+async function concluirMontagem(id) {
+  try { await api(`/api/montagens/${id}/concluir`, {method: "POST", json: {recebido_por: $("mt-recebido").value}}); await carregarMontagem(); verMontagem(id); }
+  catch (e) { $("mtd-msg").innerHTML = `<div class="msg err">${esc(e.message)}</div>`; }
+}
+
+// --- Assistência técnica -----------------------------------------------------
+const CAUSAS = {PRODUCAO: "Produção", PROJETO: "Projeto", MONTAGEM: "Montagem", MATERIAL: "Material", CLIENTE: "Cliente (uso)"};
+async function carregarAssistencia() {
+  const [chamados, projetos] = await Promise.all([api("/api/chamados"), api("/api/projetos")]);
+  const abertos = chamados.filter((c) => c.status !== "RESOLVIDO"), resolvidos = chamados.filter((c) => c.status === "RESOLVIDO");
+  const retrab = resolvidos.filter((c) => c.retrabalho);
+  $("kpis-assist").innerHTML = [[abertos.length, "Chamados abertos"], [retrab.length, "Retrabalhos (causa interna)"],
+    [brl(resolvidos.reduce((s, c) => s + c.custo, 0)), "Custo de assistência"]].map(([v, t]) => `<div class="card kpi">${v}<small>${t}</small></div>`).join("");
+  const alvo = projetos.filter((p) => ["ENTREGUE", "CONCLUIDO"].includes(p.status));
+  $("ch-proj").innerHTML = alvo.length ? alvo.map((p) => `<option value="${p.id}">${esc(p.codigo)} · ${esc(p.nome)}</option>`).join("")
+    : `<option value="">Nenhum projeto entregue</option>`;
+  $("lista-chamados").innerHTML = tabela([["Nº", (c) => `<a onclick="verChamado(${c.id})">#${c.numero}</a>`], ["Aberto", (c) => new Date(c.aberto_em).toLocaleDateString("pt-BR")],
+    ["Projeto", (c) => `<b>${esc(c.projeto_codigo)}</b>`], ["Tipo", (c) => c.tipo.replace("_", " ").toLowerCase()], ["Relato", (c) => esc(c.descricao)],
+    ["Garantia", (c) => c.em_garantia ? "Sim" : "Fora"], ["Causa", (c) => c.causa ? CAUSAS[c.causa] : "—"],
+    ["Custo", (c) => c.custo ? brl(c.custo) : "—", 1], ["Status", (c) => tag(c.status)]], chamados);
+}
+
+async function abrirChamado() {
+  try {
+    const c = await api("/api/chamados", {method: "POST", json: {projeto_id: Number($("ch-proj").value), tipo: $("ch-tipo").value, descricao: $("ch-desc").value.trim()}});
+    $("ch-desc").value = ""; $("ch-msg").innerHTML = ""; await carregarAssistencia(); verChamado(c.id);
+  } catch (e) { $("ch-msg").innerHTML = `<div class="msg err">${esc(e.message.replace(/Value error, /g, ""))}</div>`; }
+}
+
+async function verChamado(id) {
+  const c = (await api("/api/chamados")).find((x) => x.id === id);
+  $("det-chamado").hidden = false;
+  $("det-chamado").innerHTML = `<h2>Chamado #${c.numero} · ${esc(c.projeto_codigo)} ${tag(c.status)}</h2>
+    <p>${esc(c.descricao)}</p><p class="dica">${c.em_garantia ? "Dentro da garantia." : "Fora da garantia: avalie cobrança."}
+    ${c.agendado_para ? ` Visita em ${dataBR(c.agendado_para)}.` : ""}</p>
+    ${c.status === "RESOLVIDO" ? `<p><b>Causa:</b> ${CAUSAS[c.causa]}${c.retrabalho ? " (retrabalho)" : ""} · <b>Solução:</b> ${esc(c.solucao)} · <b>Custo:</b> ${brl(c.custo)}</p>` : `
+    <div class="linha"><input id="chv-data" type="date" value="${c.agendado_para || ""}" aria-label="Data da visita"><button class="btn sec" onclick="agendarVisita(${c.id})">Agendar visita</button></div>
+    <div class="linha">
+      <select id="chr-causa" aria-label="Causa raiz">${Object.entries(CAUSAS).map(([k, v]) => `<option value="${k}">${v}</option>`).join("")}</select>
+      <input id="chr-sol" placeholder="Solução aplicada" size="34"><input id="chr-custo" placeholder="Custo (R$)" size="10">
+      <button class="btn" onclick="resolverChamado(${c.id})">Resolver</button>
+    </div><p class="dica">O custo entra no DRE da obra. Causas internas contam como retrabalho nos indicadores.</p>`}
+    <div id="chd-msg"></div>`;
+}
+
+async function agendarVisita(id) {
+  try { await api(`/api/chamados/${id}`, {method: "PATCH", json: {agendado_para: $("chv-data").value || null}}); await carregarAssistencia(); verChamado(id); }
+  catch (e) { $("chd-msg").innerHTML = `<div class="msg err">${esc(e.message)}</div>`; }
+}
+async function resolverChamado(id) {
+  try {
+    await api(`/api/chamados/${id}/resolver`, {method: "POST", json: {causa: $("chr-causa").value, solucao: $("chr-sol").value,
+      custo: Number(($("chr-custo").value || "0").replace(",", "."))}});
+    await carregarAssistencia(); verChamado(id);
+  } catch (e) { $("chd-msg").innerHTML = `<div class="msg err">${esc(e.message)}</div>`; }
+}
+
 // --- Financeiro -------------------------------------------------------------
 const MES = (k) => { const [a, m] = k.split("-"); return new Date(a, m - 1, 1).toLocaleDateString("pt-BR", {month: "short", year: "numeric"}); };
 async function carregarFinanceiro() {
@@ -771,7 +920,7 @@ async function criarLancamento() {
 
 // --- Configurações da empresa ----------------------------------------------
 const CAMPOS_EMPRESA = [["nome", "Razão social", "text"], ["cnpj", "CNPJ", "text"], ["perda_chapa_pct", "Perda de chapa (%)"], ["perda_fita_pct", "Perda de fita (%)"],
-  ["imposto_venda_pct", "Imposto sobre a venda (%)"], ["chapa_comprimento_mm", "Chapa padrão: comprimento (mm)"], ["chapa_largura_mm", "Chapa padrão: largura (mm)"],
+  ["imposto_venda_pct", "Imposto sobre a venda (%)"], ["garantia_meses", "Garantia (meses)"], ["chapa_comprimento_mm", "Chapa padrão: comprimento (mm)"], ["chapa_largura_mm", "Chapa padrão: largura (mm)"],
   ["serra_mm", "Espessura da serra (mm)"], ["refilo_mm", "Refilo da chapa (mm)"]];
 async function carregarEmpresa() {
   const e = await api("/api/empresas/atual");
@@ -786,15 +935,16 @@ async function salvarEmpresa() {
 
 // --- Acesso -----------------------------------------------------------------
 const ABAS = {
-  ADMIN: ["painel", "projetos", "ops", "apontamento", "estoque", "compras", "financeiro", "materiais", "usuarios"],
-  GESTOR: ["painel", "projetos", "ops", "apontamento", "estoque", "compras", "financeiro", "materiais"],
+  ADMIN: ["painel", "projetos", "ops", "apontamento", "montagem", "assistencia", "estoque", "compras", "financeiro", "materiais", "usuarios"],
+  GESTOR: ["painel", "projetos", "ops", "apontamento", "montagem", "assistencia", "estoque", "compras", "financeiro", "materiais"],
+  MONTAGEM: ["montagem", "assistencia", "ops", "painel"],
   FINANCEIRO: ["financeiro", "projetos", "painel"],
   ENGENHARIA: ["painel", "projetos", "ops", "estoque", "materiais"],
-  PCP: ["painel", "projetos", "ops", "apontamento", "estoque", "materiais"],
+  PCP: ["painel", "projetos", "ops", "apontamento", "montagem", "assistencia", "estoque", "materiais"],
   COMPRAS: ["compras", "estoque", "materiais", "painel"],
   OPERADOR: ["apontamento", "ops", "painel"],
 };
-const NOME_PERFIL = {ADMIN: "Administrador", GESTOR: "Gestor", ENGENHARIA: "Engenharia", PCP: "PCP", COMPRAS: "Compras", FINANCEIRO: "Financeiro", OPERADOR: "Operador"};
+const NOME_PERFIL = {ADMIN: "Administrador", GESTOR: "Gestor", ENGENHARIA: "Engenharia", PCP: "PCP", COMPRAS: "Compras", FINANCEIRO: "Financeiro", MONTAGEM: "Montagem", OPERADOR: "Operador"};
 const VE_FINANCEIRO = () => ["ADMIN", "GESTOR", "FINANCEIRO"].includes(sessao?.usuario.perfil);
 
 function mostrarAcesso(msg) {

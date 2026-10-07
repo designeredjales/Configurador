@@ -1,6 +1,7 @@
 """Engenharia: explosão de consumo (chapa, fita, ferragem) e gate de liberação."""
 import math
 from collections import defaultdict
+from datetime import datetime
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -140,6 +141,7 @@ def liberar(db: Session, projeto: Projeto) -> list[str]:
     for _, item in _iter_itens(projeto):
         item.material = materiais[item.material_codigo]
     projeto.status = StatusProjeto.LIBERADO
+    projeto.liberado_em = datetime.now()
     db.flush()
     from .estoque import reservar_projeto  # evita import circular
     reservar_projeto(db, projeto)
