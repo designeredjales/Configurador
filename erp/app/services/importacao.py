@@ -154,10 +154,13 @@ def importar_csv(db: Session, projeto: Projeto, conteudo: str, origem: str = "CS
 def importar_promob_xml(db: Session, projeto: Projeto, conteudo: bytes) -> dict:
     """Grava no projeto a engenharia lida do XML do Promob.
 
-    Materiais que ainda não existem no cadastro entram automaticamente com o
-    código, a descrição, a unidade e o preço de tabela do Promob.
+    Códigos com de-para viram o material do estoque (com o fator de conversão). Os demais,
+    se ainda não existem no cadastro, entram automaticamente com o código, a descrição, a
+    unidade e o preço de tabela do Promob, a menos que a base desligue a criação automática:
+    aí ficam como pendência de engenharia até alguém vincular o de-para.
     """
-    from ..models import Cliente, TipoMaterial
+    from ..models import Cliente, Empresa, TipoMaterial
+    from .depara import mapa, traduzir
     from .promob_xml import ErroXMLPromob, ler_xml_promob
 
     try:
@@ -169,9 +172,21 @@ def importar_promob_xml(db: Session, projeto: Projeto, conteudo: bytes) -> dict:
         m.codigo: m
         for m in db.scalars(select(Material).where(Material.empresa_id == projeto.empresa_id))
     }
+    dp = mapa(db, projeto.empresa_id)
+    for d in dp.values():
+        materiais.setdefault(d.material.codigo, d.material)
+    cria = db.get(Empresa, projeto.empresa_id).promob_cria_materiais
     criados: list[str] = []
+    sem_vinculo: list[str] = []
+    traduzidos = 0
     for mx in lido.materiais.values():
+        if mx.codigo in dp:
+            traduzidos += 1
+            continue
         if mx.codigo in materiais:
+            continue
+        if not cria:
+            sem_vinculo.append(mx.codigo)
             continue
         material = Material(
             empresa_id=projeto.empresa_id, codigo=mx.codigo, descricao=mx.descricao,
@@ -183,6 +198,10 @@ def importar_promob_xml(db: Session, projeto: Projeto, conteudo: bytes) -> dict:
         criados.append(mx.codigo)
 
     avisos = list(lido.avisos)
+    if traduzidos:
+        avisos.append(f"{traduzidos} código(s) do Promob trocados pelo material do estoque (de-para)")
+    if sem_vinculo:
+        avisos.append(f"Código(s) do Promob sem de-para nem cadastro (vincule em Materiais → De-para): {', '.join(sorted(sem_vinculo)[:20])}")
     sem_custo = sorted(c for c in criados if not materiais[c].custo_unitario)
     if sem_custo:
         avisos.append(f"Material cadastrado sem custo (preencha no cadastro): {', '.join(sem_custo)}")
@@ -214,26 +233,29 @@ def importar_promob_xml(db: Session, projeto: Projeto, conteudo: bytes) -> dict:
             )
             amb.modulos.append(mod)
             for px in mx.pecas:
+                chapa, _ = traduzir(dp, px.material_codigo)
                 mod.pecas.append(Peca(
                     codigo=px.codigo, descricao=px.descricao,
-                    material=materiais.get(px.material_codigo), material_codigo=px.material_codigo,
+                    material=materiais.get(chapa), material_codigo=chapa,
                     comprimento_mm=px.comprimento_mm, largura_mm=px.largura_mm,
                     espessura_mm=px.espessura_mm, quantidade=max(1, round(px.quantidade)),
-                    fita_codigo=px.fita_codigo, fita_metros=px.fita_metros or None,
+                    fita_codigo=traduzir(dp, px.fita_codigo)[0], fita_metros=px.fita_metros or None,
                     operacoes=",".join(px.operacoes) or None,
                 ))
                 n_pecas += 1
             # Ferragens repetidas peça a peça viram uma linha por código no módulo
             somadas: dict[str, ItemModulo] = {}
             for ix in mx.itens:
-                item = somadas.get(ix.codigo)
+                codigo, fator = traduzir(dp, ix.codigo)
+                item = somadas.get(codigo)
                 if item is None:
-                    item = ItemModulo(material=materiais.get(ix.codigo), material_codigo=ix.codigo,
-                                      descricao=ix.descricao, quantidade=0, unidade=ix.unidade)
-                    somadas[ix.codigo] = item
+                    mat = materiais.get(codigo)
+                    item = ItemModulo(material=mat, material_codigo=codigo, descricao=mat.descricao if codigo != ix.codigo else ix.descricao,
+                                      quantidade=0, unidade=mat.unidade if codigo != ix.codigo else ix.unidade)
+                    somadas[codigo] = item
                     mod.itens.append(item)
                     n_itens += 1
-                item.quantidade += ix.quantidade
+                item.quantidade = round(item.quantidade + ix.quantidade * fator, 4)
 
     c = lido.comercial
     projeto.valor_tabela, projeto.valor_pedido = c.valor_tabela, c.valor_pedido

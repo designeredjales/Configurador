@@ -103,10 +103,10 @@ def atualizar_material(material_id: int, dados: MaterialIn, emp: Empresa = Depen
 
 @router.get("/centros", response_model=list[CentroOut])
 def listar_centros(emp: Empresa = Depends(empresa_atual), db: Session = Depends(get_db)):
-    return db.scalars(
-        select(CentroTrabalho).where(CentroTrabalho.empresa_id == emp.id)
-        .order_by(CentroTrabalho.sequencia)
-    )
+    from ..services.custos import centros
+    lista = centros(db, emp.id, so_ativos=False)
+    db.commit()
+    return lista
 
 
 @router.post("/centros", response_model=CentroOut, status_code=201, dependencies=[Depends(PCP)])

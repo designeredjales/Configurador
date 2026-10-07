@@ -23,7 +23,8 @@ def atualizar_centro(centro_id: int, dados: CentroAtualizar, emp: Empresa = Depe
         if v is not None:
             setattr(centro, k, v)
     db.commit()
-    return centro
+    from ..services.custos import anotar
+    return anotar(db, emp.id, [centro])[0]
 
 
 @router.get("/separacoes", response_model=list[ClasseOut])

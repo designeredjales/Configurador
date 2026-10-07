@@ -56,7 +56,7 @@ def config(db: Session, empresa_id: int) -> ConfigGestao:
 
 def config_out(cfg: ConfigGestao) -> dict:
     return {"metas": cfg.metas or {}, "limites_wip": cfg.limites_wip or {}, "dias_uteis_mes": cfg.dias_uteis_mes,
-            "horas_turno": cfg.horas_turno,
+            "horas_turno": cfg.horas_turno, "pulmao_dias": cfg.pulmao_dias, "tambor_codigo": cfg.tambor_codigo,
             "catalogo_metas": [{"codigo": c, "nome": n, "unidade": u, "maior_melhor": s > 0} for c, n, u, s, _ in METAS],
             "colunas": [{"codigo": c, "nome": n} for c, n in COLUNAS if c != "ENTREGUE"]}
 
@@ -169,6 +169,8 @@ def painel(db: Session, empresa_id: int, hoje: date | None = None) -> dict:
         restricao = max(com_fila, key=lambda s: s["fila_m2"])["centro_codigo"]
     else:
         restricao = None
+    if cfg.tambor_codigo and any(s["centro_codigo"] == cfg.tambor_codigo for s in setores):
+        restricao = cfg.tambor_codigo  # tambor fixado no setup da base
 
     # --- Ritmo × takt ------------------------------------------------------------------------------
     uteis_mes = cfg.dias_uteis_mes or max(1, _dias_uteis(inicio_mes, fim_mes))

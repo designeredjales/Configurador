@@ -24,7 +24,7 @@ from ..models import (
     Usuario,
     VersaoProposta,
 )
-from ..services import comercial, promob_prices
+from ..services import comercial, custos, promob_prices
 from ..services.importacao import eh_xml
 from ..services.promob_xml import ErroXMLPromob, ler_xml_promob
 from .projetos import carregar as carregar_projeto
@@ -341,8 +341,11 @@ async def nova_versao(op_id: int, arquivo: UploadFile = File(...), usuario: Usua
     except ErroXMLPromob as e:
         raise HTTPException(422, str(e))
     texto = bruto.decode("utf-8", errors="replace")
+    resumo = comercial.resumo_xml(lido)
+    mo = custos.mao_de_obra_xml(db, emp.id, lido)
+    resumo["mao_de_obra"], resumo["mao_de_obra_horas"] = mo["total"], mo["horas"]
     v = VersaoProposta(oportunidade=op, numero=len(op.versoes) + 1, arquivo=(arquivo.filename or "projeto.xml")[:200],
-                       xml=texto, resumo=comercial.resumo_xml(lido), criado_por=usuario.nome)
+                       xml=texto, resumo=resumo, criado_por=usuario.nome)
     db.add(v)
     db.flush()
     try:

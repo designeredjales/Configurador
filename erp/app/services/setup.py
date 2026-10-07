@@ -15,23 +15,25 @@ from pydantic import BaseModel, ConfigDict, Field, ValidationError
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from ..models import CentroTrabalho, ClasseSeparacao, Empresa, Parceiro, RegraCentro
-from . import comercial, gestao, promob_prices, separacao
+from ..models import CentroTrabalho, ClasseSeparacao, Empresa, Material, Parceiro, RegraCentro
+from . import comercial, depara, gestao, promob_prices, separacao
 
 FORMATO = "erp-moveleiro-setup"
 VERSAO = 1
 PASTA_MODELOS = Path(__file__).resolve().parent.parent / "setups"
 SECOES = {
-    "fabrica": "Parâmetros da fábrica (perdas, chapa, serra, imposto, garantia, caixa master)",
+    "fabrica": "Parâmetros da fábrica (perdas, chapa, serra, imposto, garantia, caixa master, materiais do Promob)",
     "fiscal": "Padrões fiscais (NCM, CFOP, CSOSN)",
-    "setores": "Setores e regras do roteiro",
+    "setores": "Setores, roteiro, capacidade, tempos padrão e custo-hora",
     "separacoes": "Separação de peças (tupia, tamburato...)",
     "comercial": "Política comercial e integração Promob Prices (sem token)",
     "parceiros": "Parceiros e RT",
-    "gestao": "Metas, WIP do kanban e calendário da gestão à vista",
+    "gestao": "Metas, WIP do kanban, calendário, tambor e pulmão",
+    "depara": "De-para Promob → estoque (casado pelo código do material nesta base)",
 }
+CAMPOS_SETOR = ["pessoas", "horas_dia", "eficiencia_pct", "custo_mensal", "minutos_peca", "minutos_m2"]
 CAMPOS_FABRICA = ["perda_chapa_pct", "perda_fita_pct", "chapa_comprimento_mm", "chapa_largura_mm", "serra_mm",
-                  "refilo_mm", "imposto_venda_pct", "garantia_meses", "caixa_max_modulos"]
+                  "refilo_mm", "imposto_venda_pct", "garantia_meses", "caixa_max_modulos", "promob_cria_materiais"]
 CAMPOS_FISCAL = ["ncm_padrao", "cfop_interno", "cfop_interestadual", "csosn_padrao"]
 CAMPOS_COMERCIAL = ["desconto_max_vendedor", "desconto_max_gerente", "margem_minima", "comissao_vendedor_pct",
                     "limite_divergencia_pct", "validade_proposta_dias", "etapas", "condicoes", "prices_url",
@@ -56,6 +58,7 @@ class Fabrica(_M):
     imposto_venda_pct: float | None = Field(None, ge=0, le=60)
     garantia_meses: int | None = Field(None, ge=0, le=120)
     caixa_max_modulos: int | None = Field(None, ge=1, le=50)
+    promob_cria_materiais: bool | None = None
 
 
 class Fiscal(_M):
@@ -72,6 +75,12 @@ class Setor(_M):
     regra: RegraCentro = RegraCentro.TODAS
     ativo: bool = True
     exige_apontamento: bool = True
+    pessoas: float | None = Field(None, ge=0, le=500)
+    horas_dia: float | None = Field(None, ge=0, le=24)
+    eficiencia_pct: float | None = Field(None, gt=0, le=150)
+    custo_mensal: float | None = Field(None, ge=0)
+    minutos_peca: float | None = Field(None, ge=0, le=600)
+    minutos_m2: float | None = Field(None, ge=0, le=600)
 
 
 class Separacao(_M):
@@ -118,6 +127,15 @@ class Gestao(_M):
     limites_wip: dict[str, int | None] | None = None
     dias_uteis_mes: int | None = Field(None, ge=1, le=31)
     horas_turno: float | None = Field(None, gt=0, le=24)
+    pulmao_dias: float | None = Field(None, ge=0, le=60)
+    tambor_codigo: str | None = Field(None, max_length=20)
+
+
+class DeParaSetup(_M):
+    codigo_promob: str = Field(min_length=1, max_length=60)
+    material_codigo: str = Field(min_length=1, max_length=60)
+    fator: float = Field(1.0, gt=0, le=100000)
+    observacao: str | None = Field(None, max_length=200)
 
 
 class Setup(_M):
@@ -132,6 +150,7 @@ class Setup(_M):
     comercial: Comercial | None = None
     parceiros: list[ParceiroSetup] | None = None
     gestao: Gestao | None = None
+    depara: list[DeParaSetup] | None = None
 
 
 def validar(dados: dict) -> Setup:
@@ -159,7 +178,8 @@ def exportar(db: Session, emp: Empresa, nome: str | None = None) -> dict:
         "fabrica": {k: getattr(emp, k) for k in CAMPOS_FABRICA},
         "fiscal": {k: getattr(emp, k) for k in CAMPOS_FISCAL},
         "setores": [{"codigo": c.codigo, "nome": c.nome, "sequencia": c.sequencia, "regra": RegraCentro(c.regra).value,
-                     "ativo": c.ativo, "exige_apontamento": c.exige_apontamento} for c in centros],
+                     "ativo": c.ativo, "exige_apontamento": c.exige_apontamento} | {k: getattr(c, k) for k in CAMPOS_SETOR}
+                    for c in centros],
         "separacoes": [{"codigo": c.codigo, "nome": c.nome, "palavras_chave": c.palavras_chave, "centro_codigo": c.centro_codigo,
                         "vai_para_caixa": c.vai_para_caixa, "ativo": c.ativo} for c in separacao.garantir_padroes(db, emp.id)],
         "comercial": {k: getattr(cc, k) for k in CAMPOS_COMERCIAL} | {
@@ -167,7 +187,9 @@ def exportar(db: Session, emp: Empresa, nome: str | None = None) -> dict:
         "parceiros": [{k: getattr(p, k) for k in ("nome", "tipo", "documento", "telefone", "email", "rt_pct", "ativo")}
                       for p in parceiros],
         "gestao": {"metas": cg.metas or {}, "limites_wip": cg.limites_wip or {}, "dias_uteis_mes": cg.dias_uteis_mes,
-                   "horas_turno": cg.horas_turno},
+                   "horas_turno": cg.horas_turno, "pulmao_dias": cg.pulmao_dias, "tambor_codigo": cg.tambor_codigo},
+        "depara": [{"codigo_promob": d.codigo_promob, "material_codigo": d.material.codigo, "fator": d.fator,
+                    "observacao": d.observacao} for d in sorted(depara.mapa(db, emp.id).values(), key=lambda d: d.codigo_promob)],
     }
 
 
@@ -206,7 +228,7 @@ def aplicar(db: Session, emp: Empresa, s: Setup, secoes: list[str] | None = None
             dados = st.model_dump(mode="json") | {"codigo": st.codigo.upper()}
             c = existentes.get(dados["codigo"])
             if c is None:
-                db.add(CentroTrabalho(empresa_id=emp.id, **dados))
+                db.add(CentroTrabalho(empresa_id=emp.id, **{k: v for k, v in dados.items() if v is not None}))
                 mud.append({"secao": "setores", "texto": f"Novo setor {dados['codigo']} · {st.nome} (seq. {st.sequencia}, {st.regra.value})"})
             else:
                 _campos(c, {k: v for k, v in dados.items() if k != "codigo"}, f"Setor {c.codigo} · ", mud, "setores")
@@ -276,7 +298,33 @@ def aplicar(db: Session, emp: Empresa, s: Setup, secoes: list[str] | None = None
         colunas = {c for c, _ in gestao.COLUNAS}
         if dados.get("limites_wip") is not None:
             dados["limites_wip"] = {k: v for k, v in dados["limites_wip"].items() if k in colunas and v}
+        if "tambor_codigo" in s.gestao.model_fields_set:
+            tambor = (dados.pop("tambor_codigo") or "").strip().upper() or None
+            if tambor and db.scalar(select(CentroTrabalho).where(CentroTrabalho.empresa_id == emp.id,
+                                                                 CentroTrabalho.codigo == tambor)) is None:
+                raise ErroSetup(f"O tambor do setup ({tambor}) não é um setor desta base")
+            if cfg.tambor_codigo != tambor:
+                mud.append({"secao": "gestao", "texto": f"tambor_codigo: {cfg.tambor_codigo or 'calculado'} → {tambor or 'calculado'}"})
+                cfg.tambor_codigo = tambor
+        else:
+            dados.pop("tambor_codigo", None)
         _campos(cfg, dados, "", mud, "gestao")
+    if "depara" in escolhidas:
+        materiais = {m.codigo: m for m in db.scalars(select(Material).where(Material.empresa_id == emp.id))}
+        atuais = depara.mapa(db, emp.id)
+        for dp in s.depara:
+            m = materiais.get(dp.material_codigo)
+            if m is None:
+                mud.append({"secao": "depara", "texto": f"{dp.codigo_promob} → {dp.material_codigo}: material não existe nesta base (ignorado)"})
+                continue
+            d = atuais.get(dp.codigo_promob)
+            if d is None or d.material_id != m.id or d.fator != dp.fator:
+                antes = f"{d.material.codigo} ×{d.fator:g}" if d else "sem vínculo"
+                try:
+                    depara.salvar(db, emp.id, dp.codigo_promob, m.id, dp.fator, dp.observacao)
+                except depara.ErroDePara as e:
+                    raise ErroSetup(f"De-para {dp.codigo_promob}: {e}")
+                mud.append({"secao": "depara", "texto": f"{dp.codigo_promob}: {antes} → {m.codigo} ×{dp.fator:g}"})
     db.flush()
     return mud
 

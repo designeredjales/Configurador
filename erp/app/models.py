@@ -155,6 +155,8 @@ class Empresa(Base):
     fiscal_token: Mapped[str | None] = mapped_column(String(200))
     # Expedição: quantos módulos diferentes cabem numa caixa master antes de sugerir outra caixa
     caixa_max_modulos: Mapped[int] = mapped_column(Integer, default=3, server_default="3")
+    # Importação do Promob: código sem de-para e sem cadastro vira material novo (True) ou pendência (False)
+    promob_cria_materiais: Mapped[bool] = mapped_column(default=True, server_default="1")
 
     @property
     def fiscal_token_configurado(self) -> bool:
@@ -253,6 +255,31 @@ class CentroTrabalho(Base):
     ativo: Mapped[bool] = mapped_column(default=True)
     # Sem conferência: o setor não é bipado; a etapa fecha sozinha quando a peça passa no setor seguinte
     exige_apontamento: Mapped[bool] = mapped_column(default=True, server_default="1")
+    # Capacidade e custo-hora: custo mensal (folha + encargos + rateio) ÷ horas produtivas do mês
+    pessoas: Mapped[float] = mapped_column(Float, default=1.0, server_default="1")
+    horas_dia: Mapped[float] = mapped_column(Float, default=8.8, server_default="8.8")
+    eficiencia_pct: Mapped[float] = mapped_column(Float, default=85.0, server_default="85")
+    custo_mensal: Mapped[float] = mapped_column(Float, default=0.0, server_default="0")
+    # Tempo padrão por peça que passa no setor: fixo + proporcional à área
+    minutos_peca: Mapped[float] = mapped_column(Float, default=0.0, server_default="0")
+    minutos_m2: Mapped[float] = mapped_column(Float, default=0.0, server_default="0")
+
+    @property
+    def capacidade_h_dia(self) -> float:
+        """Horas produtivas por dia: pessoas × horas do turno × eficiência."""
+        return round((self.pessoas or 0) * (self.horas_dia or 0) * (self.eficiencia_pct or 0) / 100, 2)
+
+    def custo_hora_para(self, dias_uteis: int) -> float:
+        cap = self.capacidade_h_dia * (dias_uteis or 0)
+        return round((self.custo_mensal or 0) / cap, 2) if cap else 0.0
+
+    @property
+    def custo_hora(self) -> float:
+        return self.custo_hora_para(getattr(self, "dias_uteis", None) or 22)
+
+    def minutos(self, area_m2: float) -> float:
+        """Tempo padrão de uma peça neste setor."""
+        return (self.minutos_peca or 0) + (self.minutos_m2 or 0) * area_m2
 
 
 class Projeto(Base):
@@ -980,3 +1007,22 @@ class ConfigGestao(Base):
     limites_wip: Mapped[dict | None] = mapped_column(JSON)
     dias_uteis_mes: Mapped[int] = mapped_column(Integer, default=22)
     horas_turno: Mapped[float] = mapped_column(Float, default=8.8)
+    # Tambor-pulmão-corda: dias de proteção antes da restrição e setor fixado como tambor (vazio = calculado)
+    pulmao_dias: Mapped[float] = mapped_column(Float, default=2.0, server_default="2")
+    tambor_codigo: Mapped[str | None] = mapped_column(String(20))
+
+
+class DeParaMaterial(Base):
+    """Código do Promob → material do estoque (com fator de conversão de quantidade)."""
+    __tablename__ = "depara_materiais"
+    __table_args__ = (UniqueConstraint("empresa_id", "codigo_promob"),)
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    empresa_id: Mapped[int] = mapped_column(ForeignKey("empresas.id"), index=True)
+    codigo_promob: Mapped[str] = mapped_column(String(60))
+    material_id: Mapped[int] = mapped_column(ForeignKey("materiais.id"))
+    fator: Mapped[float] = mapped_column(Float, default=1.0)  # 1 unidade do Promob = fator unidades do estoque
+    observacao: Mapped[str | None] = mapped_column(String(200))
+    criado_em: Mapped[datetime] = mapped_column(DateTime, default=agora)
+
+    material: Mapped[Material] = relationship()

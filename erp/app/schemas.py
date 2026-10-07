@@ -37,6 +37,7 @@ class EmpresaIn(Schema):
     imposto_venda_pct: float = Field(0.0, ge=0, le=100)
     garantia_meses: int = Field(12, ge=0, le=120)
     caixa_max_modulos: int = Field(3, ge=1, le=50)
+    promob_cria_materiais: bool = True
 
 
 class EmpresaOut(EmpresaIn):
@@ -64,6 +65,7 @@ class EmpresaAtualizar(Schema):
     imposto_venda_pct: float | None = Field(None, ge=0, le=100)
     garantia_meses: int | None = Field(None, ge=0, le=120)
     caixa_max_modulos: int | None = Field(None, ge=1, le=50)
+    promob_cria_materiais: bool | None = None
     uf: str | None = Field(None, min_length=2, max_length=2)
     inscricao_estadual: str | None = None
     ncm_padrao: str | None = Field(None, pattern=r"^\d{4}\.?\d{2}\.?\d{2}$")
@@ -222,10 +224,18 @@ class CentroIn(Schema):
     regra: RegraCentro = RegraCentro.TODAS
     ativo: bool = True
     exige_apontamento: bool = True
+    pessoas: float = Field(1.0, ge=0, le=500)
+    horas_dia: float = Field(8.8, ge=0, le=24)
+    eficiencia_pct: float = Field(85.0, gt=0, le=150)
+    custo_mensal: float = Field(0.0, ge=0)
+    minutos_peca: float = Field(0.0, ge=0, le=600)
+    minutos_m2: float = Field(0.0, ge=0, le=600)
 
 
 class CentroOut(CentroIn):
     id: int
+    capacidade_h_dia: float = 0.0
+    custo_hora: float = 0.0
 
 
 class CentroAtualizar(Schema):
@@ -234,6 +244,12 @@ class CentroAtualizar(Schema):
     regra: RegraCentro | None = None
     ativo: bool | None = None
     exige_apontamento: bool | None = None
+    pessoas: float | None = Field(None, ge=0, le=500)
+    horas_dia: float | None = Field(None, ge=0, le=24)
+    eficiencia_pct: float | None = Field(None, gt=0, le=150)
+    custo_mensal: float | None = Field(None, ge=0)
+    minutos_peca: float | None = Field(None, ge=0, le=600)
+    minutos_m2: float | None = Field(None, ge=0, le=600)
 
 
 class ClasseIn(Schema):
@@ -533,6 +549,9 @@ class DREObra(Schema):
     material_refugo: float = 0.0
     custos_diretos: dict[str, float]
     total_custos_diretos: float
+    mao_de_obra: float = 0.0
+    mao_de_obra_horas: float = 0.0
+    mao_de_obra_setores: list[dict] = []
     margem_contribuicao: float
     margem_pct: float
     orcado_frete: float | None

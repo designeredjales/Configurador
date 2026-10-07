@@ -227,6 +227,18 @@ Aba **Gestão à vista** (função *Indicadores do dono*), feita para a reunião
 
 Metas, limites de WIP, dias úteis e horas do turno ficam no setup da base (`GET/PUT /api/gestao/config`); o painel é `GET /api/gestao/painel`.
 
+## De-para Promob → estoque
+
+Em **Materiais → De-para**, cada código da biblioteca do Promob aponta para o material que a fábrica compra e estoca, com **fator de conversão** quando a unidade de compra é outra (dobradiça por unidade no Promob, caixa com 100 no estoque: fator 0,01). A importação do XML já troca o código e a quantidade; **Reaplicar** troca nos projetos que ainda estão na engenharia. A tela lista os códigos em uso nos projetos abertos (sem cadastro, mesmo código ou vinculado) com **sugestões** por semelhança de código e descrição. Com **criar materiais automaticamente** desligado (setup da base), código sem de-para vira pendência de engenharia em vez de material novo. O de-para viaja no setup, casado pelo código do material na base de destino.
+
+## Custo-hora e mão de obra padrão
+
+Em **Configurações → Capacidade, tempos padrão e custo-hora**, cada setor recebe pessoas, horas por dia, eficiência, custo mensal (folha, encargos e rateio) e tempo padrão (minutos por peça + minutos por m²). **Custo-hora** = custo mensal ÷ (pessoas × horas × eficiência × dias úteis). A **mão de obra padrão** de cada obra soma o roteiro de cada peça (as mesmas regras da OP) × o custo-hora: entra no **DRE da obra** e no **custo da proposta comercial**, por setor.
+
+## Sequenciamento pela restrição (tambor-pulmão-corda)
+
+No **Painel PCP**, a sequência mostra o **tambor** (setor com mais dias de carga em horas, ou fixado no setup), encaixa as obras pela data de entrega na capacidade dele, calcula a **saída prevista** (tambor + pulmão), a **folga** e a **corda** (até quando liberar cada obra). **Aplicar prioridades** ajusta as OPs; **Formar lote** junta as próximas obras liberadas que cabem em N dias de tambor. Sem tempos cadastrados, a carga é em m² e a capacidade vem da vazão dos últimos 7 dias. Pulmão e tambor ficam no setup (gestão à vista).
+
 ## Comercial e financeiro
 
 - **Do XML do Promob**: `TOTALPRICES/@TABLE` (valor de tabela), `MARGINS/ORDER/@VALUE` (pedido à fábrica com ICMS, IPI e descontos), `MARGINS/BUDGET/@VALUE` (venda ao cliente), frete e montagem do orçamento e a condição de pagamento selecionada.

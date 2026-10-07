@@ -141,7 +141,8 @@ def calcular(db: Session, emp: Empresa, cfg: ConfigComercial, op: Oportunidade, 
     rt_pct = op.parceiro.rt_pct if op.parceiro else 0.0
     rt = _r(preco * rt_pct / 100)
     comissao = _r(preco * cfg.comissao_vendedor_pct / 100) if op.vendedor_id else 0.0
-    custo = _r(r["valor_pedido"] + r["frete"] + r["montagem"])
+    mao_de_obra = _r(r.get("mao_de_obra") or 0)  # tempo padrão dos setores × custo-hora (setup da base)
+    custo = _r(r["valor_pedido"] + r["frete"] + r["montagem"] + mao_de_obra)
     margem = _r(preco - impostos - rt - comissao - custo)
     margem_pct = _r(margem / preco * 100, 1) if preco else 0.0
     nivel = None
@@ -158,7 +159,7 @@ def calcular(db: Session, emp: Empresa, cfg: ConfigComercial, op: Oportunidade, 
     m2 = r["m2_chapa"] or 0
     return {"preco_base": _r(base), "desconto_pct": desconto, "condicao": cond["nome"], "parcelas": cond["parcelas"],
             "ajuste_pct": cond["ajuste_pct"], "preco_final": preco, "parcela_valor": _r(preco / cond["parcelas"]),
-            "impostos": impostos, "rt_pct": rt_pct, "rt": rt, "comissao_vendedor": comissao, "custo_producao": custo,
+            "impostos": impostos, "rt_pct": rt_pct, "rt": rt, "comissao_vendedor": comissao, "custo_producao": custo, "mao_de_obra": mao_de_obra,
             "margem": margem, "margem_pct": margem_pct, "preco_m2": _r(preco / m2) if m2 else None,
             "custo_m2": _r(custo / m2) if m2 else None, "nivel_exigido": nivel, "motivos": motivos,
             "prices": conferencia_prices(db, emp.id, r)}

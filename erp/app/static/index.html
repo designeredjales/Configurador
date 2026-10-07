@@ -261,6 +261,7 @@ body.tv #gv-kpis .kpi { font-size: 30px; } body.tv .andon div { font-size: 17px;
       <p class="dica">Metas mensais em m² e em valor; em branco, o indicador aparece sem cobrança. As metas acumuladas no mês são cobradas proporcionalmente aos dias úteis já passados.</p>
       <div class="cfg" id="gv-metas"></div>
       <h2>Limite de obras por coluna (WIP)</h2><div class="cfg" id="gv-wip"></div>
+      <h2>Tambor e pulmão</h2><div class="cfg" id="gv-dbr"></div>
       <div class="linha" style="margin-top:10px"><button class="btn" onclick="salvarMetas()">Salvar metas</button></div><div id="gv-msg"></div>
     </div>
   </section>
@@ -269,6 +270,16 @@ body.tv #gv-kpis .kpi { font-size: 30px; } body.tv .andon div { font-size: 17px;
     <div class="grid" id="kpis"></div>
     <div class="card"><h2>Fila por centro de trabalho</h2><div class="tabela" id="filas"></div></div>
     <div class="card"><h2>OPs em andamento</h2><div class="tabela" id="painel-ops"></div></div>
+    <div class="card" id="seq-card" hidden><h2>Sequência pela restrição (tambor-pulmão-corda)</h2>
+      <p class="dica">O <b>tambor</b> é o setor com mais dias de carga: ele dita o ritmo. As obras entram na ordem da data de entrega, encaixadas na capacidade do tambor; a <b>saída prevista</b> soma o pulmão de proteção; a <b>corda</b> diz até quando liberar cada obra (lote e material) para chegar ao tambor a tempo.</p>
+      <div id="seq-resumo"></div>
+      <div class="tabela" id="seq-setores"></div>
+      <div class="tabela" id="seq-itens"></div>
+      <div class="linha" style="margin-top:10px"><button class="btn sec" onclick="aplicarPrioridadesSeq()">Aplicar prioridades às OPs</button>
+        <label class="dica">Formar lote com <input id="seq-dias" type="number" min="0.5" step="0.5" value="2" style="width:70px" aria-label="Dias de tambor"> dia(s) de tambor</label>
+        <button class="btn" onclick="formarLoteSeq()">Formar lote</button></div>
+      <div id="seq-msg"></div>
+    </div>
   </section>
 
   <section id="comercial">
@@ -477,6 +488,9 @@ body.tv #gv-kpis .kpi { font-size: 30px; } body.tv .andon div { font-size: 17px;
         <button class="btn sec" onclick="novoSetor()">Adicionar setor</button>
       </div>
       <div id="cfg-centros-msg"></div>
+      <h2>Capacidade, tempos padrão e custo-hora</h2>
+      <p class="dica"><b>Custo-hora</b> = custo mensal do setor (folha, encargos e rateio das despesas fixas) ÷ horas produtivas do mês (pessoas × horas/dia × eficiência × dias úteis da gestão à vista). <b>Tempo padrão</b> de cada peça no setor = minutos por peça + minutos por m². Com isso o ERP calcula a mão de obra padrão de cada obra (DRE e margem da proposta) e a carga em horas para o sequenciamento pela restrição.</p>
+      <div class="tabela" id="cfg-capacidade"></div>
     </div>
     <div class="card"><h2>Separação de peças</h2>
       <p class="dica">Peças que seguem caminho próprio: tupia, tamburato, peças coladas que viram outra peça. A separação vem das <b>palavras-chave</b> (procuradas na descrição e no código da peça, no módulo e nas operações do Promob) ou é marcada à mão pelo PCP na OP. Ela aparece na etiqueta, gera o aviso <b>SEPARAR</b> no apontamento, agrupa os carrinhos e pode colocar um setor próprio no roteiro. "Vai para caixa master" desmarcado: a peça vira outra peça e a expedição recusa embalar.</p>
@@ -662,6 +676,13 @@ body.tv #gv-kpis .kpi { font-size: 30px; } body.tv .andon div { font-size: 17px;
       <div id="m-msg"></div>
     </div>
     <div class="card"><h2>Cadastro</h2><div class="tabela" id="lista-materiais"></div></div>
+    <div class="card"><h2>De-para Promob → estoque</h2>
+      <p class="dica">Cada código da biblioteca do Promob aponta para o material que você compra e estoca. A importação do XML já troca o código; o fator converte a quantidade quando a unidade de compra é outra (ex.: dobradiça por unidade no Promob, caixa com 100 no estoque: fator 0,01). Sugestões vêm da semelhança de código e descrição.</p>
+      <div class="linha" id="dp-cria"></div>
+      <div class="tabela" id="dp-codigos"></div>
+      <div class="linha" style="margin-top:10px"><button class="btn sec" onclick="reaplicarDePara()">Reaplicar aos projetos em engenharia</button></div>
+      <div id="dp-msg"></div>
+    </div>
   </section>
 </main>
 </div>
@@ -723,6 +744,7 @@ async function carregarPainel() {
   $("filas").innerHTML = tabela([["Centro", (c) => `<b>${esc(c.centro_codigo)}</b> ${esc(c.centro_nome)}`],
     ["Peças na fila", (c) => c.na_fila, 1], ["Baixas hoje", (c) => c.concluidas_hoje, 1]], p.centros);
   $("painel-ops").innerHTML = tabelaOps(p.ops);
+  if (opera("pcp")) carregarSequencia().catch((e) => $("seq-resumo").innerHTML = `<div class="msg err">${esc(e.message)}</div>`);
 }
 
 function tabelaOps(ops) {
@@ -820,6 +842,7 @@ async function mostrarComercial(p) {
       ${linha(`(−) Material ${d.material_base === "REALIZADO" ? "consumido (custo médio)" : "previsto pela engenharia"}`, -d.material)}
       ${d.material_refugo ? linha("(−) Refugo de produção (material perdido)", -d.material_refugo) : ""}
       ${diretos}
+      ${d.mao_de_obra ? linha(`(−) Mão de obra padrão · ${num(d.mao_de_obra_horas, 1)} h (${d.mao_de_obra_setores.map((x) => `${x.centro_codigo} ${num(x.horas, 1)} h`).join(", ")})`, -d.mao_de_obra) : ""}
       ${linha(`Margem de contribuição · ${d.margem_pct}%`, d.margem_contribuicao, "total")}
     </tbody></table></div>
     <p class="dica">Recebido ${brl(d.recebido)} · a receber ${brl(d.a_receber)}${d.orcado_frete != null ? ` · orçado no Promob: frete ${brl(d.orcado_frete)}, montagem ${brl(d.orcado_montagem || 0)}` : ""}.
@@ -1111,8 +1134,10 @@ async function esvaziarCarrinho(id) {
 }
 
 // --- Materiais --------------------------------------------------------------
+let materiaisCache = [];
 async function carregarMateriais() {
-  const lista = await api("/api/materiais");
+  const lista = materiaisCache = await api("/api/materiais");
+  carregarDePara().catch((e) => $("dp-codigos").innerHTML = `<div class="msg err">${esc(e.message)}</div>`);
   $("lista-materiais").innerHTML = tabela([["Código", (m) => `<b>${esc(m.codigo)}</b>`], ["Descrição", (m) => esc(m.descricao)],
     ["Tipo", (m) => m.tipo], ["Unid.", (m) => esc(m.unidade)], ["Esp.", (m) => m.espessura_mm ?? "—", 1],
     ["Chapa", (m) => m.comprimento_mm ? `${m.comprimento_mm} × ${m.largura_mm}` : "—", 1], ["Custo", (m) => brl(m.custo_unitario), 1]], lista);
@@ -1758,7 +1783,7 @@ function linhaCalc(c) {
     ${l(`Desconto ${pctTxt(c.desconto_pct)} · ${esc(c.condicao)} (${c.ajuste_pct >= 0 ? "+" : ""}${pctTxt(c.ajuste_pct)})`, brl(c.preco_final - c.preco_base))}
     ${l(`Preço final · ${c.parcelas}x de ${brl(c.parcela_valor)}`, brl(c.preco_final), "total")}
     ${l("(−) Impostos", brl(-c.impostos))}${l(`(−) RT do parceiro (${pctTxt(c.rt_pct)})`, brl(-c.rt))}${l("(−) Comissão do vendedor", brl(-c.comissao_vendedor))}
-    ${l("(−) Custo de produção (pedido Promob + frete + montagem)", brl(-c.custo_producao))}
+    ${l(`(−) Custo de produção (pedido Promob + frete + montagem${c.mao_de_obra ? ` + mão de obra ${brl(c.mao_de_obra)}` : ""})`, brl(-c.custo_producao))}
     ${l(`Margem · ${pctTxt(c.margem_pct)}`, brl(c.margem), "total")}
     ${c.preco_m2 ? l("Preço por m² de chapa · custo por m²", `${brl(c.preco_m2)} · ${brl(c.custo_m2)}`) : ""}</tbody></table>
     ${c.prices ? `<p class="dica">Promob Prices (tabela vigente): ${c.prices.modulos_encontrados} de ${c.prices.modulos_total} módulo(s) encontrados · ${brl(c.prices.valor_tabela_prices)}${c.prices.diferenca_pct != null ? ` · diferença de ${pctTxt(c.prices.diferenca_pct)} sobre o valor de tabela do XML` : ""}${c.prices.faltando.length ? ` · sem preço: ${c.prices.faltando.slice(0, 5).map(esc).join(", ")}` : ""}</p>` : ""}`;
@@ -1950,6 +1975,12 @@ async function carregarConfiguracoes() {
     ["Quais peças passam", (c) => `<select onchange="salvarSetor(${c.id}, {regra: this.value})" aria-label="Regra">${Object.entries(REGRAS).map(([k, t]) => `<option value="${k}" ${k === c.regra ? "selected" : ""}>${t}</option>`).join("")}</select>`],
     ["Conferência obrigatória", (c) => `<label class="dica"><input type="checkbox" ${c.exige_apontamento ? "checked" : ""} onchange="salvarSetor(${c.id}, {exige_apontamento: this.checked})"> ${c.exige_apontamento ? "bipa" : "pula"}</label>`],
     ["Ativo", (c) => `<input type="checkbox" ${c.ativo ? "checked" : ""} onchange="salvarSetor(${c.id}, {ativo: this.checked})" aria-label="Ativo">`]], centros);
+  const campoSetor = (c, k, passo = "0.1", larg = 80) => `<input type="number" step="${passo}" min="0" value="${c[k]}" style="width:${larg}px" onchange="salvarSetor(${c.id}, {${k}: Number(this.value)})" aria-label="${k}">`;
+  $("cfg-capacidade").innerHTML = tabela([["Setor", (c) => `<b>${esc(c.codigo)}</b>`], ["Pessoas", (c) => campoSetor(c, "pessoas", "0.5", 70), 1],
+    ["Horas/dia", (c) => campoSetor(c, "horas_dia", "0.1", 70), 1], ["Eficiência %", (c) => campoSetor(c, "eficiencia_pct", "1", 70), 1],
+    ["Custo mensal (R$)", (c) => campoSetor(c, "custo_mensal", "100", 110), 1], ["Min/peça", (c) => campoSetor(c, "minutos_peca", "0.1", 70), 1],
+    ["Min/m²", (c) => campoSetor(c, "minutos_m2", "0.1", 70), 1], ["Capacidade h/dia", (c) => num(c.capacidade_h_dia, 1), 1],
+    ["Custo-hora", (c) => c.custo_hora ? brl(c.custo_hora) : "—", 1]], centros.filter((c) => c.ativo));
   const opcoesSetor = (atual) => `<option value="">— nenhum —</option>` + centros.map((c) => `<option value="${c.codigo}" ${c.codigo === atual ? "selected" : ""}>${esc(c.codigo)}</option>`).join("");
   $("cfg-classes").innerHTML = tabela([["Separação", (c) => `<b>${esc(c.codigo)}</b>`],
     ["Nome", (c) => `<input value="${esc(c.nome)}" size="14" onchange="salvarSeparacao(${c.id}, {nome: this.value})" aria-label="Nome">`],
@@ -2259,6 +2290,67 @@ async function iniciar() {
   if (!token) return mostrarAcesso();
   try { entrar(await api("/api/auth/eu")); } catch (e) { mostrarAcesso(); }
 }
+// --- De-para Promob → estoque ------------------------------------------------------------------
+const SIT_DP = {SEM_CADASTRO: ["FALTA", "sem cadastro"], MESMO_CODIGO: ["AGUARDANDO", "mesmo código"], VINCULADO: ["OK", "vinculado"]};
+async function carregarDePara() {
+  const r = await api("/api/depara/codigos");
+  $("dp-cria").innerHTML = opera("usuarios") ? `<label class="dica"><input type="checkbox" ${r.cria_materiais ? "checked" : ""} onchange="criaMateriaisPromob(this.checked)">
+    Criar material automaticamente para código do Promob sem de-para (desmarcado: vira pendência de engenharia até alguém vincular)</label>` : "";
+  const opcoes = (c) => `<option value="">Escolha o material do estoque</option>` + materiaisCache.filter((m) => m.codigo !== c.codigo)
+    .sort((a, b) => (b.tipo === c.tipo) - (a.tipo === c.tipo) || a.codigo.localeCompare(b.codigo))
+    .map((m) => `<option value="${m.id}" ${c.depara && c.depara.material_id === m.id ? "selected" : ""}>${esc(m.codigo)} · ${esc(m.descricao)}</option>`).join("");
+  $("dp-codigos").innerHTML = tabela([["Código do Promob", (c) => `<b>${esc(c.codigo)}</b><br><span class="dica">${esc(c.tipo)} · ${esc(c.descricao)}</span>`],
+    ["Situação", (c) => `<span class="tag ${SIT_DP[c.situacao][0]}">${SIT_DP[c.situacao][1]}</span>`],
+    ["Projetos", (c) => c.projetos.length ? esc(c.projetos.join(", ")) : "—"],
+    ["Material do estoque", (c) => `<select id="dp-m-${c.codigo.replace(/\W/g, "_")}" style="max-width:260px" aria-label="Material">${opcoes(c)}</select>
+      ${c.sugestoes.length ? `<br><span class="dica">Sugestão: ${c.sugestoes.map((g) => `<a onclick="$('dp-m-${c.codigo.replace(/\W/g, "_")}').value='${g.material_id}'">${esc(g.codigo)} (${g.semelhanca}%)</a>`).join(" · ")}</span>` : ""}`],
+    ["Fator", (c) => `<input id="dp-f-${c.codigo.replace(/\W/g, "_")}" type="number" step="0.001" min="0" value="${c.depara ? c.depara.fator : 1}" style="width:80px" aria-label="Fator">`],
+    ["", (c) => `<button class="btn sec" onclick="vincularDePara('${esc(c.codigo)}')">${c.depara ? "Atualizar" : "Vincular"}</button>${c.depara ? ` <a onclick="removerDePara(${c.depara.id})">remover</a>` : ""}`]], r.codigos);
+}
+const msgDp = (ok, t) => $("dp-msg").innerHTML = `<div class="msg ${ok ? "ok" : "err"}">${esc(t)}</div>`;
+async function vincularDePara(codigo) {
+  const k = codigo.replace(/\W/g, "_"), mid = $("dp-m-" + k).value;
+  if (!mid) { msgDp(false, "Escolha o material do estoque."); return; }
+  try { const d = await api("/api/depara", {method: "POST", json: {codigo_promob: codigo, material_id: Number(mid), fator: Number($("dp-f-" + k).value || 1)}});
+    msgDp(true, `${d.codigo_promob} → ${d.material_codigo} (fator ${num(d.fator, 4)}). Use "Reaplicar" para trocar nos projetos em engenharia.`); carregarDePara(); }
+  catch (e) { msgDp(false, e.message); }
+}
+async function removerDePara(id) { try { await api(`/api/depara/${id}`, {method: "DELETE"}); carregarDePara(); } catch (e) { msgDp(false, e.message); } }
+async function reaplicarDePara() {
+  try { const r = await api("/api/depara/reaplicar", {method: "POST"}); msgDp(true, `${r.trocas} troca(s) em ${r.projetos} projeto(s) em engenharia.`); carregarDePara(); }
+  catch (e) { msgDp(false, e.message); }
+}
+async function criaMateriaisPromob(v) { try { await api("/api/empresas/atual", {method: "PUT", json: {promob_cria_materiais: v}}); msgDp(true, "Regra de criação de materiais salva."); } catch (e) { msgDp(false, e.message); } }
+
+// --- Sequência pela restrição ----------------------------------------------------------------------
+const STATUS_SEQ = {OK: "OK", RISCO: "AMARELO", ATRASA: "VERMELHO", SEM_DATA: "AGUARDANDO"};
+async function carregarSequencia() {
+  const s = await api("/api/pcp/sequencia"), u = s.unidade, fmt = (v) => `${num(v, 1)} ${u}`;
+  $("seq-card").hidden = false;
+  const t = s.tambor;
+  $("seq-resumo").innerHTML = t ? `<p>Tambor: <b>${esc(t.centro_codigo)} · ${esc(t.centro_nome)}</b>${s.tambor_fixo ? " (fixado no setup)" : ""} · capacidade ${fmt(t.capacidade_dia)}/dia ·
+      carga ${fmt(t.carga)} = <b>${t.dias_de_carga == null ? "?" : num(t.dias_de_carga, 1)} dia(s)</b> · pulmão ${num(s.pulmao_dias, 1)} dia(s)${u === "m²" ? ' <span class="dica">(sem tempos padrão: carga em m² e capacidade pela vazão dos últimos 7 dias; cadastre os tempos em Configurações)</span>' : ""}</p>`
+    : `<p class="pend">Sem carga em aberto.</p>`;
+  $("seq-setores").innerHTML = tabela([["Setor", (c) => `<b>${esc(c.centro_codigo)}</b> ${esc(c.centro_nome)} ${t && c.centro_codigo === t.centro_codigo ? '<span class="tag RESTRICAO">tambor</span>' : ""}`],
+    [`Carga (${u})`, (c) => num(c.carga, 1), 1], [`Capacidade/dia (${u})`, (c) => num(c.capacidade_dia, 1), 1], ["Dias de carga", (c) => c.dias_de_carga == null ? "—" : num(c.dias_de_carga, 1), 1]], s.setores);
+  $("seq-itens").innerHTML = tabela([["#", (i) => i.posicao, 1], ["Obra", (i) => `<b>${esc(i.codigo)}</b> ${esc(i.nome)}<br><span class="dica">${i.tipo === "OP" ? `OP ${i.op_numero}${i.lote ? ` · lote ${i.lote}` : ""} · prioridade ${i.prioridade}${i.prioridade_sugerida && i.prioridade_sugerida !== i.prioridade ? ` → ${i.prioridade_sugerida}` : ""}` : "liberada, aguarda lote"}</span>`],
+    ["Entrega", (i) => dataBR(i.data_entrega)], [`No tambor (${u})`, (i) => num(i.carga_tambor, 1), 1],
+    ["Passa no tambor", (i) => `${dataBR(i.inicio_tambor)} a ${dataBR(i.fim_tambor)}`], ["Saída prevista", (i) => dataBR(i.saida_prevista)],
+    ["Folga", (i) => i.folga_dias == null ? "—" : `${i.folga_dias} dia(s)`, 1],
+    ["Corda", (i) => i.tipo === "PROJETO" ? (i.liberar_ja ? '<b class="neg">liberar já</b>' : `liberar até ${dataBR(i.liberar_ate)}`) : "em produção"],
+    ["Situação", (i) => `<span class="tag ${STATUS_SEQ[i.status]}">${i.status === "SEM_DATA" ? "sem data" : i.status.toLowerCase()}</span>`]], s.itens);
+}
+const msgSeq = (ok, t) => $("seq-msg").innerHTML = `<div class="msg ${ok ? "ok" : "err"}">${esc(t)}</div>`;
+async function aplicarPrioridadesSeq() {
+  try { const r = await api("/api/pcp/sequencia/prioridades", {method: "POST"}); msgSeq(true, `${r.ops_alteradas} OP(s) com prioridade ajustada pela sequência.`); carregarPainel(); }
+  catch (e) { msgSeq(false, e.message); }
+}
+async function formarLoteSeq() {
+  try { const r = await api("/api/pcp/sequencia/lote", {method: "POST", json: {dias: Number($("seq-dias").value)}});
+    msgSeq(true, `Lote ${r.numero} formado com ${r.projetos} obra(s) na ordem da sequência.`); carregarPainel(); }
+  catch (e) { msgSeq(false, e.message); }
+}
+
 // --- Diagnóstico do Promob Prices: formatos reais da conta --------------------------------------
 async function diagnosticarPrices() {
   $("cc-diag").innerHTML = `<p class="dica">Consultando o Promob Prices...</p>`;
@@ -2348,13 +2440,16 @@ async function carregarMetas() {
     <input id="gm-${m.codigo}" type="number" step="0.1" value="${gvConfig.metas[m.codigo] ?? ""}" placeholder="sem meta"></label>`).join("")
     + `<label>Dias úteis no mês<input id="gm-dias" type="number" min="1" max="31" value="${gvConfig.dias_uteis_mes}"></label>
        <label>Horas do turno<input id="gm-horas" type="number" step="0.1" value="${gvConfig.horas_turno}"></label>`;
+  const setoresGv = await api("/api/centros");
+  $("gv-dbr").innerHTML = `<label>Pulmão (dias úteis de proteção)<input id="gm-pulmao" type="number" min="0" step="0.5" value="${gvConfig.pulmao_dias}"></label>
+    <label>Tambor (restrição)<select id="gm-tambor"><option value="">Calculado pela carga</option>${setoresGv.filter((c) => c.ativo).map((c) => `<option value="${c.codigo}" ${c.codigo === gvConfig.tambor_codigo ? "selected" : ""}>${esc(c.codigo)} · ${esc(c.nome)}</option>`).join("")}</select></label>`;
   $("gv-wip").innerHTML = gvConfig.colunas.map((c) => `<label>${esc(c.nome)}<input id="gw-${c.codigo}" type="number" min="1" value="${gvConfig.limites_wip[c.codigo] ?? ""}" placeholder="sem limite"></label>`).join("");
 }
 async function salvarMetas() {
   const valor = (id) => $(id).value === "" ? null : Number($(id).value);
   const dados = {metas: Object.fromEntries(gvConfig.catalogo_metas.map((m) => [m.codigo, valor("gm-" + m.codigo)])),
     limites_wip: Object.fromEntries(gvConfig.colunas.map((c) => [c.codigo, valor("gw-" + c.codigo)])),
-    dias_uteis_mes: valor("gm-dias"), horas_turno: valor("gm-horas")};
+    dias_uteis_mes: valor("gm-dias"), horas_turno: valor("gm-horas"), pulmao_dias: valor("gm-pulmao") ?? 0, tambor_codigo: $("gm-tambor").value};
   try { await api("/api/gestao/config", {method: "PUT", json: dados}); $("gv-msg").innerHTML = `<div class="msg ok">Metas salvas.</div>`; carregarGestao(); }
   catch (e) { $("gv-msg").innerHTML = `<div class="msg err">${esc(e.message)}</div>`; }
 }

@@ -19,6 +19,16 @@ with TestClient(app) as c:
     c.post("/api/usuarios", json={"nome": "João (corte)", "email": "operador@demo.com",
                                   "senha": "demo12345", "perfil": "OPERADOR"}, headers=h)
     c.post("/api/carrinhos", json={"quantidade": 3}, headers=h)  # carrinhos da fábrica
+    # Capacidade, tempos padrão e custo-hora dos setores; de-para da dobradiça (comprada em caixa com 100)
+    centros = {x["codigo"]: x["id"] for x in c.get("/api/centros", headers=h).json()}
+    for cod, dados in {"CORTE": {"pessoas": 2, "custo_mensal": 14000, "minutos_peca": 1, "minutos_m2": 2},
+                       "BORDA": {"pessoas": 1, "custo_mensal": 7000, "minutos_peca": 2.5},
+                       "USINAGEM": {"pessoas": 1, "custo_mensal": 8000, "minutos_peca": 1.5},
+                       "EMBALAGEM": {"pessoas": 1, "custo_mensal": 5000, "minutos_peca": 0.8}}.items():
+        c.patch(f"/api/centros/{centros[cod]}", json=dados, headers=h)
+    cx = c.post("/api/materiais", json={"codigo": "DOB-CX100", "descricao": "Dobradiça caneco 35mm (caixa c/ 100)",
+                                        "tipo": "FERRAGEM", "unidade": "CX", "custo_unitario": 690}, headers=h).json()
+    c.post("/api/depara", json={"codigo_promob": "DOBTA", "material_id": cx["id"], "fator": 0.01}, headers=h)
     # Estação de expedição isolada: só a função de caixa master
     c.post("/api/usuarios", json={"nome": "Marcos (expedição)", "email": "expedicao@demo.com", "senha": "demo12345",
                                   "perfil": "OPERADOR", "funcoes": ["expedicao"]}, headers=h)

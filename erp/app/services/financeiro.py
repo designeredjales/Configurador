@@ -105,7 +105,9 @@ def dre_obra(db: Session, projeto: Projeto) -> dict:
         if l.tipo == TipoLancamento.PAGAR:
             custos_diretos[l.categoria] += l.valor_pago if l.pago_em else l.valor
     total_diretos = round(sum(custos_diretos.values()), 2)
-    margem = round(receita - impostos - material - refugo - total_diretos, 2)
+    from .custos import mao_de_obra_projeto  # mão de obra padrão: tempo de cada setor × custo-hora
+    mo = mao_de_obra_projeto(db, projeto)
+    margem = round(receita - impostos - material - refugo - total_diretos - mo["total"], 2)
     receber = [l for l in lancs if l.tipo == TipoLancamento.RECEBER]
     recebido = round(sum(l.valor_pago or 0 for l in receber if l.pago_em), 2)
     return {
@@ -115,6 +117,7 @@ def dre_obra(db: Session, projeto: Projeto) -> dict:
         "material": material, "material_base": material_base, "material_refugo": refugo,
         "custos_diretos": {k: round(v, 2) for k, v in sorted(custos_diretos.items())},
         "total_custos_diretos": total_diretos,
+        "mao_de_obra": mo["total"], "mao_de_obra_horas": mo["horas"], "mao_de_obra_setores": mo["por_setor"],
         "margem_contribuicao": margem,
         "margem_pct": round(100 * margem / receita, 1) if receita else 0.0,
         "orcado_frete": projeto.frete_orcado, "orcado_montagem": projeto.montagem_orcada,
