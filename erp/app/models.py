@@ -412,6 +412,7 @@ class OrdemProducao(Base):
     data_entrega: Mapped[date | None] = mapped_column(Date)
     criada_em: Mapped[datetime] = mapped_column(DateTime, default=agora)
     concluida_em: Mapped[datetime | None] = mapped_column(DateTime)
+    motivo_cancelamento: Mapped[str | None] = mapped_column(String(200))
 
     projeto: Mapped[Projeto] = relationship()
     lote: Mapped[LoteProducao | None] = relationship(back_populates="ops")

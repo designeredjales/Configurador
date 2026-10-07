@@ -8,7 +8,17 @@ from datetime import date
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
-from ..models import LoteProducao, OrdemProducao, Projeto, StatusOP, StatusProjeto, Usuario
+from ..models import (
+    ItemCaixa,
+    LoteProducao,
+    Ocorrencia,
+    OrdemProducao,
+    Projeto,
+    StatusOP,
+    StatusProjeto,
+    UnidadePeca,
+    Usuario,
+)
 from . import pcp
 from .pcp import ErroPCP
 
@@ -63,7 +73,8 @@ def adicionar(db: Session, lote: LoteProducao, projeto_ids: list[int]) -> LotePr
 
 def resumo(lote: LoteProducao) -> dict:
     projetos, total, feitas, pecas = [], 0, 0, 0
-    for op in lote.ops:
+    ativas = [o for o in lote.ops if o.status != StatusOP.CANCELADA]
+    for op in ativas or lote.ops:  # OPs que voltaram para programação saem da lista (a menos que todas tenham voltado)
         t, f = pcp.progresso(op)
         n = sum(1 for u in op.unidades if u.ativa)
         if op.status != StatusOP.CANCELADA:
@@ -85,3 +96,58 @@ def resumo(lote: LoteProducao) -> dict:
 def unidades(lote: LoteProducao, apenas_reposicoes: bool = False) -> list:
     return [u for op in lote.ops if op.status != StatusOP.CANCELADA for u in op.unidades
             if u.ativa and (not apenas_reposicoes or u.reposicao_de_id)]
+
+
+# --- Voltar para programação ------------------------------------------------------
+# Desfaz a programação de uma OP que a fábrica ainda não tocou: a OP fica cancelada
+# (o número e as etiquetas nunca são reaproveitados) e o projeto volta a LIBERADO,
+# pronto para entrar em outro lote ou ganhar uma OP nova.
+
+def impedimento(db: Session, op: OrdemProducao) -> str | None:
+    if op.status == StatusOP.CANCELADA:
+        return f"OP {op.numero} já está cancelada"
+    if op.status == StatusOP.CONCLUIDA:
+        return f"OP {op.numero} já foi concluída"
+    baixas = sum(1 for u in op.unidades for e in u.etapas if e.concluida_em)
+    if baixas:
+        return (f"OP {op.numero} ({op.projeto.codigo}) já tem {baixas} baixa(s) na fábrica: "
+                f"estorne as baixas no Controle de Produção ou cancele a OP")
+    ids = [u.id for u in op.unidades]
+    if ids and db.scalar(select(func.count()).select_from(ItemCaixa).where(ItemCaixa.unidade_id.in_(ids))):
+        return f"OP {op.numero} ({op.projeto.codigo}) tem peças em caixa master"
+    if db.scalar(select(func.count()).select_from(Ocorrencia).where(Ocorrencia.op_id == op.id)):
+        return f"OP {op.numero} ({op.projeto.codigo}) tem estorno ou refugo registrado: cancele a OP em vez de reprogramar"
+    return None
+
+
+def _devolver(db: Session, op: OrdemProducao, usuario: Usuario) -> None:
+    op.status = StatusOP.CANCELADA
+    op.motivo_cancelamento = f"Voltou para programação ({usuario.nome})"
+    db.flush()
+    ativas = db.scalar(select(func.count()).select_from(OrdemProducao).where(
+        OrdemProducao.projeto_id == op.projeto_id,
+        OrdemProducao.status.in_([StatusOP.ABERTA, StatusOP.EM_PRODUCAO])))
+    if not ativas and op.projeto.status == StatusProjeto.PRODUCAO:
+        op.projeto.status = StatusProjeto.LIBERADO
+
+
+def voltar_op(db: Session, op: OrdemProducao, usuario: Usuario) -> None:
+    motivo = impedimento(db, op)
+    if motivo:
+        raise ErroPCP(motivo)
+    _devolver(db, op, usuario)
+    db.flush()
+
+
+def voltar_lote(db: Session, lote: LoteProducao, usuario: Usuario) -> list[OrdemProducao]:
+    """Tudo ou nada: se alguma OP do lote já foi tocada pela fábrica, nenhuma volta."""
+    ops = [o for o in lote.ops if o.status != StatusOP.CANCELADA]
+    if not ops:
+        raise ErroPCP(f"Lote {lote.numero} não tem OPs ativas")
+    problemas = [m for m in (impedimento(db, o) for o in ops) if m]
+    if problemas:
+        raise ErroPCP(f"Lote {lote.numero} não pode voltar inteiro para programação: " + "; ".join(problemas))
+    for o in ops:
+        _devolver(db, o, usuario)
+    db.flush()
+    return ops

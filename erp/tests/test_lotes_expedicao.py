@@ -218,3 +218,44 @@ def test_remover_e_caixa_vazia(client, empresa, lote_misto):
     # A peça removida pode ser bipada de novo (a baixa da embalagem já ficou feita)
     r = bipar(client, empresa, u1[0]["codigo_barras"], caixa["id"])
     assert r.status_code == 200 and not r.json()["embalagem_apontada"]
+
+
+def test_voltar_para_programacao_projeto_e_lote(client, empresa):
+    p1, p2, p3 = liberado(client, empresa), liberado(client, empresa), liberado(client, empresa)
+    lote = client.post("/api/lotes", json={"descricao": "Semana 42", "projeto_ids": [p1, p2, p3]}, headers=empresa).json()
+    op1, op2, op3 = (p["op_id"] for p in lote["projetos"])
+
+    # Projeto a projeto: a OP sai da fábrica e o projeto volta a LIBERADO
+    r = client.post(f"/api/ops/{op1}/voltar-programacao", headers=empresa)
+    assert r.status_code == 200 and r.json()["status"] == "CANCELADA" and "Voltou para programação" in r.json()["motivo_cancelamento"]
+    assert next(p for p in client.get("/api/projetos", headers=empresa).json() if p["id"] == p1)["status"] == "LIBERADO"
+    lote = client.get(f"/api/lotes/{lote['id']}", headers=empresa).json()
+    assert [p["projeto_id"] for p in lote["projetos"]] == [p2, p3] and lote["total_pecas"] == 68
+    # Etiqueta da OP que voltou não vale mais no leitor; o projeto pode ganhar OP nova (número novo)
+    cb_antiga = unidades(client, empresa, op1)[0]["codigo_barras"]
+    assert client.post("/api/apontamentos", json={"codigo_barras": cb_antiga, "centro_codigo": "CORTE"}, headers=empresa).status_code == 409
+    nova = client.post(f"/api/projetos/{p1}/ops", json={}, headers=empresa).json()
+    assert nova["numero"] == 4
+
+    # Fábrica já tocou: não volta, e o lote não volta pela metade
+    cb = unidades(client, empresa, op2)[0]["codigo_barras"]
+    client.post("/api/apontamentos", json={"codigo_barras": cb, "centro_codigo": "CORTE"}, headers=empresa)
+    r = client.post(f"/api/ops/{op2}/voltar-programacao", headers=empresa)
+    assert r.status_code == 409 and "1 baixa(s)" in r.json()["detail"]
+    r = client.post(f"/api/lotes/{lote['id']}/voltar-programacao", headers=empresa)
+    assert r.status_code == 409 and "não pode voltar inteiro" in r.json()["detail"]
+    assert client.get(f"/api/ops/{op3}", headers=empresa).json()["status"] == "ABERTA"  # nada mudou
+
+    # Estornada a baixa, o lote inteiro volta e os projetos ficam livres para outro lote
+    client.post("/api/apontamentos/estorno", json={"codigo_barras": cb, "centro_codigo": "CORTE", "motivo": "teste"}, headers=empresa)
+    r = client.post(f"/api/lotes/{lote['id']}/voltar-programacao", headers=empresa)
+    assert r.status_code == 409 and "estorno ou refugo" in r.json()["detail"]  # OP com histórico de ocorrência: cancelar, não reprogramar
+    client.post(f"/api/ops/{op2}/cancelar", headers=empresa)
+    r = client.post(f"/api/lotes/{lote['id']}/voltar-programacao", headers=empresa)
+    assert r.status_code == 200 and r.json()["status"] == "CANCELADO"
+    assert next(p for p in client.get("/api/projetos", headers=empresa).json() if p["id"] == p3)["status"] == "LIBERADO"
+    outro = client.post("/api/lotes", json={"descricao": "Semana 43", "projeto_ids": [p3]}, headers=empresa)
+    assert outro.status_code == 201 and outro.json()["numero"] == 2
+
+    operador = criar_usuario(client, empresa, "OPERADOR")
+    assert client.post(f"/api/ops/{nova['id']}/voltar-programacao", headers=operador).status_code == 403

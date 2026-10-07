@@ -3,7 +3,7 @@ from datetime import date, datetime
 
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import HTMLResponse, PlainTextResponse
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from ..db import get_db
@@ -38,6 +38,7 @@ def resumo(op: OrdemProducao) -> dict:
         "lote_id": op.lote_id,
         "lote_numero": op.lote.numero if op.lote else None,
         "status": op.status,
+        "motivo_cancelamento": op.motivo_cancelamento,
         "prioridade": op.prioridade,
         "data_entrega": op.data_entrega,
         "criada_em": op.criada_em,
@@ -114,6 +115,29 @@ def cancelar_op(op_id: int, emp: Empresa = Depends(empresa_atual), db: Session =
     if op.status == StatusOP.CONCLUIDA:
         raise HTTPException(409, "OP concluída não pode ser cancelada")
     op.status = StatusOP.CANCELADA
+    op.motivo_cancelamento = op.motivo_cancelamento or "Cancelada pelo PCP"
+    db.flush()
+    from ..models import StatusProjeto
+    ativas = db.scalar(select(func.count()).select_from(OrdemProducao).where(
+        OrdemProducao.projeto_id == op.projeto_id, OrdemProducao.status.in_([StatusOP.ABERTA, StatusOP.EM_PRODUCAO])))
+    if not ativas and op.projeto.status == StatusProjeto.PRODUCAO:
+        op.projeto.status = StatusProjeto.LIBERADO  # sem OP ativa, o projeto pode ser programado de novo
+    db.commit()
+    return resumo(op)
+
+
+@router.post("/ops/{op_id}/voltar-programacao", response_model=OPResumo)
+def voltar_programacao(op_id: int, usuario: Usuario = Depends(PCP), db: Session = Depends(get_db)):
+    """Desfaz a programação de uma OP que a fábrica ainda não tocou; o projeto volta a LIBERADO."""
+    from ..services import lotes  # evita import circular com o roteador de lotes
+    op = db.get(OrdemProducao, op_id)
+    if op is None or op.empresa_id != usuario.empresa_id:
+        raise HTTPException(404, "OP não encontrada")
+    try:
+        lotes.voltar_op(db, op, usuario)
+    except pcp.ErroPCP as e:
+        db.rollback()
+        raise HTTPException(e.status, str(e))
     db.commit()
     return resumo(op)
 

@@ -73,7 +73,7 @@ td input.num { width: 90px; text-align: right; }
 .tag.ENTREGUE, .tag.RESOLVIDO { background: var(--ok); color: #fff; }
 .tag.AGUARDANDO { background: var(--line); } .tag.EM_PROCESSO { background: var(--warn); color: #fff; }
 .tag.REFUGADA, .tag.REFUGO { background: var(--err); color: #fff; } .tag.ESTORNO { background: var(--warn); color: #fff; } .tag.REPOSICAO { background: var(--brand); color: var(--brand-ink); }
-.tag.ABERTO, .tag.ABERTA { background: var(--line); } .tag.FECHADA { background: var(--warn); color: #fff; } .tag.EXPEDIDA { background: var(--ok); color: #fff; }
+.tag.ABERTO, .tag.ABERTA { background: var(--line); } .tag.CANCELADO { background: var(--err); color: #fff; } .tag.FECHADA { background: var(--warn); color: #fff; } .tag.EXPEDIDA { background: var(--ok); color: #fff; }
 .alerta-ex { padding: 14px 16px; border-radius: 8px; margin-top: 12px; font-size: 16px; font-weight: 600; white-space: pre-wrap; border: 2px solid transparent; }
 .alerta-ex.ok { background: color-mix(in srgb, var(--ok) 16%, transparent); border-color: var(--ok); }
 .alerta-ex.err { background: color-mix(in srgb, var(--err) 18%, transparent); border-color: var(--err); }
@@ -750,7 +750,11 @@ async function verOp(id) {
       <button class="btn sec" onclick="baixarZpl(${op.id}, ${op.numero})">Baixar ZPL (Zebra)</button>
       <button class="btn sec" onclick="verPlanoCorte(${op.id})">Plano de corte</button>
       ${op.unidades.some((u) => u.reposicao && u.status === "ATIVA") ? `<button class="btn sec" onclick="imprimirEtiquetas(${op.id}, true)">Etiquetas só das reposições</button>` : ""}
+      ${opera("pcp") && ["ABERTA", "EM_PRODUCAO"].includes(op.status) ? `<button class="btn sec" onclick="pedirConfirmacao('op-msg', 'Voltar a OP #${op.numero} para programação? A OP sai da fábrica, as etiquetas dela deixam de valer e o projeto volta para LIBERADO, pronto para outro lote.', () => voltarOp(${op.id}))">Voltar para programação</button>
+        <button class="btn sec" onclick="pedirConfirmacao('op-msg', 'Cancelar a OP #${op.numero}? Use quando a produção não vai mais acontecer.', () => cancelarOp(${op.id}))">Cancelar OP</button>` : ""}
     </div>
+    ${op.motivo_cancelamento ? `<p class="dica">${esc(op.motivo_cancelamento)}</p>` : ""}
+    <div id="op-msg"></div>
     <div id="op-extra"></div>
     <div class="tabela">${tabela([["Etiqueta", (u) => `<code>${u.codigo_barras}</code>${u.status === "REFUGADA" ? ` <span class="tag REFUGADA">Refugada</span>` : u.reposicao ? ` <span class="tag REPOSICAO">Reposição</span>` : ""}`], ["Ambiente", (u) => esc(u.ambiente)],
       ["Peça", (u) => `${esc(u.modulo)}/<b>${esc(u.peca_codigo)}</b> ${esc(u.peca_descricao)}`],
@@ -1500,16 +1504,46 @@ async function verLote(id) {
       <button class="btn sec" onclick="api('/api/lotes/${l.id}/plano-corte').then((p) => desenharPlano(p, 'lote-extra')).catch((e) => alert(e.message))">Plano de corte do lote</button>
       <button class="btn sec" onclick="pecasDoLote(${l.id})">Onde estão as peças</button>
       ${l.status === "ABERTO" && opera("pcp") ? `<button class="btn sec" onclick="adicionarAoLote(${l.id})">Incluir projetos marcados</button>` : ""}
+      ${["ABERTO", "EM_PRODUCAO"].includes(l.status) && opera("pcp") ? `<button class="btn sec" onclick="pedirConfirmacao('lote-msg', 'Voltar o lote ${l.numero} inteiro para programação? Todas as OPs saem da fábrica e os projetos voltam para LIBERADO. Só funciona se nenhuma peça do lote foi apontada.', () => voltarLote(${l.id}))">Voltar lote para programação</button>` : ""}
     </div><div id="lote-msg"></div>
     <div class="tabela">${tabela([["Projeto", (p) => `<b>${esc(p.codigo)}</b> ${esc(p.nome)}`], ["Cliente", (p) => esc(p.cliente || "—")],
       ["OP", (p) => `<a onclick="verOp(${p.op_id})">#${p.op_numero}</a>`], ["Status", (p) => tag(p.op_status)], ["Peças", (p) => p.pecas, 1],
-      ["Progresso", (p) => `${barra(p.progresso_pct)} ${p.progresso_pct}%`]], l.projetos)}</div>
+      ["Progresso", (p) => `${barra(p.progresso_pct)} ${p.progresso_pct}%`],
+      ["", (p) => opera("pcp") && ["ABERTA", "EM_PRODUCAO"].includes(p.op_status) ? `<button class="btn sec" onclick="pedirConfirmacao('lote-msg', 'Tirar ${esc(p.codigo)} do lote e voltar para programação? A OP #${p.op_numero} sai da fábrica e o projeto fica livre para outro lote.', () => voltarOp(${p.op_id}, ${l.id}))">Voltar para programação</button>` : ""]], l.projetos)}</div>
     <div id="lote-extra"></div>`;
   card.scrollIntoView({behavior: "smooth", block: "start"});
 }
 async function adicionarAoLote(id) {
   try { await api(`/api/lotes/${id}/projetos`, {method: "POST", json: {projeto_ids: marcados()}}); await carregarProjetos(); verLote(id); }
   catch (e) { $("lote-msg").innerHTML = `<div class="msg err">${esc(e.status === 422 ? "Marque os projetos liberados na lista acima." : e.message)}</div>`; }
+}
+// Ações que desfazem trabalho pedem confirmação na própria tela (sem janela do navegador)
+const confirmacoes = {};
+function pedirConfirmacao(alvo, texto, acao) {
+  confirmacoes[alvo] = acao;
+  $(alvo).innerHTML = `<div class="msg err">${esc(texto)}<div class="linha" style="margin:10px 0 0">
+    <button class="btn" onclick="const f = confirmacoes['${alvo}']; delete confirmacoes['${alvo}']; f()">Confirmar</button>
+    <button class="btn sec" onclick="$('${alvo}').innerHTML = ''">Desistir</button></div></div>`;
+}
+async function voltarOp(id, loteId = null) {
+  const alvo = loteId ? "lote-msg" : "op-msg";
+  try {
+    const op = await api(`/api/ops/${id}/voltar-programacao`, {method: "POST"});
+    if (loteId) { await carregarProjetos(); await verLote(loteId); } else { await carregarOps(); await verOp(id); }
+    $(alvo).innerHTML = `<div class="msg ok">OP #${op.numero} voltou para programação. O projeto ${esc(op.projeto_nome)} está LIBERADO e aparece na lista para formar lote.</div>`;
+  } catch (e) { $(alvo).innerHTML = `<div class="msg err">${esc(e.message)}</div>`; }
+}
+async function cancelarOp(id) {
+  try { await api(`/api/ops/${id}/cancelar`, {method: "POST"}); await carregarOps(); await verOp(id);
+    $("op-msg").innerHTML = `<div class="msg ok">OP cancelada.</div>`; }
+  catch (e) { $("op-msg").innerHTML = `<div class="msg err">${esc(e.message)}</div>`; }
+}
+async function voltarLote(id) {
+  try {
+    const l = await api(`/api/lotes/${id}/voltar-programacao`, {method: "POST"});
+    await carregarProjetos(); await verLote(id);
+    $("lote-msg").innerHTML = `<div class="msg ok">Lote ${l.numero} voltou para programação. Os projetos estão LIBERADOS e aparecem na lista para formar um lote novo.</div>`;
+  } catch (e) { $("lote-msg").innerHTML = `<div class="msg err">${esc(e.message)}</div>`; }
 }
 async function pecasDoLote(id) { abrir("producao"); await new Promise((ok) => setTimeout(ok, 300)); $("pr-lote").value = id; consultarPecas(); }
 

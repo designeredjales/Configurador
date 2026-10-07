@@ -802,6 +802,7 @@ class OPResumo(Schema):
     projeto_nome: str
     lote_id: int | None = None
     lote_numero: int | None = None
+    motivo_cancelamento: str | None = None
     status: StatusOP
     prioridade: int
     data_entrega: date | None

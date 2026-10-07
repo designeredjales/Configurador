@@ -139,6 +139,7 @@ Na aba **Projetos → Lotes de produção**, marque os projetos liberados e form
 - **Etiquetas do lote** (`/etiquetas.html` e `/etiquetas.zpl`): a primeira linha de toda etiqueta diz de quem é a peça: `L<lote> <obra> · <cliente> · <ambiente>`. É ela que separa a expedição depois.
 - Enquanto nenhuma peça foi apontada, dá para incluir projetos no lote; depois que a produção começa, o lote fecha.
 - Progresso por projeto e "onde estão as peças" do lote na consulta de produção (`?lote_id=`).
+- **Voltar para programação**, do lote inteiro (`POST /api/lotes/{id}/voltar-programacao`) ou projeto a projeto (`POST /api/ops/{id}/voltar-programacao`): a OP sai da fábrica e o projeto volta a LIBERADO, pronto para outro lote. Só vale para OP que a fábrica não tocou (sem baixa, refugo ou peça em caixa); no lote é tudo ou nada. A OP fica cancelada com o motivo e o número nunca é reaproveitado, então etiqueta velha impressa é recusada no leitor. Cancelar uma OP também devolve o projeto a LIBERADO.
 
 ## Expedição por caixa master
 

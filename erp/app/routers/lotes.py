@@ -56,6 +56,21 @@ def adicionar(lote_id: int, dados: LoteAdicionar, emp: Empresa = Depends(empresa
     return lotes.resumo(lote)
 
 
+@router.post("/{lote_id}/voltar-programacao", response_model=LoteOut)
+def voltar_programacao(lote_id: int, usuario: Usuario = Depends(PCP), emp: Empresa = Depends(empresa_atual),
+                       db: Session = Depends(get_db)):
+    """Desfaz o lote inteiro: todas as OPs voltam e os projetos ficam livres para outro lote."""
+    lote = carregar_lote(db, emp, lote_id)
+    try:
+        lotes.voltar_lote(db, lote, usuario)
+    except pcp.ErroPCP as e:
+        db.rollback()
+        raise HTTPException(e.status, str(e))
+    db.commit()
+    db.refresh(lote)
+    return lotes.resumo(lote)
+
+
 @router.get("/{lote_id}/plano-corte", response_model=PlanoCorte)
 def plano_corte(lote_id: int, apenas_reposicoes: bool = False, emp: Empresa = Depends(empresa_atual),
                 db: Session = Depends(get_db)):
