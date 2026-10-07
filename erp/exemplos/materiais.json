@@ -1,0 +1,60 @@
+[
+  {
+    "codigo": "MDF-BR-18",
+    "descricao": "MDF Branco TX 18mm",
+    "tipo": "CHAPA",
+    "unidade": "CH",
+    "espessura_mm": 18,
+    "comprimento_mm": 2750,
+    "largura_mm": 1850,
+    "custo_unitario": 320.0
+  },
+  {
+    "codigo": "MDF-BR-6",
+    "descricao": "MDF Branco 6mm",
+    "tipo": "CHAPA",
+    "unidade": "CH",
+    "espessura_mm": 6,
+    "comprimento_mm": 2750,
+    "largura_mm": 1850,
+    "custo_unitario": 150.0
+  },
+  {
+    "codigo": "MDF-FREIJO-18",
+    "descricao": "MDF Freijó 18mm",
+    "tipo": "CHAPA",
+    "unidade": "CH",
+    "espessura_mm": 18,
+    "comprimento_mm": 2750,
+    "largura_mm": 1850,
+    "custo_unitario": 480.0
+  },
+  {
+    "codigo": "FT-BR-22",
+    "descricao": "Fita Branca 22mm",
+    "tipo": "FITA",
+    "unidade": "M",
+    "custo_unitario": 0.9
+  },
+  {
+    "codigo": "FT-FREIJO-22",
+    "descricao": "Fita Freijó 22mm",
+    "tipo": "FITA",
+    "unidade": "M",
+    "custo_unitario": 1.6
+  },
+  {
+    "codigo": "DOB-35-AMORT",
+    "descricao": "Dobradiça 35mm amortecida",
+    "tipo": "FERRAGEM",
+    "unidade": "UN",
+    "custo_unitario": 12.5
+  },
+  {
+    "codigo": "PUX-160",
+    "descricao": "Puxador perfil 160mm",
+    "tipo": "FERRAGEM",
+    "unidade": "UN",
+    "custo_unitario": 18.0
+  }
+]

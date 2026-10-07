@@ -1,0 +1,318 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ERP Moveleiro</title>
+<style>
+:root {
+  --bg: #f4f5f7; --panel: #fff; --ink: #1d2330; --muted: #677085; --line: #dfe2e8;
+  --brand: #b5651d; --brand-ink: #fff; --ok: #1f8a4c; --warn: #b7791f; --err: #c53030;
+}
+@media (prefers-color-scheme: dark) {
+  :root { --bg: #14171d; --panel: #1d2129; --ink: #e7e9ee; --muted: #9aa3b5; --line: #2e3440;
+          --brand: #d98a3d; --brand-ink: #14171d; }
+}
+* { box-sizing: border-box; }
+body { margin: 0; font: 14px/1.45 system-ui, "Segoe UI", Roboto, sans-serif; background: var(--bg); color: var(--ink); }
+header { display: flex; align-items: center; gap: 16px; padding: 12px 20px; background: var(--panel); border-bottom: 1px solid var(--line); flex-wrap: wrap; }
+header h1 { font-size: 17px; margin: 0; }
+header h1 span { color: var(--brand); }
+nav { display: flex; gap: 4px; flex-wrap: wrap; }
+nav button { background: none; border: 0; padding: 8px 12px; border-radius: 6px; color: var(--muted); cursor: pointer; font: inherit; }
+nav button.ativo { background: var(--brand); color: var(--brand-ink); }
+#empresa { margin-left: auto; color: var(--muted); font-size: 13px; }
+main { padding: 20px; max-width: 1280px; margin: 0 auto; }
+section { display: none; } section.ativo { display: block; }
+.card { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 16px; margin-bottom: 16px; }
+.card h2 { font-size: 15px; margin: 18px 0 10px; } .card h2:first-child { margin-top: 0; }
+.grid { display: grid; gap: 12px; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); }
+.kpi { font-size: 28px; font-weight: 700; } .kpi small { display: block; font-size: 12px; font-weight: 400; color: var(--muted); }
+table { width: 100%; border-collapse: collapse; } th, td { text-align: left; padding: 7px 8px; border-bottom: 1px solid var(--line); }
+th { color: var(--muted); font-weight: 600; font-size: 12px; text-transform: uppercase; }
+td.n, th.n { text-align: right; font-variant-numeric: tabular-nums; }
+.tabela { overflow-x: auto; }
+input, select { font: inherit; padding: 7px 9px; border: 1px solid var(--line); border-radius: 6px; background: var(--bg); color: var(--ink); }
+button.btn { font: inherit; padding: 7px 14px; border-radius: 6px; border: 1px solid var(--brand); background: var(--brand); color: var(--brand-ink); cursor: pointer; }
+button.sec { background: none; color: var(--brand); }
+.linha { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin-bottom: 10px; }
+.tag { display: inline-block; padding: 2px 8px; border-radius: 99px; font-size: 12px; background: var(--line); }
+.tag.LIBERADO, .tag.CONCLUIDA, .tag.CONCLUIDO { background: var(--ok); color: #fff; }
+.tag.PRODUCAO, .tag.EM_PRODUCAO { background: var(--warn); color: #fff; }
+.tag.CANCELADA { background: var(--err); color: #fff; }
+.barra { display: inline-block; vertical-align: middle; width: 120px; height: 8px; background: var(--line); border-radius: 4px; overflow: hidden; min-width: 80px; }
+.barra i { display: block; height: 100%; background: var(--ok); }
+.msg { padding: 10px 12px; border-radius: 6px; margin-top: 10px; white-space: pre-wrap; }
+.msg.ok { background: color-mix(in srgb, var(--ok) 15%, transparent); }
+.msg.err { background: color-mix(in srgb, var(--err) 15%, transparent); }
+#scan { font-size: 22px; padding: 14px; width: 100%; }
+.feito { color: var(--ok); } .pend { color: var(--muted); }
+a { color: var(--brand); cursor: pointer; }
+</style>
+</head>
+<body>
+<header>
+  <h1>ERP <span>Moveleiro</span></h1>
+  <nav id="abas">
+    <button data-aba="painel">Painel PCP</button>
+    <button data-aba="projetos">Projetos</button>
+    <button data-aba="ops">Ordens de Produção</button>
+    <button data-aba="apontamento">Apontamento</button>
+    <button data-aba="materiais">Materiais</button>
+  </nav>
+  <div id="empresa"></div>
+</header>
+<main>
+  <section id="painel">
+    <div class="grid" id="kpis"></div>
+    <div class="card"><h2>Fila por centro de trabalho</h2><div class="tabela" id="filas"></div></div>
+    <div class="card"><h2>OPs em andamento</h2><div class="tabela" id="painel-ops"></div></div>
+  </section>
+
+  <section id="projetos">
+    <div class="card"><h2>Novo projeto</h2>
+      <div class="linha">
+        <input id="p-codigo" placeholder="Código (ex.: P-001)">
+        <input id="p-nome" placeholder="Nome / cliente">
+        <input id="p-entrega" type="date" title="Data de entrega">
+        <button class="btn" onclick="criarProjeto()">Criar</button>
+      </div>
+    </div>
+    <div class="card"><h2>Projetos</h2><div class="tabela" id="lista-projetos"></div></div>
+    <div class="card" id="det-projeto" hidden></div>
+  </section>
+
+  <section id="ops">
+    <div class="card"><h2>Ordens de produção</h2><div class="tabela" id="lista-ops"></div></div>
+    <div class="card" id="det-op" hidden></div>
+  </section>
+
+  <section id="apontamento">
+    <div class="card"><h2>Baixa por código de barras</h2>
+      <div class="linha">
+        <select id="ap-centro"></select>
+        <input id="ap-operador" placeholder="Operador">
+      </div>
+      <input id="scan" placeholder="Bipe a etiqueta da peça e tecle Enter" autocomplete="off">
+      <div id="ap-msg"></div>
+    </div>
+  </section>
+
+  <section id="materiais">
+    <div class="card"><h2>Novo material</h2>
+      <div class="linha">
+        <input id="m-codigo" placeholder="Código">
+        <input id="m-desc" placeholder="Descrição">
+        <select id="m-tipo"><option>CHAPA</option><option>FITA</option><option>FERRAGEM</option><option>ACESSORIO</option><option>OUTRO</option></select>
+        <input id="m-un" placeholder="Unid. (CH, M, UN, M2)" size="8">
+        <input id="m-esp" placeholder="Esp. mm" size="6">
+        <input id="m-comp" placeholder="Comp. chapa" size="8">
+        <input id="m-larg" placeholder="Larg. chapa" size="8">
+        <input id="m-custo" placeholder="Custo unit." size="8">
+        <button class="btn" onclick="criarMaterial()">Salvar</button>
+      </div>
+      <div id="m-msg"></div>
+    </div>
+    <div class="card"><h2>Cadastro</h2><div class="tabela" id="lista-materiais"></div></div>
+  </section>
+</main>
+
+<script>
+const $ = (id) => document.getElementById(id);
+const esc = (s) => String(s ?? "").replace(/[&<>"]/g, (c) => ({"&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;"}[c]));
+const brl = (v) => v.toLocaleString("pt-BR", {style: "currency", currency: "BRL"});
+const num = (v, d = 2) => Number(v).toLocaleString("pt-BR", {maximumFractionDigits: d});
+const dataBR = (d) => d ? new Date(d + (d.length === 10 ? "T00:00" : "")).toLocaleDateString("pt-BR") : "—";
+const tag = (s) => `<span class="tag ${s}">${s}</span>`;
+const barra = (p) => `<div class="barra" title="${p}%"><i style="width:${p}%"></i></div>`;
+
+let empresaId = new URLSearchParams(location.search).get("empresa");
+try { if (empresaId) localStorage.setItem("empresaId", empresaId); else empresaId = localStorage.getItem("empresaId"); } catch (e) {}
+
+async function api(caminho, opcoes = {}) {
+  const headers = {"X-Empresa-Id": empresaId, ...(opcoes.headers || {})};
+  if (opcoes.json !== undefined) { headers["Content-Type"] = "application/json"; opcoes.body = JSON.stringify(opcoes.json); }
+  const r = await fetch(caminho, {...opcoes, headers});
+  const corpo = await r.json().catch(() => ({}));
+  if (!r.ok) {
+    const d = corpo.detail;
+    const texto = typeof d === "string" ? d : d?.pendencias ? `${d.mensagem}:\n• ${d.pendencias.join("\n• ")}`
+      : Array.isArray(d) ? d.map((x) => x.msg).join("; ") : `Erro ${r.status}`;
+    throw new Error(texto);
+  }
+  return corpo;
+}
+
+function tabela(colunas, linhas) {
+  if (!linhas.length) return `<p class="pend">Nada por aqui ainda.</p>`;
+  const th = colunas.map(([t, , n]) => `<th class="${n ? "n" : ""}">${t}</th>`).join("");
+  const tr = linhas.map((l) => "<tr>" + colunas.map(([, f, n]) => `<td class="${n ? "n" : ""}">${f(l)}</td>`).join("") + "</tr>").join("");
+  return `<table><thead><tr>${th}</tr></thead><tbody>${tr}</tbody></table>`;
+}
+
+// --- Navegação --------------------------------------------------------------
+const carregadores = {painel: carregarPainel, projetos: carregarProjetos, ops: carregarOps,
+                      apontamento: carregarApontamento, materiais: carregarMateriais};
+function abrir(aba) {
+  document.querySelectorAll("section").forEach((s) => s.classList.toggle("ativo", s.id === aba));
+  document.querySelectorAll("#abas button").forEach((b) => b.classList.toggle("ativo", b.dataset.aba === aba));
+  carregadores[aba]().catch((e) => alert(e.message));
+}
+document.querySelectorAll("#abas button").forEach((b) => b.onclick = () => abrir(b.dataset.aba));
+
+// --- Painel -----------------------------------------------------------------
+async function carregarPainel() {
+  const p = await api("/api/painel");
+  $("kpis").innerHTML = [["OPs abertas", p.ops_abertas], ["Em produção", p.ops_em_producao], ["Atrasadas", p.ops_atrasadas]]
+    .map(([t, v]) => `<div class="card kpi">${v}<small>${t}</small></div>`).join("");
+  $("filas").innerHTML = tabela([["Centro", (c) => `<b>${esc(c.centro_codigo)}</b> ${esc(c.centro_nome)}`],
+    ["Peças na fila", (c) => c.na_fila, 1], ["Baixas hoje", (c) => c.concluidas_hoje, 1]], p.centros);
+  $("painel-ops").innerHTML = tabelaOps(p.ops);
+}
+
+function tabelaOps(ops) {
+  return tabela([["OP", (o) => `<a onclick="verOp(${o.id})">#${o.numero}</a>`], ["Projeto", (o) => esc(o.projeto_nome)],
+    ["Status", (o) => tag(o.status)], ["Prior.", (o) => o.prioridade, 1], ["Entrega", (o) => dataBR(o.data_entrega)],
+    ["Peças", (o) => o.total_unidades, 1], ["Progresso", (o) => `${barra(o.progresso_pct)} ${o.progresso_pct}%`]], ops);
+}
+
+// --- Projetos ---------------------------------------------------------------
+async function carregarProjetos() {
+  const lista = await api("/api/projetos");
+  $("lista-projetos").innerHTML = tabela([["Código", (p) => `<a onclick="verProjeto(${p.id})">${esc(p.codigo)}</a>`],
+    ["Nome", (p) => esc(p.nome)], ["Status", (p) => tag(p.status)], ["Origem", (p) => esc(p.origem)],
+    ["Entrega", (p) => dataBR(p.data_entrega)]], lista);
+}
+
+async function criarProjeto() {
+  try {
+    const p = await api("/api/projetos", {method: "POST", json: {codigo: $("p-codigo").value.trim(),
+      nome: $("p-nome").value.trim(), data_entrega: $("p-entrega").value || null}});
+    $("p-codigo").value = $("p-nome").value = "";
+    await carregarProjetos(); verProjeto(p.id);
+  } catch (e) { alert(e.message); }
+}
+
+async function verProjeto(id) {
+  const [p, c] = await Promise.all([api(`/api/projetos/${id}`), api(`/api/projetos/${id}/consumo`)]);
+  const editavel = ["ORCAMENTO", "APROVADO", "ENGENHARIA"].includes(p.status);
+  const linhasConsumo = (titulo, ls) => `<h2>${titulo}</h2>` + tabela([["Material", (l) => `<b>${esc(l.material_codigo)}</b> ${esc(l.descricao)}`],
+    ["Líquido", (l) => num(l.quantidade_liquida, 3), 1], ["c/ perda", (l) => num(l.quantidade_com_perda, 3), 1],
+    ["Compra", (l) => `${num(l.quantidade_compra, 3)} ${l.unidade}`, 1], ["Custo", (l) => brl(l.custo_total), 1]], ls);
+  const modulos = p.ambientes.flatMap((a) => a.modulos.map((m) => ({...m, ambiente: a.nome})));
+  $("det-projeto").hidden = false;
+  $("det-projeto").innerHTML = `
+    <h2>${esc(p.codigo)} · ${esc(p.nome)} ${tag(p.status)}</h2>
+    <div class="linha">
+      ${editavel ? `<input type="file" id="arq" accept=".csv,.txt"><button class="btn sec" onclick="importar(${id})">Importar lista de peças (CSV)</button>
+      <button class="btn" onclick="liberar(${id})">Liberar para a fábrica</button>` : ""}
+      ${p.status === "LIBERADO" ? `<button class="btn" onclick="gerarOp(${id})">Gerar ordem de produção</button>` : ""}
+    </div>
+    <div id="proj-msg">${c.pendencias.length ? `<div class="msg err">Pendências de engenharia:\n• ${c.pendencias.map(esc).join("\n• ")}</div>` : ""}</div>
+    <div class="grid">
+      <div class="card kpi">${c.total_pecas}<small>Peças a fabricar</small></div>
+      <div class="card kpi">${modulos.length}<small>Módulos</small></div>
+      <div class="card kpi">${brl(c.custo_material_total)}<small>Custo de material</small></div>
+    </div>
+    <h2>Módulos</h2>${tabela([["Ambiente", (m) => esc(m.ambiente)], ["Módulo", (m) => `<b>${esc(m.codigo)}</b> ${esc(m.descricao)}`],
+      ["Qtd", (m) => m.quantidade, 1], ["Peças", (m) => m.pecas.length, 1], ["Itens", (m) => m.itens.length, 1]], modulos)}
+    ${linhasConsumo("Chapas", c.chapas)}${linhasConsumo("Fitas de borda", c.fitas)}${linhasConsumo("Ferragens e acessórios", c.itens)}`;
+}
+
+async function importar(id) {
+  const arquivo = $("arq").files[0];
+  if (!arquivo) return alert("Escolha o arquivo CSV.");
+  const fd = new FormData(); fd.append("arquivo", arquivo);
+  try {
+    const r = await api(`/api/projetos/${id}/importar`, {method: "POST", body: fd});
+    await verProjeto(id);
+    $("proj-msg").insertAdjacentHTML("afterbegin", `<div class="msg ok">Importado: ${r.ambientes} ambiente(s), ${r.modulos} módulo(s), ${r.pecas} peça(s), ${r.itens} item(ns).${r.avisos.length ? "\n" + r.avisos.map(esc).join("\n") : ""}</div>`);
+  } catch (e) { $("proj-msg").innerHTML = `<div class="msg err">${esc(e.message)}</div>`; }
+}
+
+async function liberar(id) {
+  try { await api(`/api/projetos/${id}/liberar`, {method: "POST"}); await carregarProjetos(); await verProjeto(id); }
+  catch (e) { $("proj-msg").innerHTML = `<div class="msg err">${esc(e.message)}</div>`; }
+}
+
+async function gerarOp(id) {
+  try {
+    const op = await api(`/api/projetos/${id}/ops`, {method: "POST", json: {prioridade: 3}});
+    abrir("ops"); verOp(op.id);
+  } catch (e) { alert(e.message); }
+}
+
+// --- OPs --------------------------------------------------------------------
+async function carregarOps() { $("lista-ops").innerHTML = tabelaOps(await api("/api/ops")); }
+
+async function verOp(id) {
+  if (!$("ops").classList.contains("ativo")) abrir("ops");
+  const op = await api(`/api/ops/${id}`);
+  $("det-op").hidden = false;
+  $("det-op").innerHTML = `<h2>OP #${op.numero} · ${esc(op.projeto_nome)} ${tag(op.status)}</h2>
+    <div class="linha">${barra(op.progresso_pct)} ${op.etapas_concluidas}/${op.etapas_total} etapas (${op.progresso_pct}%)</div>
+    ${tabela([["Etiqueta", (u) => `<code>${u.codigo_barras}</code>`], ["Ambiente", (u) => esc(u.ambiente)],
+      ["Peça", (u) => `${esc(u.modulo)}/<b>${esc(u.peca_codigo)}</b> ${esc(u.peca_descricao)}`],
+      ["Material", (u) => esc(u.material_codigo)], ["Medida", (u) => `${num(u.comprimento_mm, 1)} × ${num(u.largura_mm, 1)}`, 1],
+      ["Roteiro", (u) => u.etapas.map((e) => `<span class="${e.concluida_em ? "feito" : "pend"}">${e.concluida_em ? "✔" : "○"} ${e.centro_codigo}</span>`).join(" › ")]],
+      op.unidades)}`;
+}
+
+// --- Apontamento ------------------------------------------------------------
+async function carregarApontamento() {
+  const centros = await api("/api/centros");
+  const atual = $("ap-centro").value;
+  $("ap-centro").innerHTML = centros.filter((c) => c.ativo).map((c) => `<option value="${esc(c.codigo)}">${esc(c.codigo)} · ${esc(c.nome)}</option>`).join("");
+  if (atual) $("ap-centro").value = atual;
+  $("scan").focus();
+}
+
+$("scan").addEventListener("keydown", async (ev) => {
+  if (ev.key !== "Enter") return;
+  const codigo = $("scan").value.trim(); $("scan").value = "";
+  if (!codigo) return;
+  try {
+    const r = await api("/api/apontamentos", {method: "POST", json: {codigo_barras: codigo,
+      centro_codigo: $("ap-centro").value, operador: $("ap-operador").value || null}});
+    $("ap-msg").innerHTML = `<div class="msg ok">✔ ${esc(r.peca)} baixada em ${r.centro_codigo}.
+Próxima etapa: ${r.proxima_etapa ?? "peça finalizada"} · OP #${r.op_numero} ${r.op_progresso_pct}% (${r.op_status})</div>`;
+  } catch (e) { $("ap-msg").innerHTML = `<div class="msg err">✖ ${esc(codigo)}: ${esc(e.message)}</div>`; }
+  $("scan").focus();
+});
+
+// --- Materiais --------------------------------------------------------------
+async function carregarMateriais() {
+  const lista = await api("/api/materiais");
+  $("lista-materiais").innerHTML = tabela([["Código", (m) => `<b>${esc(m.codigo)}</b>`], ["Descrição", (m) => esc(m.descricao)],
+    ["Tipo", (m) => m.tipo], ["Unid.", (m) => esc(m.unidade)], ["Esp.", (m) => m.espessura_mm ?? "—", 1],
+    ["Chapa", (m) => m.comprimento_mm ? `${m.comprimento_mm} × ${m.largura_mm}` : "—", 1], ["Custo", (m) => brl(m.custo_unitario), 1]], lista);
+}
+
+async function criarMaterial() {
+  const n = (id) => $(id).value ? Number($(id).value.replace(",", ".")) : null;
+  try {
+    await api("/api/materiais", {method: "POST", json: {codigo: $("m-codigo").value.trim(), descricao: $("m-desc").value.trim(),
+      tipo: $("m-tipo").value, unidade: $("m-un").value.trim() || "UN", espessura_mm: n("m-esp"),
+      comprimento_mm: n("m-comp"), largura_mm: n("m-larg"), custo_unitario: n("m-custo") || 0}});
+    ["m-codigo", "m-desc", "m-un", "m-esp", "m-comp", "m-larg", "m-custo"].forEach((id) => $(id).value = "");
+    $("m-msg").innerHTML = ""; carregarMateriais();
+  } catch (e) { $("m-msg").innerHTML = `<div class="msg err">${esc(e.message)}</div>`; }
+}
+
+// --- Empresa (tenant) -------------------------------------------------------
+async function iniciar() {
+  if (empresaId) {
+    try { const e = await api("/api/empresas/atual"); $("empresa").textContent = e.nome; return abrir("painel"); }
+    catch (e) { empresaId = null; }
+  }
+  const nome = prompt("Nome da empresa (primeiro acesso):", "Minha Marcenaria");
+  if (!nome) return;
+  const r = await fetch("/api/empresas", {method: "POST", headers: {"Content-Type": "application/json"}, body: JSON.stringify({nome})});
+  const e = await r.json(); empresaId = String(e.id);
+  try { localStorage.setItem("empresaId", empresaId); } catch (err) {}
+  $("empresa").textContent = e.nome; abrir("painel");
+}
+iniciar();
+</script>
+</body>
+</html>
