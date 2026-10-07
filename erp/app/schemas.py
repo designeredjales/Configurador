@@ -103,6 +103,24 @@ class LoginIn(Schema):
     senha: str
 
 
+class EsqueciIn(Schema):
+    email: str
+
+
+class RedefinirIn(Schema):
+    token: str = Field(min_length=20)
+    senha: str
+
+    _senha = field_validator("senha")(_validar_senha)
+
+
+class TrocarSenhaIn(Schema):
+    senha_atual: str
+    senha_nova: str
+
+    _senha = field_validator("senha_nova")(_validar_senha)
+
+
 class UsuarioIn(Schema):
     nome: str = Field(min_length=2)
     email: str

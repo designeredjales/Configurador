@@ -25,6 +25,8 @@ def usuario_atual(cred: HTTPAuthorizationCredentials | None = Depends(bearer),
     # O perfil e o status valem do banco, não do token: desativar corta o acesso na hora
     if usuario is None or not usuario.ativo or usuario.empresa_id != dados.get("emp"):
         raise NAO_AUTENTICADO
+    if dados.get("ver", 1) != usuario.versao_sessao:  # senha trocada depois deste login
+        raise NAO_AUTENTICADO
     return usuario
 
 

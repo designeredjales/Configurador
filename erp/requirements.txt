@@ -5,8 +5,8 @@ pydantic>=2.7
 python-multipart>=0.0.9
 pyjwt>=2.8
 httpx>=0.27            # emissor de NF-e
-# PostgreSQL em produção:
-# psycopg[binary]>=3.2
+alembic>=1.13          # migrações do banco
+psycopg[binary]>=3.2   # PostgreSQL
 
 # Testes
 pytest>=8

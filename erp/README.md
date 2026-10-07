@@ -58,14 +58,30 @@ Todos os perfis consultam os dados da própria empresa. Detalhes de segurança:
 - Sessão por token JWT (HS256) válido por 12 horas (`ERP_SESSAO_HORAS`). **Defina `ERP_SECRET` em produção**: sem ele, o servidor gera um segredo temporário e todos precisam entrar de novo a cada reinício.
 - O perfil e a situação do usuário são lidos do banco a cada requisição: desativar alguém corta o acesso na hora, mesmo com token emitido.
 - Login com erro não revela se o e-mail existe; a empresa nunca fica sem um administrador ativo.
-- Ainda faltam: recuperação de senha por e-mail, limite de tentativas de login e HTTPS (fica a cargo do servidor de hospedagem).
+- **Recuperação de senha** por e-mail: link de uso único, válido por 1 hora, guardado só como hash; a resposta não revela se o e-mail existe e há no máximo 3 pedidos por hora por endereço.
+- **Trocar a senha** (no menu "Senha"), redefini-la ou o administrador mudar senha ou perfil derruba as outras sessões do usuário na hora (versão de sessão dentro do token).
+- **Limite de tentativas**: 5 senhas erradas em 15 minutos bloqueiam aquele e-mail naquele IP.
+- Cabeçalhos de segurança, `Cache-Control: no-store` na API e `GET /api/saude` para monitoramento. HTTPS fica com o proxy da hospedagem (ver [DEPLOY.md](DEPLOY.md)).
 
-O banco padrão é SQLite (`marcenaria_erp.db`). Em produção, use `DATABASE_URL=postgresql+psycopg://...`.
+O banco padrão de desenvolvimento é SQLite (`marcenaria_erp.db`), com as tabelas criadas na subida. **Produção usa PostgreSQL com migrações**: veja o [guia de hospedagem](DEPLOY.md) (Docker + Postgres, HTTPS, backup).
+
+### Migrações do banco (Alembic)
+
+Mudou um modelo em `app/models.py`? Gere e aplique a migração:
+
+```bash
+alembic revision --autogenerate -m "descreva a mudança"
+alembic upgrade head
+```
+
+O teste `tests/test_migracoes.py` falha se o modelo mudar sem migração.
 
 ## Testes
 
 ```bash
 cd erp && python -m pytest -q
+# a mesma suíte no PostgreSQL:
+ERP_TEST_DATABASE_URL="postgresql+psycopg://usuario@/banco_teste?host=/tmp" python -m pytest -q
 ```
 
 ## Entrada do projeto: XML do Promob
@@ -195,6 +211,10 @@ erp/
       fiscal.py        # NF-e via Focus NFe
       conciliacao.py   # extrato OFX e pareamento com contas
       code128.py       # código de barras das etiquetas
+      limite.py        # limite de tentativas (login, redefinição)
+      email.py         # envio SMTP
+  migrations/          # migrações do banco (Alembic)
+  Dockerfile, docker-compose.yml, DEPLOY.md
     routers/           # API REST (cadastros, projetos, produção)
     static/index.html  # interface web (painel, projetos, OPs, apontamento, materiais)
   tests/               # fluxo completo, XML do Promob, gate, perfis, isolamento entre empresas
@@ -203,10 +223,10 @@ erp/
 
 ## Próximas camadas (roadmap)
 
-1. **Segurança 2.0**: recuperação de senha por e-mail, limite de tentativas de login, registro de auditoria.
+1. **Auditoria**: registro de quem alterou o quê (preços, contratos, baixas), limite de tentativas em Redis para várias instâncias.
 2. **Lados da fita e furação**: ler o XML de máquina do Promob (ou o relatório com bordas) para etiquetas com C1/C2/L1/L2 e programas CNC.
 3. **Integração com a otimizadora** (Corte Certo, Optiplanning) e programas CNC por peça.
 4. **Compras 2.0**: cotação entre fornecedores, envio do pedido por e-mail/WhatsApp, lotes e sobras de chapa reaproveitáveis.
 5. **Pós-obra 2.0**: fotos da obra no checklist, assinatura do cliente na tela e peça de reposição gerando OP.
 6. **Fiscal 2.0**: cancelamento e carta de correção da NF-e, NFS-e da montagem, uma linha por ambiente na nota.
-7. **Alembic** para migrações e PostgreSQL como padrão.
+7. **Operação**: backup automático para nuvem, monitoramento de erros (Sentry) e domínio com e-mail transacional.

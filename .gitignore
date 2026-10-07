@@ -7,3 +7,4 @@ log_erro_importacao.txt
 log_erro_execucao.txt
 *.db
 .pytest_cache/
+.env

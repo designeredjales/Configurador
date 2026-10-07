@@ -1,7 +1,8 @@
 import json
 import os
 
-os.environ["DATABASE_URL"] = "sqlite://"
+# SQLite em memória por padrão; ERP_TEST_DATABASE_URL roda a suíte em outro banco (ex.: PostgreSQL)
+os.environ["DATABASE_URL"] = os.getenv("ERP_TEST_DATABASE_URL", "sqlite://")
 
 import pytest  # noqa: E402
 from fastapi.testclient import TestClient  # noqa: E402
@@ -18,6 +19,9 @@ with open(os.path.join(EXEMPLOS, "materiais.json"), encoding="utf-8") as f:
 
 @pytest.fixture
 def client():
+    from app.services import limite
+    limite.falhas_login._eventos.clear()
+    limite.pedidos_redefinicao._eventos.clear()
     Base.metadata.drop_all(engine)
     with TestClient(app) as c:
         yield c

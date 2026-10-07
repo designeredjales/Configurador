@@ -1,0 +1,38 @@
+# Ambiente completo: ERP + PostgreSQL. Uso: copie .env.exemplo para .env, ajuste e rode
+#   docker compose up -d
+services:
+  banco:
+    image: postgres:16
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: erp
+      POSTGRES_USER: erp
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?defina POSTGRES_PASSWORD no .env}
+    volumes:
+      - dados:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U erp -d erp"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  erp:
+    build: .
+    restart: unless-stopped
+    depends_on:
+      banco:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgresql+psycopg://erp:${POSTGRES_PASSWORD}@banco:5432/erp
+      ERP_SECRET: ${ERP_SECRET:?defina ERP_SECRET no .env (48+ caracteres aleatórios)}
+      ERP_URL_PUBLICA: ${ERP_URL_PUBLICA:-http://localhost:8000}
+      SMTP_HOST: ${SMTP_HOST:-}
+      SMTP_PORTA: ${SMTP_PORTA:-587}
+      SMTP_USUARIO: ${SMTP_USUARIO:-}
+      SMTP_SENHA: ${SMTP_SENHA:-}
+      SMTP_REMETENTE: ${SMTP_REMETENTE:-}
+    ports:
+      - "8000:8000"
+
+volumes:
+  dados:

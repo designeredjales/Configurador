@@ -169,6 +169,8 @@ class Usuario(Base):
     ativo: Mapped[bool] = mapped_column(default=True)
     criado_em: Mapped[datetime] = mapped_column(DateTime, default=agora)
     ultimo_acesso: Mapped[datetime | None] = mapped_column(DateTime)
+    # Vai dentro do token: trocar a senha incrementa e derruba todas as sessões antigas
+    versao_sessao: Mapped[int] = mapped_column(Integer, default=1)
 
     empresa: Mapped[Empresa] = relationship()
 
@@ -634,3 +636,17 @@ class NotaFiscal(Base):
     atualizado_em: Mapped[datetime] = mapped_column(DateTime, default=agora)
 
     projeto: Mapped[Projeto] = relationship()
+
+
+class RedefinicaoSenha(Base):
+    """Pedido de redefinição de senha. Só o hash do token fica no banco."""
+    __tablename__ = "redefinicoes_senha"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    usuario_id: Mapped[int] = mapped_column(ForeignKey("usuarios.id"), index=True)
+    token_hash: Mapped[str] = mapped_column(String(64), unique=True)
+    expira_em: Mapped[datetime] = mapped_column(DateTime)
+    usado_em: Mapped[datetime | None] = mapped_column(DateTime)
+    criado_em: Mapped[datetime] = mapped_column(DateTime, default=agora)
+
+    usuario: Mapped[Usuario] = relationship()

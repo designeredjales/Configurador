@@ -120,7 +120,19 @@ td input.num { width: 90px; text-align: right; }
         <label>Senha <input id="l-senha" type="password" autocomplete="current-password" required></label>
         <button class="btn" type="submit">Entrar</button>
       </form>
-      <p class="troca">Primeira vez? <a id="ir-registro">Cadastre sua empresa</a></p>
+      <p class="troca"><a id="ir-esqueci">Esqueci a senha</a> · Primeira vez? <a id="ir-registro">Cadastre sua empresa</a></p>
+    </div>
+    <div id="form-esqueci" hidden>
+      <p class="dica">Informe o e-mail de acesso. Se ele estiver cadastrado, enviamos um link para criar uma nova senha (vale por 1 hora).</p>
+      <form id="esqueci"><label>E-mail <input id="e-email" type="email" autocomplete="username" required></label>
+        <button class="btn" type="submit">Enviar link</button></form>
+      <p class="troca"><a class="voltar-login">Voltar ao login</a></p>
+    </div>
+    <div id="form-redefinir" hidden>
+      <p class="dica">Crie uma nova senha. Ao salvar, todos os acessos abertos com a senha antiga são encerrados.</p>
+      <form id="redefinir"><label>Nova senha (mínimo 8 caracteres) <input id="n-senha" type="password" autocomplete="new-password" required minlength="8"></label>
+        <button class="btn" type="submit">Salvar nova senha</button></form>
+      <p class="troca"><a class="voltar-login">Voltar ao login</a></p>
     </div>
     <div id="form-registro" hidden>
       <p class="dica">Cadastre a empresa. Você será o administrador e poderá convidar a equipe depois.</p>
@@ -153,9 +165,19 @@ td input.num { width: 90px; text-align: right; }
     <button data-aba="materiais">Materiais</button>
     <button data-aba="usuarios">Usuários</button>
   </nav>
-  <div id="sessao"><span id="empresa"></span><span id="quem"></span><button class="btn sec" id="sair" type="button">Sair</button></div>
+  <div id="sessao"><span id="empresa"></span><span id="quem"></span><button class="btn sec" id="btn-senha" type="button">Senha</button><button class="btn sec" id="sair" type="button">Sair</button></div>
 </header>
 <main>
+  <div class="card" id="troca-senha" hidden>
+    <h2>Trocar minha senha</h2>
+    <p class="dica">Os outros acessos abertos com a senha atual serão encerrados; este continua.</p>
+    <div class="linha">
+      <input id="ts-atual" type="password" placeholder="Senha atual" autocomplete="current-password">
+      <input id="ts-nova" type="password" placeholder="Nova senha (8+)" autocomplete="new-password">
+      <button class="btn" onclick="trocarSenha()">Salvar</button><button class="btn sec" onclick="$('troca-senha').hidden = true">Fechar</button>
+    </div><div id="ts-msg"></div>
+  </div>
+
   <section id="indicadores">
     <div class="linha"><label class="dica" for="ind-dias">Período</label>
       <select id="ind-dias"><option value="30">Últimos 30 dias</option><option value="90" selected>Últimos 90 dias</option>
@@ -1129,7 +1151,7 @@ const VE_FINANCEIRO = () => ["ADMIN", "GESTOR", "FINANCEIRO"].includes(sessao?.u
 
 function mostrarAcesso(msg) {
   sessao = null; $("app").hidden = true; $("tela-acesso").hidden = false;
-  $("form-login").hidden = false; $("form-registro").hidden = true; $("l-senha").value = "";
+  mostrarForm("form-login"); $("l-senha").value = "";
   $("acesso-msg").innerHTML = msg ? `<div class="msg err">${esc(msg)}</div>` : "";
 }
 
@@ -1158,8 +1180,34 @@ $("login").addEventListener("submit", (ev) => { ev.preventDefault();
 $("registro").addEventListener("submit", (ev) => { ev.preventDefault();
   enviarAcesso("/api/auth/registrar", {empresa: $("r-empresa").value, nome: $("r-nome").value,
     email: $("r-email").value, senha: $("r-senha").value}); });
-$("ir-registro").onclick = () => { $("form-login").hidden = true; $("form-registro").hidden = false; $("acesso-msg").innerHTML = ""; };
-$("ir-login").onclick = () => { $("form-login").hidden = false; $("form-registro").hidden = true; $("acesso-msg").innerHTML = ""; };
+function mostrarForm(id) {
+  ["form-login", "form-registro", "form-esqueci", "form-redefinir"].forEach((f) => $(f).hidden = f !== id);
+  $("acesso-msg").innerHTML = "";
+}
+$("ir-registro").onclick = () => mostrarForm("form-registro");
+$("ir-login").onclick = () => mostrarForm("form-login");
+$("ir-esqueci").onclick = () => { mostrarForm("form-esqueci"); $("e-email").value = $("l-email").value; };
+document.querySelectorAll(".voltar-login").forEach((a) => a.onclick = () => { history.replaceState(null, "", location.pathname); mostrarForm("form-login"); });
+$("esqueci").addEventListener("submit", async (ev) => {
+  ev.preventDefault();
+  const r = await fetch("/api/auth/esqueci", {method: "POST", headers: {"Content-Type": "application/json"}, body: JSON.stringify({email: $("e-email").value})});
+  const d = await r.json().catch(() => ({}));
+  $("acesso-msg").innerHTML = `<div class="msg ok">${esc(d.mensagem || "Pedido registrado.")}</div>`;
+});
+$("redefinir").addEventListener("submit", (ev) => {
+  ev.preventDefault();
+  const token = (location.hash.match(/redefinir=([\w-]+)/) || [])[1];
+  history.replaceState(null, "", location.pathname);  // o token não fica na barra de endereço
+  enviarAcesso("/api/auth/redefinir", {token, senha: $("n-senha").value});
+});
+$("btn-senha").onclick = () => { $("troca-senha").hidden = false; $("ts-atual").focus(); };
+async function trocarSenha() {
+  try {
+    const s = await api("/api/auth/senha", {method: "POST", json: {senha_atual: $("ts-atual").value, senha_nova: $("ts-nova").value}});
+    guardarToken(s.token); $("ts-atual").value = $("ts-nova").value = "";
+    $("ts-msg").innerHTML = `<div class="msg ok">Senha alterada. Os outros acessos foram encerrados.</div>`;
+  } catch (e) { $("ts-msg").innerHTML = `<div class="msg err">${esc(e.message.replace(/Value error, /g, ""))}</div>`; }
+}
 $("sair").onclick = () => { guardarToken(null); mostrarAcesso(); };
 
 // --- Usuários (administrador) ----------------------------------------------
@@ -1189,7 +1237,11 @@ async function criarUsuario() {
   } catch (e) { $("u-msg").innerHTML = `<div class="msg err">${esc(e.message.replace(/Value error, /g, ""))}</div>`; }
 }
 
+// Link de redefinição: vale tanto abrindo a página nova quanto com o ERP já aberto
+window.addEventListener("hashchange", () => { if (/redefinir=/.test(location.hash)) { mostrarAcesso(); mostrarForm("form-redefinir"); } });
+
 async function iniciar() {
+  if (/redefinir=/.test(location.hash)) { mostrarAcesso(); mostrarForm("form-redefinir"); return; }
   if (!token) return mostrarAcesso();
   try { entrar(await api("/api/auth/eu")); } catch (e) { mostrarAcesso(); }
 }
