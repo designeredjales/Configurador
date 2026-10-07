@@ -1,3 +1,5 @@
+from datetime import date
+
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
 from sqlalchemy import func, select
 from sqlalchemy.exc import IntegrityError
@@ -6,7 +8,7 @@ from sqlalchemy.orm import Session
 from ..db import get_db
 from ..deps import ENGENHARIA, empresa_atual
 from ..models import Cliente, Empresa, Projeto, StatusProjeto
-from ..schemas import ConsumoProjeto, ProjetoIn, ProjetoOut, ProjetoResumo, ResultadoImportacao
+from ..schemas import ConsumoProjeto, ProjetoAtualizar, ProjetoIn, ProjetoOut, ProjetoResumo, ResultadoImportacao
 from ..services import engenharia
 from ..services.importacao import ErroImportacao, eh_xml, importar_csv, importar_promob_xml
 
@@ -46,15 +48,16 @@ def criar(dados: ProjetoIn, emp: Empresa = Depends(empresa_atual), db: Session =
 @router.post("/importar-xml", response_model=ResultadoImportacao, status_code=201,
              dependencies=[Depends(ENGENHARIA)])
 async def novo_por_xml(arquivo: UploadFile = File(...), codigo: str | None = Form(None),
-                       nome: str | None = Form(None), emp: Empresa = Depends(empresa_atual),
-                       db: Session = Depends(get_db)):
+                       nome: str | None = Form(None), data_entrega: date | None = Form(None),
+                       emp: Empresa = Depends(empresa_atual), db: Session = Depends(get_db)):
     """Cria o projeto inteiro a partir do XML do Promob (entrada padrão do ERP)."""
     bruto = await arquivo.read()
     if not eh_xml(bruto):
         raise HTTPException(422, "Envie o XML exportado do Promob (Orçamento-Explodido c/ Operação).")
     base = (arquivo.filename or "Projeto Promob").rsplit(".", 1)[0]
     codigo = (codigo or "").strip() or _proximo_codigo(db, emp.id)
-    projeto = Projeto(empresa_id=emp.id, codigo=codigo, nome=(nome or "").strip() or base)
+    projeto = Projeto(empresa_id=emp.id, codigo=codigo, nome=(nome or "").strip() or base,
+                      data_entrega=data_entrega)
     db.add(projeto)
     try:
         db.flush()
@@ -78,6 +81,19 @@ def _proximo_codigo(db: Session, empresa_id: int) -> str:
                                              Projeto.codigo == f"P-{n:04d}")):
         n += 1
     return f"P-{n:04d}"
+
+
+@router.patch("/{projeto_id}", response_model=ProjetoResumo, dependencies=[Depends(ENGENHARIA)])
+def atualizar(projeto_id: int, dados: ProjetoAtualizar, emp: Empresa = Depends(empresa_atual),
+              db: Session = Depends(get_db)):
+    """Nome e data de entrega combinada com o cliente (base da pontualidade)."""
+    projeto = carregar(db, emp, projeto_id)
+    for campo, valor in dados.model_dump(exclude_unset=True).items():
+        if campo == "nome" and not valor:
+            raise HTTPException(422, "O nome não pode ficar vazio.")
+        setattr(projeto, campo, valor)
+    db.commit()
+    return projeto
 
 
 @router.get("/{projeto_id}", response_model=ProjetoOut)

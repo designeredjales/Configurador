@@ -213,6 +213,11 @@ class ProjetoIn(Schema):
     data_entrega: date | None = None
 
 
+class ProjetoAtualizar(Schema):
+    nome: str | None = Field(None, min_length=2)
+    data_entrega: date | None = None
+
+
 class ProjetoResumo(Schema):
     id: int
     codigo: str

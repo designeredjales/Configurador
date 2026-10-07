@@ -5,10 +5,11 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from ..db import get_db
-from ..deps import FINANCEIRO
+from ..deps import FINANCEIRO, exigir
+from ..models import Perfil
 from ..models import Fornecedor, Lancamento, Projeto, TipoLancamento, Usuario
 from ..schemas import BaixaIn, ContratoIn, DREObra, FluxoCaixa, LancamentoIn, LancamentoOut, ProjetoResumo
-from ..services import financeiro
+from ..services import financeiro, indicadores
 
 router = APIRouter(prefix="/api", tags=["financeiro"])
 # Valores financeiros só para administrador, gestor e financeiro (leitura inclusive)
@@ -111,3 +112,10 @@ def excluir(lanc_id: int, usuario: Usuario = Depends(FINANCEIRO), db: Session = 
 @router.get("/financeiro/fluxo", response_model=FluxoCaixa)
 def fluxo(meses: int = 6, usuario: Usuario = Depends(FINANCEIRO), db: Session = Depends(get_db)):
     return financeiro.fluxo_caixa(db, usuario.empresa_id, max(1, min(meses, 24)))
+
+
+@router.get("/indicadores")
+def painel_do_dono(dias: int = 90, usuario: Usuario = Depends(exigir(Perfil.GESTOR)),
+                   db: Session = Depends(get_db)):
+    """Indicadores consolidados (administrador e gestor)."""
+    return indicadores.calcular(db, usuario.empresa_id, max(7, min(dias, 730)))

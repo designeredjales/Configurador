@@ -27,6 +27,7 @@ section { display: none; } section.ativo { display: block; }
 .card { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 16px; margin-bottom: 16px; }
 .card h2 { font-size: 15px; margin: 18px 0 10px; } .card h2:first-child { margin-top: 0; }
 .grid { display: grid; gap: 12px; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); }
+.grid { margin-bottom: 16px; } .grid > .card { margin-bottom: 0; }
 .kpi { font-size: 28px; font-weight: 700; } .kpi small { display: block; font-size: 12px; font-weight: 400; color: var(--muted); }
 table { width: 100%; border-collapse: collapse; } th, td { text-align: left; padding: 7px 8px; border-bottom: 1px solid var(--line); }
 th { color: var(--muted); font-weight: 600; font-size: 12px; text-transform: uppercase; }
@@ -70,6 +71,29 @@ td input.num { width: 90px; text-align: right; }
 .tag.EM_ANDAMENTO { background: var(--warn); color: #fff; }
 .tag.ENTREGUE, .tag.RESOLVIDO { background: var(--ok); color: #fff; }
 .check { display: grid; gap: 6px; } .check label { display: flex; gap: 10px; align-items: center; padding: 8px 10px; border: 1px solid var(--line); border-radius: 8px; }
+#ind-kpis { grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); }
+@media (max-width: 640px) {
+  header nav { flex-wrap: nowrap; overflow-x: auto; width: 100%; scrollbar-width: none; -webkit-overflow-scrolling: touch; }
+  header nav button { flex: none; }
+  #ind-kpis .kpi { font-size: 21px; padding: 12px; }
+}
+.ind-grade { display: grid; gap: 16px; grid-template-columns: repeat(auto-fit, minmax(min(100%, 460px), 1fr)); }
+.ind-grade .card { margin: 0; min-width: 0; }
+.kpi .sub { display: block; font-size: 12px; font-weight: 400; color: var(--muted); margin-top: 2px; }
+.kpi.alerta { border-color: var(--err); }
+.hbar { display: grid; grid-template-columns: minmax(70px, 120px) 1fr auto; gap: 4px 10px; align-items: center; font-size: 13px; }
+.hbar .rot { color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.hbar .trilho { height: 14px; position: relative; border-left: 1px solid var(--line); }
+.hbar .barra-v { height: 100%; background: var(--brand); border-radius: 0 4px 4px 0; min-width: 2px; }
+.hbar .barra-v.neg { background: var(--err); }
+.hbar .val { font-variant-numeric: tabular-nums; text-align: right; color: var(--ink); white-space: nowrap; }
+.colunas { display: grid; grid-auto-flow: column; grid-auto-columns: 1fr; gap: 8px; align-items: end; height: 170px; padding-top: 18px; border-bottom: 1px solid var(--line); }
+.colunas .col { display: flex; flex-direction: column; align-items: center; justify-content: flex-end; height: 100%; gap: 4px; min-width: 0; }
+.colunas .col i { display: block; width: min(38px, 70%); background: var(--brand); border-radius: 4px 4px 0 0; min-height: 2px; }
+.colunas .col span { font-size: 11px; color: var(--ink); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.eixo-x { display: grid; grid-auto-flow: column; grid-auto-columns: 1fr; gap: 8px; font-size: 11px; color: var(--muted); text-align: center; margin-top: 4px; }
+.alertas { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; font-size: 13px; }
+.alertas li { display: flex; gap: 8px; align-items: baseline; }
 .check input[type=checkbox] { width: 20px; height: 20px; accent-color: var(--ok); } .check small { color: var(--muted); margin-left: auto; } .tag.PAGO { background: var(--ok); color: #fff; }
 .cfg { display: grid; gap: 10px; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); }
 .cfg label { display: grid; gap: 4px; font-size: 13px; color: var(--muted); }
@@ -115,6 +139,7 @@ td input.num { width: 90px; text-align: right; }
 <header>
   <h1>ERP <span>Moveleiro</span></h1>
   <nav id="abas">
+    <button data-aba="indicadores">Indicadores</button>
     <button data-aba="painel">Painel PCP</button>
     <button data-aba="projetos">Projetos</button>
     <button data-aba="ops">Ordens de Produção</button>
@@ -130,6 +155,19 @@ td input.num { width: 90px; text-align: right; }
   <div id="sessao"><span id="empresa"></span><span id="quem"></span><button class="btn sec" id="sair" type="button">Sair</button></div>
 </header>
 <main>
+  <section id="indicadores">
+    <div class="linha"><label class="dica" for="ind-dias">Período</label>
+      <select id="ind-dias"><option value="30">Últimos 30 dias</option><option value="90" selected>Últimos 90 dias</option>
+        <option value="180">Últimos 6 meses</option><option value="365">Últimos 12 meses</option></select></div>
+    <div class="grid" id="ind-kpis"></div>
+    <div class="ind-grade">
+      <div class="card"><h2>Vendas contratadas por mês</h2><div id="ind-vendas"></div></div>
+      <div class="card"><h2>Alertas</h2><div id="ind-alertas"></div></div>
+      <div class="card"><h2>Margem de contribuição por obra</h2><p class="dica">Obras com produção concluída no período, da menor para a maior margem.</p><div id="ind-margem"></div></div>
+      <div class="card"><h2>Fábrica: tempo de passagem por setor</h2><p class="dica">Horas médias entre a baixa anterior (ou a criação da OP) e a baixa no setor.</p><div id="ind-setores"></div></div>
+    </div>
+  </section>
+
   <section id="painel">
     <div class="grid" id="kpis"></div>
     <div class="card"><h2>Fila por centro de trabalho</h2><div class="tabela" id="filas"></div></div>
@@ -365,7 +403,7 @@ function tabela(colunas, linhas) {
 // --- Navegação --------------------------------------------------------------
 const carregadores = {painel: carregarPainel, projetos: carregarProjetos, ops: carregarOps, usuarios: carregarUsuarios,
                       estoque: carregarEstoque, compras: carregarCompras, financeiro: carregarFinanceiro,
-                      montagem: carregarMontagem, assistencia: carregarAssistencia,
+                      montagem: carregarMontagem, assistencia: carregarAssistencia, indicadores: carregarIndicadores,
                       apontamento: carregarApontamento, materiais: carregarMateriais};
 function abrir(aba) {
   document.querySelectorAll("section").forEach((s) => s.classList.toggle("ativo", s.id === aba));
@@ -428,6 +466,10 @@ async function verProjeto(id) {
   $("det-projeto").hidden = false;
   $("det-projeto").innerHTML = `
     <h2>${esc(p.codigo)} · ${esc(p.nome)} ${tag(p.status)}</h2>
+    <div class="linha"><label class="dica" for="pj-entrega">Entrega combinada com o cliente</label>
+      <input id="pj-entrega" type="date" value="${p.data_entrega || ""}">
+      <button class="btn sec" onclick="salvarEntrega(${id})">Salvar data</button>
+      ${p.data_entrega ? "" : `<span class="dica">Sem data, o projeto fica fora do indicador de pontualidade.</span>`}</div>
     <div class="linha">
       ${editavel ? `<input type="file" id="arq" accept=".xml,.csv"><button class="btn sec" onclick="importar(${id})">Reimportar XML do Promob</button>
       <button class="btn" onclick="liberar(${id})">Liberar para a fábrica</button>` : ""}
@@ -484,6 +526,12 @@ async function registrarContrato(id) {
     await verProjeto(id);
   } catch (e) { $("ct-msg").innerHTML = `<div class="msg err">${esc(e.message)}</div>`; }
 }
+
+async function salvarEntrega(id) {
+  try { await api(`/api/projetos/${id}`, {method: "PATCH", json: {data_entrega: $("pj-entrega").value || null}}); await carregarProjetos(); await verProjeto(id); avisoProjeto("Data de entrega salva."); }
+  catch (e) { $("proj-msg").innerHTML = `<div class="msg err">${esc(e.message)}</div>`; }
+}
+function avisoProjeto(t) { const m = $("proj-msg"); if (m) m.insertAdjacentHTML("afterbegin", `<div class="msg ok">${esc(t)}</div>`); }
 
 async function importar(id) {
   const arquivo = $("arq").files[0];
@@ -767,6 +815,50 @@ async function criarFornecedor() {
   } catch (e) { $("f-msg").innerHTML = `<div class="msg err">${esc(e.message)}</div>`; }
 }
 
+// --- Indicadores do dono ------------------------------------------------------
+const pct = (v) => v == null ? "—" : `${num(v, 1)}%`;
+const dias = (v) => v == null ? "—" : `${num(v, 1)} dia${v === 1 ? "" : "s"}`;
+function barrasH(itens, rotulo, valor, formato, extra = () => "") {
+  if (!itens.length) return `<p class="dica">Sem dados no período.</p>`;
+  const max = Math.max(...itens.map((i) => Math.abs(valor(i))), 1e-9);
+  return `<div class="hbar" role="list">${itens.map((i) => {
+    const v = valor(i);
+    return `<span class="rot" title="${esc(rotulo(i))}">${esc(rotulo(i))}</span>
+      <span class="trilho" role="listitem" title="${esc(rotulo(i))}: ${formato(v)}"><span class="barra-v ${v < 0 ? "neg" : ""}" style="width:${Math.abs(v) / max * 100}%; display:block"></span></span>
+      <span class="val">${formato(v)}${extra(i)}</span>`; }).join("")}</div>`;
+}
+async function carregarIndicadores() {
+  const d = await api(`/api/indicadores?dias=${$("ind-dias").value}`);
+  const c = d.comercial, m = d.margem, p = d.prazo, q = d.qualidade, cx = d.caixa;
+  const tile = (valor, rotulo, sub = "", alerta = false) => `<div class="card kpi ${alerta ? "alerta" : ""}">${valor}<small>${rotulo}</small>${sub ? `<span class="sub">${sub}</span>` : ""}</div>`;
+  $("ind-kpis").innerHTML = [
+    tile(brl(c.faturamento), "Vendas contratadas", `${c.contratos} contrato(s) · ticket ${c.ticket_medio ? brl(c.ticket_medio) : "—"}`),
+    tile(pct(m.margem_media_pct), "Margem de contribuição", `${m.obras} obra(s) concluída(s)`, m.margem_media_pct != null && m.margem_media_pct < 20),
+    tile(pct(p.pontualidade_pct), "Entregas no prazo", `${p.entregas} entrega(s)`, p.pontualidade_pct != null && p.pontualidade_pct < 80),
+    tile(dias(p.lead_time_venda_dias), "Do contrato à entrega", `fábrica: ${dias(p.lead_time_fabrica_dias)}`),
+    tile(pct(q.taxa_retrabalho_pct), "Retrabalho por entrega", `${q.retrabalhos} retrabalho(s) · ${brl(q.custo_assistencia)}`, q.taxa_retrabalho_pct != null && q.taxa_retrabalho_pct > 10),
+    tile(brl(cx.vencido_receber), "A receber vencido", `a pagar vencido: ${brl(cx.vencido_pagar)}`, cx.vencido_receber > 0),
+  ].join("");
+  const maxV = Math.max(...c.por_mes.map((x) => x.valor), 1e-9);
+  $("ind-vendas").innerHTML = `<div class="colunas">${c.por_mes.map((x) => `<div class="col" title="${MES(x.mes)}: ${brl(x.valor)}">
+      <span>${x.valor ? brl(x.valor).replace(",00", "") : ""}</span><i style="height:${x.valor / maxV * 100}%"></i></div>`).join("")}</div>
+    <div class="eixo-x">${c.por_mes.map((x) => `<span>${MES(x.mes)}</span>`).join("")}</div>`;
+  $("ind-margem").innerHTML = barrasH(m.projetos, (x) => x.codigo, (x) => x.margem_pct, (v) => pct(v),
+    (x) => ` <small class="dica">${brl(x.margem)}${x.material_base === "PREVISTO" ? " · material previsto" : ""}</small>`);
+  $("ind-setores").innerHTML = barrasH(d.fabrica.setores.filter((x) => x.passagem_media_h != null), (x) => x.centro_codigo,
+    (x) => x.passagem_media_h, (v) => `${num(v, 1)} h`,
+    (x) => ` <small class="dica">${x.pecas_no_periodo} peças · fila ${x.na_fila}</small>${x.centro_codigo === d.fabrica.gargalo ? ` <span class="tag FALTA">Gargalo</span>` : ""}`);
+  const alertas = [
+    ...p.atrasados_hoje.map((a) => `<li><span class="tag VENCIDO">Atrasado</span> <b>${esc(a.codigo)}</b> ${esc(a.nome)}: ${a.dias_atraso} dia(s) após ${dataBR(a.data_entrega)} (${a.status})</li>`),
+    cx.materiais_em_falta ? `<li><span class="tag FALTA">Compras</span> ${cx.materiais_em_falta} material(is) reservado(s) sem saldo suficiente</li>` : "",
+    q.chamados_abertos ? `<li><span class="tag MINIMO">Assistência</span> ${q.chamados_abertos} chamado(s) em aberto</li>` : "",
+    cx.vencido_receber ? `<li><span class="tag VENCIDO">Caixa</span> ${brl(cx.vencido_receber)} a receber vencido</li>` : "",
+    d.fabrica.gargalo ? `<li><span class="tag MINIMO">Fábrica</span> gargalo atual: <b>${esc(d.fabrica.gargalo)}</b></li>` : "",
+  ].filter(Boolean);
+  $("ind-alertas").innerHTML = alertas.length ? `<ul class="alertas">${alertas.join("")}</ul>` : `<p class="dica">Nenhum alerta. Operação dentro do esperado.</p>`;
+}
+$("ind-dias").onchange = () => carregarIndicadores().catch((e) => alert(e.message));
+
 // --- Montagem ---------------------------------------------------------------
 const PODE_MONTAR = ["LIBERADO", "PRODUCAO", "CONCLUIDO"];
 async function carregarMontagem() {
@@ -935,8 +1027,8 @@ async function salvarEmpresa() {
 
 // --- Acesso -----------------------------------------------------------------
 const ABAS = {
-  ADMIN: ["painel", "projetos", "ops", "apontamento", "montagem", "assistencia", "estoque", "compras", "financeiro", "materiais", "usuarios"],
-  GESTOR: ["painel", "projetos", "ops", "apontamento", "montagem", "assistencia", "estoque", "compras", "financeiro", "materiais"],
+  ADMIN: ["indicadores", "painel", "projetos", "ops", "apontamento", "montagem", "assistencia", "estoque", "compras", "financeiro", "materiais", "usuarios"],
+  GESTOR: ["indicadores", "painel", "projetos", "ops", "apontamento", "montagem", "assistencia", "estoque", "compras", "financeiro", "materiais"],
   MONTAGEM: ["montagem", "assistencia", "ops", "painel"],
   FINANCEIRO: ["financeiro", "projetos", "painel"],
   ENGENHARIA: ["painel", "projetos", "ops", "estoque", "materiais"],

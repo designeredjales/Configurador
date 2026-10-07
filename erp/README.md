@@ -22,6 +22,7 @@ Projeto (Promob) → Engenharia (BOM + consumo + gate) → Ordem de Produção �
 | **Estoque** | Saldo por movimentação, reserva automática na liberação do projeto, baixa automática na conclusão, inventário com ajuste pela diferença, custo médio ponderado |
 | **Comercial** | Valor de tabela, pedido à fábrica, venda ao cliente, frete, montagem e condição de pagamento lidos do XML; contrato gera as parcelas a receber |
 | **Financeiro** | Contas a receber e a pagar (a compra recebida vira conta a pagar no prazo do fornecedor), baixas, fluxo de caixa de 6 meses, **DRE por obra** (receita − impostos − material − custos diretos = margem de contribuição) |
+| **Indicadores do dono** | Painel único: vendas contratadas, margem de contribuição ponderada, pontualidade, prazo contrato→entrega, gargalo da fábrica, retrabalho, caixa vencido e alertas |
 | **Montagem e pós-obra** | Agenda de montagem (só inicia com a produção concluída), checklist de entrega com quem conferiu, entrega com nome de quem recebeu; assistência técnica com garantia, causa raiz e custo lançado no DRE da obra |
 | **Compras (MRP)** | Sugestão de compra = reservado + mínimo − saldo − em pedido; pedido ao fornecedor, envio, recebimento parcial ou total, cancelamento |
 
@@ -117,6 +118,22 @@ Saldo negativo é permitido e aparece em vermelho: indica consumo sem entrada re
 - **Fluxo de caixa** (`GET /api/financeiro/fluxo`): previsto por vencimento (atrasado entra no mês atual) e realizado por data de baixa, com saldo acumulado.
 - **Configurações** (`PUT /api/empresas/atual`, administrador): perdas, imposto sobre a venda, chapa padrão, serra e refilo.
 
+## Indicadores do dono
+
+`GET /api/indicadores?dias=90` (Administrador e Gestor), também a tela inicial desses perfis:
+
+| Indicador | Cálculo |
+|---|---|
+| Vendas contratadas | Soma dos contratos registrados no período, nº de contratos e ticket médio; série dos últimos 6 meses |
+| Margem de contribuição | Σ margem ÷ Σ receita das obras com produção concluída no período (DRE de cada obra) |
+| Entregas no prazo | Entregues até a data combinada ÷ entregues com data combinada |
+| Prazo | Dias do contrato à entrega; dias da liberação ao fim da produção |
+| Gargalo | Setor com maior tempo de passagem medido (≥ 6 min); sem medição, a maior fila |
+| Retrabalho | Assistências com causa interna ÷ entregas; custo de assistência sobre as vendas |
+| Caixa e estoque | A receber e a pagar vencidos, materiais reservados sem saldo |
+
+A data de entrega combinada se informa no projeto (`PATCH /api/projetos/{id}`) ou na importação do XML (`data_entrega`).
+
 ## Montagem e pós-obra
 
 - **Agenda** (`POST /api/montagens`): a partir da liberação, uma montagem ativa por projeto, com o checklist padrão de 7 itens.
@@ -159,6 +176,7 @@ erp/
       corte.py         # otimizador de plano de corte
       financeiro.py    # contrato, contas, DRE por obra, fluxo de caixa
       pos_obra.py      # montagem, checklist de entrega, assistência técnica
+      indicadores.py   # painel do dono
     routers/           # API REST (cadastros, projetos, produção)
     static/index.html  # interface web (painel, projetos, OPs, apontamento, materiais)
   tests/               # fluxo completo, XML do Promob, gate, perfis, isolamento entre empresas
