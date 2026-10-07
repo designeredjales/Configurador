@@ -72,7 +72,7 @@ def consumir_projeto(db: Session, projeto: Projeto, usuario_id: int | None = Non
         db.add(MovimentoEstoque(
             empresa_id=r.empresa_id, material_id=r.material_id, quantidade=-r.quantidade,
             custo_unitario=r.material.custo_unitario, origem=OrigemMovimento.CONSUMO,
-            referencia=f"Projeto {projeto.codigo}", usuario_id=usuario_id,
+            referencia=f"Projeto {projeto.codigo}", projeto_id=projeto.id, usuario_id=usuario_id,
         ))
         r.baixada_em = agora
     db.flush()

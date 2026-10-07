@@ -50,6 +50,7 @@ class Perfil(str, Enum):
     ENGENHARIA = "ENGENHARIA"  # projetos, importação, liberação, materiais
     PCP = "PCP"                # ordens de produção, centros, apontamento
     COMPRAS = "COMPRAS"        # fornecedores, pedidos, recebimento, estoque
+    FINANCEIRO = "FINANCEIRO"  # contratos, contas a pagar e receber, DRE
     OPERADOR = "OPERADOR"      # apontamento e consulta
 
 
@@ -65,6 +66,23 @@ class OrigemMovimento(str, Enum):
     RECEBIMENTO = "RECEBIMENTO"
     CONSUMO = "CONSUMO"        # baixa da reserva quando o projeto conclui
     INVENTARIO = "INVENTARIO"  # ajuste de contagem física
+
+
+class TipoLancamento(str, Enum):
+    RECEBER = "RECEBER"
+    PAGAR = "PAGAR"
+
+
+class Categoria(str, Enum):
+    VENDA = "VENDA"
+    MATERIAL = "MATERIAL"
+    MAO_DE_OBRA = "MAO_DE_OBRA"
+    FRETE = "FRETE"
+    MONTAGEM = "MONTAGEM"
+    COMISSAO = "COMISSAO"
+    IMPOSTO = "IMPOSTO"
+    DESPESA_FIXA = "DESPESA_FIXA"
+    OUTROS = "OUTROS"
 
 
 class RegraCentro(str, Enum):
@@ -87,6 +105,8 @@ class Empresa(Base):
     chapa_largura_mm: Mapped[float] = mapped_column(Float, default=1850.0)
     serra_mm: Mapped[float] = mapped_column(Float, default=4.0)
     refilo_mm: Mapped[float] = mapped_column(Float, default=10.0)
+    # Imposto sobre a venda (ex.: alíquota do Simples) usado no DRE por obra
+    imposto_venda_pct: Mapped[float] = mapped_column(Float, default=0.0)
     criado_em: Mapped[datetime] = mapped_column(DateTime, default=agora)
 
 
@@ -128,6 +148,7 @@ class Fornecedor(Base):
     telefone: Mapped[str | None] = mapped_column(String(30))
     email: Mapped[str | None] = mapped_column(String(200))
     prazo_dias: Mapped[int] = mapped_column(Integer, default=7)
+    prazo_pagamento_dias: Mapped[int] = mapped_column(Integer, default=30)
 
 
 class Material(Base):
@@ -174,6 +195,16 @@ class Projeto(Base):
     origem: Mapped[str] = mapped_column(String(30), default="MANUAL")
     data_entrega: Mapped[date | None] = mapped_column(Date)
     criado_em: Mapped[datetime] = mapped_column(DateTime, default=agora)
+    # Comercial (vem do XML do Promob e é confirmado no contrato)
+    valor_tabela: Mapped[float | None] = mapped_column(Float)
+    valor_pedido: Mapped[float | None] = mapped_column(Float)
+    valor_venda: Mapped[float | None] = mapped_column(Float)
+    frete_orcado: Mapped[float | None] = mapped_column(Float)
+    montagem_orcada: Mapped[float | None] = mapped_column(Float)
+    condicao_pagamento: Mapped[str | None] = mapped_column(String(120))
+    parcelas_sugeridas: Mapped[int | None] = mapped_column(Integer)
+    entrada_sugerida: Mapped[bool | None] = mapped_column()
+    contrato_em: Mapped[date | None] = mapped_column(Date)
 
     cliente: Mapped[Cliente | None] = relationship()
     ambientes: Mapped[list["Ambiente"]] = relationship(
@@ -381,6 +412,7 @@ class MovimentoEstoque(Base):
     origem: Mapped[OrigemMovimento] = mapped_column(String(20))
     referencia: Mapped[str | None] = mapped_column(String(80))
     observacao: Mapped[str | None] = mapped_column(String(300))
+    projeto_id: Mapped[int | None] = mapped_column(ForeignKey("projetos.id"), index=True)
     usuario_id: Mapped[int | None] = mapped_column(ForeignKey("usuarios.id"))
     criado_em: Mapped[datetime] = mapped_column(DateTime, default=agora)
 
@@ -401,3 +433,28 @@ class Reserva(Base):
 
     material: Mapped[Material] = relationship()
     projeto: Mapped[Projeto] = relationship()
+
+
+class Lancamento(Base):
+    """Conta a receber ou a pagar. Vinculada a projeto quando é receita ou custo da obra."""
+    __tablename__ = "lancamentos"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    empresa_id: Mapped[int] = mapped_column(ForeignKey("empresas.id"), index=True)
+    tipo: Mapped[TipoLancamento] = mapped_column(String(10))
+    categoria: Mapped[Categoria] = mapped_column(String(20))
+    descricao: Mapped[str] = mapped_column(String(200))
+    valor: Mapped[float] = mapped_column(Float)
+    vencimento: Mapped[date] = mapped_column(Date, index=True)
+    pago_em: Mapped[date | None] = mapped_column(Date)
+    valor_pago: Mapped[float | None] = mapped_column(Float)
+    projeto_id: Mapped[int | None] = mapped_column(ForeignKey("projetos.id"), index=True)
+    pedido_id: Mapped[int | None] = mapped_column(ForeignKey("pedidos_compra.id"))
+    cliente_id: Mapped[int | None] = mapped_column(ForeignKey("clientes.id"))
+    fornecedor_id: Mapped[int | None] = mapped_column(ForeignKey("fornecedores.id"))
+    usuario_id: Mapped[int | None] = mapped_column(ForeignKey("usuarios.id"))
+    criado_em: Mapped[datetime] = mapped_column(DateTime, default=agora)
+
+    projeto: Mapped[Projeto | None] = relationship()
+    fornecedor: Mapped[Fornecedor | None] = relationship()
+    cliente: Mapped[Cliente | None] = relationship()

@@ -2,7 +2,7 @@ from datetime import date, datetime
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
-from .models import Perfil, RegraCentro, StatusOP, StatusProjeto, TipoMaterial
+from .models import Categoria, Perfil, RegraCentro, StatusOP, StatusProjeto, TipoLancamento, TipoMaterial
 from .security import SENHA_MINIMA
 
 
@@ -15,12 +15,30 @@ class Schema(BaseModel):
 class EmpresaIn(Schema):
     nome: str
     cnpj: str | None = None
-    perda_chapa_pct: float = 15.0
-    perda_fita_pct: float = 10.0
+    perda_chapa_pct: float = Field(15.0, ge=0, le=100)
+    perda_fita_pct: float = Field(10.0, ge=0, le=100)
+    chapa_comprimento_mm: float = Field(2750.0, gt=0)
+    chapa_largura_mm: float = Field(1850.0, gt=0)
+    serra_mm: float = Field(4.0, ge=0)
+    refilo_mm: float = Field(10.0, ge=0)
+    imposto_venda_pct: float = Field(0.0, ge=0, le=100)
 
 
 class EmpresaOut(EmpresaIn):
     id: int
+
+
+class EmpresaAtualizar(Schema):
+    """Atualização parcial: só os campos enviados mudam."""
+    nome: str | None = Field(None, min_length=2)
+    cnpj: str | None = None
+    perda_chapa_pct: float | None = Field(None, ge=0, le=100)
+    perda_fita_pct: float | None = Field(None, ge=0, le=100)
+    chapa_comprimento_mm: float | None = Field(None, gt=0)
+    chapa_largura_mm: float | None = Field(None, gt=0)
+    serra_mm: float | None = Field(None, ge=0)
+    refilo_mm: float | None = Field(None, ge=0)
+    imposto_venda_pct: float | None = Field(None, ge=0, le=100)
 
 
 # --- Acesso -------------------------------------------------------------------
@@ -202,6 +220,15 @@ class ProjetoResumo(Schema):
     origem: str
     data_entrega: date | None
     criado_em: datetime
+    valor_tabela: float | None = None
+    valor_pedido: float | None = None
+    valor_venda: float | None = None
+    frete_orcado: float | None = None
+    montagem_orcada: float | None = None
+    condicao_pagamento: str | None = None
+    parcelas_sugeridas: int | None = None
+    entrada_sugerida: bool | None = None
+    contrato_em: date | None = None
 
 
 class ProjetoOut(ProjetoResumo):
@@ -250,6 +277,7 @@ class FornecedorIn(Schema):
     telefone: str | None = None
     email: str | None = None
     prazo_dias: int = Field(7, ge=0)
+    prazo_pagamento_dias: int = Field(30, ge=0)
 
 
 class FornecedorOut(FornecedorIn):
@@ -335,6 +363,83 @@ class MovimentoOut(Schema):
     observacao: str | None
     usuario: str | None
     criado_em: datetime
+
+
+# --- Financeiro -----------------------------------------------------------------
+
+class ContratoIn(Schema):
+    valor_venda: float = Field(gt=0)
+    parcelas: int = Field(ge=1, le=120)
+    primeiro_vencimento: date
+
+
+class LancamentoIn(Schema):
+    tipo: TipoLancamento
+    categoria: Categoria
+    descricao: str = Field(min_length=2)
+    valor: float = Field(gt=0)
+    vencimento: date
+    projeto_id: int | None = None
+    fornecedor_id: int | None = None
+
+
+class LancamentoOut(Schema):
+    id: int
+    tipo: TipoLancamento
+    categoria: Categoria
+    descricao: str
+    valor: float
+    vencimento: date
+    pago_em: date | None
+    valor_pago: float | None
+    projeto_id: int | None
+    projeto_codigo: str | None
+    pedido_id: int | None
+    fornecedor_nome: str | None
+    cliente_nome: str | None
+    situacao: str
+
+
+class BaixaIn(Schema):
+    data: date
+    valor: float | None = Field(None, gt=0)
+
+
+class DREObra(Schema):
+    projeto_id: int
+    codigo: str
+    status: StatusProjeto
+    receita: float
+    impostos: float
+    imposto_pct: float
+    receita_liquida: float
+    material: float
+    material_base: str
+    custos_diretos: dict[str, float]
+    total_custos_diretos: float
+    margem_contribuicao: float
+    margem_pct: float
+    orcado_frete: float | None
+    orcado_montagem: float | None
+    recebido: float
+    a_receber: float
+    contrato_em: date | None
+
+
+class MesFluxo(Schema):
+    mes: str
+    receber_previsto: float
+    pagar_previsto: float
+    recebido: float
+    pago: float
+    saldo_mes: float
+    saldo_acumulado: float
+
+
+class FluxoCaixa(Schema):
+    meses: list[MesFluxo]
+    vencido_receber: float
+    vencido_pagar: float
 
 
 # --- PCP ---------------------------------------------------------------------

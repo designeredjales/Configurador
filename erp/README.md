@@ -20,6 +20,8 @@ Projeto (Promob) → Engenharia (BOM + consumo + gate) → Ordem de Produção �
 | **Painel** | OPs abertas, em produção e atrasadas, fila de peças por centro, baixas do dia, progresso por OP |
 | **Chão de fábrica** | Plano de corte guilhotinado por material (serra, refilo, veio) com desenho de cada chapa; etiquetas 100 × 50 mm com código de barras para imprimir no navegador ou em ZPL (Zebra); apontamento pela câmera do celular |
 | **Estoque** | Saldo por movimentação, reserva automática na liberação do projeto, baixa automática na conclusão, inventário com ajuste pela diferença, custo médio ponderado |
+| **Comercial** | Valor de tabela, pedido à fábrica, venda ao cliente, frete, montagem e condição de pagamento lidos do XML; contrato gera as parcelas a receber |
+| **Financeiro** | Contas a receber e a pagar (a compra recebida vira conta a pagar no prazo do fornecedor), baixas, fluxo de caixa de 6 meses, **DRE por obra** (receita − impostos − material − custos diretos = margem de contribuição) |
 | **Compras (MRP)** | Sugestão de compra = reservado + mínimo − saldo − em pedido; pedido ao fornecedor, envio, recebimento parcial ou total, cancelamento |
 
 ## Rodar
@@ -43,6 +45,7 @@ Abra `http://localhost:8000` e cadastre sua empresa, ou entre na demonstração 
 | **Engenharia** | Importar o XML, criar e liberar projetos, cadastrar materiais e clientes |
 | **PCP** | Gerar e cancelar OPs, cadastrar centros de trabalho, apontar |
 | **Compras** | Fornecedores, pedidos, recebimento, inventário e cadastro de materiais |
+| **Financeiro** | Contrato, contas a pagar e receber, fluxo de caixa e DRE (valores financeiros só para Administrador, Gestor e Financeiro) |
 | **Operador** | Apontar (dar baixa) e consultar OPs e painel |
 
 Todos os perfis consultam os dados da própria empresa. Detalhes de segurança:
@@ -103,6 +106,15 @@ O estoque é a soma das movimentações de cada material, na unidade do cadastro
 
 Saldo negativo é permitido e aparece em vermelho: indica consumo sem entrada registrada, ou seja, recebimento que não foi lançado.
 
+## Comercial e financeiro
+
+- **Do XML do Promob**: `TOTALPRICES/@TABLE` (valor de tabela), `MARGINS/ORDER/@VALUE` (pedido à fábrica com ICMS, IPI e descontos), `MARGINS/BUDGET/@VALUE` (venda ao cliente), frete e montagem do orçamento e a condição de pagamento selecionada.
+- **Contrato** (`POST /api/projetos/{id}/contrato`): valor, parcelas e 1º vencimento; gera as parcelas mensais a receber. A última parcela absorve o arredondamento.
+- **Contas a pagar**: cada recebimento de compra gera a conta do que entrou, com vencimento no prazo de pagamento do fornecedor. Custos da obra (frete, montador, comissão) são lançados com o projeto.
+- **DRE por obra** (`GET /api/projetos/{id}/dre`): receita − impostos (alíquota da empresa) − material − custos diretos = margem de contribuição. Material é *previsto* (engenharia × custo médio) até o projeto concluir e *realizado* (baixa do estoque) depois.
+- **Fluxo de caixa** (`GET /api/financeiro/fluxo`): previsto por vencimento (atrasado entra no mês atual) e realizado por data de baixa, com saldo acumulado.
+- **Configurações** (`PUT /api/empresas/atual`, administrador): perdas, imposto sobre a venda, chapa padrão, serra e refilo.
+
 ## Alternativa: CSV (somente pela API)
 
 Para projetos que não vêm do Promob, `POST /api/projetos/{id}/importar` aceita o CSV abaixo (e também o XML). Separador `;` (ou `,`), com cabeçalho. O decimal pode vir com vírgula. Exemplo completo em `exemplos/cozinha_silva.csv`.
@@ -136,6 +148,7 @@ erp/
       pcp.py           # OP, roteiro, apontamento, filas
       estoque.py       # reservas, MRP, recebimento, custo médio, inventário
       corte.py         # otimizador de plano de corte
+      financeiro.py    # contrato, contas, DRE por obra, fluxo de caixa
     routers/           # API REST (cadastros, projetos, produção)
     static/index.html  # interface web (painel, projetos, OPs, apontamento, materiais)
   tests/               # fluxo completo, XML do Promob, gate, perfis, isolamento entre empresas
@@ -148,5 +161,6 @@ erp/
 2. **Lados da fita e furação**: ler o XML de máquina do Promob (ou o relatório com bordas) para etiquetas com C1/C2/L1/L2 e programas CNC.
 3. **Integração com a otimizadora** (Corte Certo, Optiplanning) e programas CNC por peça.
 4. **Compras 2.0**: cotação entre fornecedores, envio do pedido por e-mail/WhatsApp, lotes e sobras de chapa reaproveitáveis.
-5. **Comercial e financeiro**: orçamento → pedido → contrato, contas a pagar e a receber, DRE por obra.
-6. **Alembic** para migrações e PostgreSQL como padrão.
+5. **Montagem e pós-obra**: agenda de montagem, checklist de entrega e assistência técnica.
+6. **Fiscal**: NF-e via emissor integrado (Focus NFe, eNotas) e conciliação bancária.
+7. **Alembic** para migrações e PostgreSQL como padrão.

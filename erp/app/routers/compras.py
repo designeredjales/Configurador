@@ -24,7 +24,7 @@ from ..schemas import (
     PosicaoEstoque,
     RecebimentoIn,
 )
-from ..services import estoque
+from ..services import estoque, financeiro
 
 router = APIRouter(prefix="/api", tags=["compras e estoque"])
 
@@ -162,8 +162,12 @@ def receber_pedido(pedido_id: int, dados: RecebimentoIn, usuario: Usuario = Depe
     quantidades: dict[int, float] = {}
     for item in dados.itens:
         quantidades[item.item_id] = quantidades.get(item.item_id, 0) + item.quantidade
+    custos = {i.id: i.custo_unitario for i in pedido.itens}
     try:
         estoque.receber(db, pedido, quantidades, usuario.id)
+        # Cada recebimento gera a conta a pagar do que entrou, no prazo do fornecedor
+        financeiro.conta_do_recebimento(
+            db, pedido, sum(q * custos[i] for i, q in quantidades.items()), usuario.id)
     except estoque.ErroEstoque as e:
         db.rollback()
         raise HTTPException(e.status, str(e))

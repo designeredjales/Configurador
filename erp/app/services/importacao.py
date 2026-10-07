@@ -235,6 +235,10 @@ def importar_promob_xml(db: Session, projeto: Projeto, conteudo: bytes) -> dict:
                     n_itens += 1
                 item.quantidade += ix.quantidade
 
+    c = lido.comercial
+    projeto.valor_tabela, projeto.valor_pedido, projeto.valor_venda = c.valor_tabela, c.valor_pedido, c.valor_venda
+    projeto.frete_orcado, projeto.montagem_orcada = c.frete, c.montagem
+    projeto.condicao_pagamento, projeto.parcelas_sugeridas, projeto.entrada_sugerida = c.condicao, c.parcelas, c.entrada
     projeto.origem = "PROMOB_XML"
     db.flush()
     return {

@@ -4,13 +4,14 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from ..db import get_db
-from ..deps import CADASTROS, PCP, empresa_atual
+from ..deps import ADMIN, CADASTROS, PCP, empresa_atual
 from ..models import CentroTrabalho, Cliente, Empresa, Material
 from ..schemas import (
     CentroIn,
     CentroOut,
     ClienteIn,
     ClienteOut,
+    EmpresaAtualizar,
     EmpresaOut,
     MaterialIn,
     MaterialOut,
@@ -21,6 +22,16 @@ router = APIRouter(prefix="/api", tags=["cadastros"])
 
 @router.get("/empresas/atual", response_model=EmpresaOut)
 def empresa(emp: Empresa = Depends(empresa_atual)):
+    return emp
+
+
+@router.put("/empresas/atual", response_model=EmpresaOut, dependencies=[Depends(ADMIN)])
+def configurar_empresa(dados: EmpresaAtualizar, emp: Empresa = Depends(empresa_atual), db: Session = Depends(get_db)):
+    for campo, valor in dados.model_dump(exclude_unset=True).items():  # só o que foi enviado
+        if valor is None and campo != "cnpj":
+            raise HTTPException(422, f"O campo {campo} não pode ficar vazio.")
+        setattr(emp, campo, valor)
+    db.commit()
     return emp
 
 

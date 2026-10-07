@@ -64,6 +64,11 @@ a { color: var(--brand); cursor: pointer; }
 .tag.OK, .tag.RECEBIDO { background: var(--ok); color: #fff; }
 td input.num { width: 90px; text-align: right; }
 .neg { color: var(--err); font-weight: 600; }
+.pos { color: var(--ok); font-weight: 600; }
+.tag.VENCIDO { background: var(--err); color: #fff; } .tag.PAGO { background: var(--ok); color: #fff; }
+.cfg { display: grid; gap: 10px; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); }
+.cfg label { display: grid; gap: 4px; font-size: 13px; color: var(--muted); }
+.dre td:first-child { color: var(--muted); } .dre tr.total td { font-weight: 700; color: var(--ink); border-top: 2px solid var(--line); }
 .chapas { display: grid; gap: 14px; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); }
 .chapa { margin: 0; min-width: 0; } .chapa figcaption { font-size: 12px; color: var(--muted); margin-bottom: 4px; }
 .chapa svg { width: 100%; height: auto; display: block; }
@@ -111,6 +116,7 @@ td input.num { width: 90px; text-align: right; }
     <button data-aba="apontamento">Apontamento</button>
     <button data-aba="estoque">Estoque</button>
     <button data-aba="compras">Compras</button>
+    <button data-aba="financeiro">Financeiro</button>
     <button data-aba="materiais">Materiais</button>
     <button data-aba="usuarios">Usuários</button>
   </nav>
@@ -201,6 +207,37 @@ td input.num { width: 90px; text-align: right; }
     </div>
   </section>
 
+  <section id="financeiro">
+    <div class="grid" id="kpis-fin"></div>
+    <div class="card"><h2>Fluxo de caixa</h2>
+      <p class="dica">Previsto = contas em aberto pelo vencimento (as atrasadas entram no mês atual). Realizado = baixas do mês.</p>
+      <div class="tabela" id="lista-fluxo"></div>
+    </div>
+    <div class="card"><h2>Contas a receber e a pagar</h2>
+      <div class="linha">
+        <select id="fin-tipo"><option value="">Receber e pagar</option><option value="RECEBER">A receber</option><option value="PAGAR">A pagar</option></select>
+        <select id="fin-sit"><option value="EM_ABERTO">Em aberto</option><option value="VENCIDO">Vencidas</option><option value="PAGO">Baixadas</option><option value="">Todas</option></select>
+      </div>
+      <div class="tabela" id="lista-lanc"></div>
+      <div id="fin-msg"></div>
+    </div>
+    <div class="card"><h2>Novo lançamento</h2>
+      <p class="dica">Custos da obra (frete, montador, comissão) vinculados ao projeto entram no DRE da obra.</p>
+      <div class="linha">
+        <select id="l-tipo"><option value="PAGAR">A pagar</option><option value="RECEBER">A receber</option></select>
+        <select id="l-cat"><option value="MONTAGEM">Montagem</option><option value="FRETE">Frete</option><option value="MAO_DE_OBRA">Mão de obra</option>
+          <option value="COMISSAO">Comissão</option><option value="MATERIAL">Material</option><option value="IMPOSTO">Imposto</option>
+          <option value="DESPESA_FIXA">Despesa fixa</option><option value="VENDA">Venda</option><option value="OUTROS">Outros</option></select>
+        <input id="l-desc" placeholder="Descrição">
+        <input id="l-valor" placeholder="Valor" size="10">
+        <input id="l-venc" type="date" title="Vencimento">
+        <select id="l-proj"></select>
+        <button class="btn" onclick="criarLancamento()">Lançar</button>
+      </div>
+      <div id="l-msg"></div>
+    </div>
+  </section>
+
   <section id="usuarios">
     <div class="card"><h2>Novo usuário</h2>
       <div class="linha">
@@ -211,6 +248,7 @@ td input.num { width: 90px; text-align: right; }
           <option value="OPERADOR">Operador: apontamento</option>
           <option value="PCP">PCP: ordens e apontamento</option>
           <option value="COMPRAS">Compras: pedidos e estoque</option>
+          <option value="FINANCEIRO">Financeiro: contratos, contas e DRE</option>
           <option value="ENGENHARIA">Engenharia: projetos e materiais</option>
           <option value="GESTOR">Gestor: engenharia + PCP</option>
           <option value="ADMIN">Administrador: tudo</option>
@@ -220,6 +258,11 @@ td input.num { width: 90px; text-align: right; }
       <div id="u-msg"></div>
     </div>
     <div class="card"><h2>Equipe</h2><div class="tabela" id="lista-usuarios"></div></div>
+    <div class="card"><h2>Configurações da empresa</h2>
+      <div class="cfg" id="cfg-empresa"></div>
+      <div class="linha" style="margin-top:10px"><button class="btn" onclick="salvarEmpresa()">Salvar configurações</button></div>
+      <div id="cfg-msg"></div>
+    </div>
   </section>
 
   <section id="materiais">
@@ -281,7 +324,7 @@ function tabela(colunas, linhas) {
 
 // --- Navegação --------------------------------------------------------------
 const carregadores = {painel: carregarPainel, projetos: carregarProjetos, ops: carregarOps, usuarios: carregarUsuarios,
-                      estoque: carregarEstoque, compras: carregarCompras,
+                      estoque: carregarEstoque, compras: carregarCompras, financeiro: carregarFinanceiro,
                       apontamento: carregarApontamento, materiais: carregarMateriais};
 function abrir(aba) {
   document.querySelectorAll("section").forEach((s) => s.classList.toggle("ativo", s.id === aba));
@@ -357,7 +400,48 @@ async function verProjeto(id) {
     </div>
     <h2>Módulos</h2>${tabela([["Ambiente", (m) => esc(m.ambiente)], ["Módulo", (m) => `<b>${esc(m.codigo)}</b> ${esc(m.descricao)}`],
       ["Qtd", (m) => m.quantidade, 1], ["Peças", (m) => m.pecas.length, 1], ["Itens", (m) => m.itens.length, 1]], modulos)}
-    ${linhasConsumo("Chapas", c.chapas)}${linhasConsumo("Fitas de borda", c.fitas)}${linhasConsumo("Ferragens e acessórios", c.itens)}`;
+    ${linhasConsumo("Chapas", c.chapas)}${linhasConsumo("Fitas de borda", c.fitas)}${linhasConsumo("Ferragens e acessórios", c.itens)}
+    <div id="proj-comercial"></div>`;
+  if (VE_FINANCEIRO()) mostrarComercial(p);
+}
+
+async function mostrarComercial(p) {
+  const d = await api(`/api/projetos/${p.id}/dre`);
+  const linha = (rotulo, v, cls = "") => `<tr class="${cls}"><td>${rotulo}</td><td class="n">${brl(v)}</td></tr>`;
+  const diretos = Object.entries(d.custos_diretos).map(([k, v]) => linha(`(−) ${k.replace(/_/g, " ").toLowerCase()}`, -v)).join("");
+  const hoje = new Date().toISOString().slice(0, 10);
+  $("proj-comercial").innerHTML = `<h2>Comercial</h2>
+    <div class="grid">
+      <div class="card kpi">${brl(p.valor_venda || 0)}<small>Venda ao cliente${p.condicao_pagamento ? ` · condição ${esc(p.condicao_pagamento)}` : ""}</small></div>
+      <div class="card kpi">${brl(p.valor_pedido || 0)}<small>Pedido à fábrica (Promob)</small></div>
+      <div class="card kpi">${brl(p.valor_tabela || 0)}<small>Valor de tabela</small></div>
+    </div>
+    ${p.contrato_em ? `<p class="dica">Contrato registrado em ${dataBR(p.contrato_em)}. Parcelas na aba Financeiro.</p>` : `
+    <div class="linha">
+      <input id="ct-valor" value="${p.valor_venda || ""}" placeholder="Valor do contrato" size="12" aria-label="Valor do contrato">
+      <input id="ct-parc" value="${p.parcelas_sugeridas || 1}" size="4" aria-label="Parcelas"> parcela(s), 1º vencimento
+      <input id="ct-venc" type="date" value="${hoje}" aria-label="Primeiro vencimento">
+      <button class="btn" onclick="registrarContrato(${p.id})">Registrar contrato</button>
+    </div><div id="ct-msg"></div>`}
+    <h2>DRE da obra</h2>
+    <div class="tabela"><table class="dre"><tbody>
+      ${linha("Receita (contrato)", d.receita)}
+      ${linha(`(−) Impostos sobre a venda (${d.imposto_pct}%)`, -d.impostos)}
+      ${linha("Receita líquida", d.receita_liquida, "total")}
+      ${linha(`(−) Material ${d.material_base === "REALIZADO" ? "consumido (custo médio)" : "previsto pela engenharia"}`, -d.material)}
+      ${diretos}
+      ${linha(`Margem de contribuição · ${d.margem_pct}%`, d.margem_contribuicao, "total")}
+    </tbody></table></div>
+    <p class="dica">Recebido ${brl(d.recebido)} · a receber ${brl(d.a_receber)}${d.orcado_frete != null ? ` · orçado no Promob: frete ${brl(d.orcado_frete)}, montagem ${brl(d.orcado_montagem || 0)}` : ""}.
+    Material sem custo no cadastro entra como zero no DRE.</p>`;
+}
+
+async function registrarContrato(id) {
+  try {
+    await api(`/api/projetos/${id}/contrato`, {method: "POST", json: {valor_venda: Number($("ct-valor").value.replace(",", ".")),
+      parcelas: Number($("ct-parc").value), primeiro_vencimento: $("ct-venc").value}});
+    await verProjeto(id);
+  } catch (e) { $("ct-msg").innerHTML = `<div class="msg err">${esc(e.message)}</div>`; }
 }
 
 async function importar(id) {
@@ -642,16 +726,76 @@ async function criarFornecedor() {
   } catch (e) { $("f-msg").innerHTML = `<div class="msg err">${esc(e.message)}</div>`; }
 }
 
+// --- Financeiro -------------------------------------------------------------
+const MES = (k) => { const [a, m] = k.split("-"); return new Date(a, m - 1, 1).toLocaleDateString("pt-BR", {month: "short", year: "numeric"}); };
+async function carregarFinanceiro() {
+  const [fluxo, projetos] = await Promise.all([api("/api/financeiro/fluxo?meses=6"), api("/api/projetos")]);
+  const m0 = fluxo.meses[0];
+  $("kpis-fin").innerHTML = [[brl(fluxo.vencido_receber), "A receber vencido"], [brl(fluxo.vencido_pagar), "A pagar vencido"],
+    [brl(m0.saldo_mes), "Saldo do mês (realizado + previsto)"], [brl(fluxo.meses.at(-1).saldo_acumulado), "Saldo acumulado em 6 meses"]]
+    .map(([v, t]) => `<div class="card kpi">${v}<small>${t}</small></div>`).join("");
+  const val = (v) => `<span class="${v < 0 ? "neg" : v > 0 ? "pos" : ""}">${brl(v)}</span>`;
+  $("lista-fluxo").innerHTML = tabela([["Mês", (m) => MES(m.mes)], ["A receber", (m) => brl(m.receber_previsto), 1], ["A pagar", (m) => brl(m.pagar_previsto), 1],
+    ["Recebido", (m) => brl(m.recebido), 1], ["Pago", (m) => brl(m.pago), 1], ["Saldo do mês", (m) => val(m.saldo_mes), 1], ["Acumulado", (m) => val(m.saldo_acumulado), 1]], fluxo.meses);
+  $("l-proj").innerHTML = `<option value="">Sem projeto (despesa geral)</option>` + projetos.map((p) => `<option value="${p.id}">${esc(p.codigo)} · ${esc(p.nome)}</option>`).join("");
+  $("l-venc").value ||= new Date().toISOString().slice(0, 10);
+  await carregarLancamentos();
+}
+
+async function carregarLancamentos() {
+  const qs = new URLSearchParams();
+  if ($("fin-tipo").value) qs.set("tipo", $("fin-tipo").value);
+  if ($("fin-sit").value) qs.set("situacao", $("fin-sit").value);
+  const lista = await api(`/api/lancamentos?${qs}`);
+  $("lista-lanc").innerHTML = tabela([["Vencimento", (l) => dataBR(l.vencimento)], ["Tipo", (l) => l.tipo === "RECEBER" ? "Receber" : "Pagar"],
+    ["Descrição", (l) => `${esc(l.descricao)}${l.projeto_codigo ? ` <span class="tag">${esc(l.projeto_codigo)}</span>` : ""}`],
+    ["Cliente / fornecedor", (l) => esc(l.cliente_nome || l.fornecedor_nome || "—")], ["Categoria", (l) => l.categoria.replace(/_/g, " ").toLowerCase()],
+    ["Valor", (l) => `<span class="${l.tipo === "PAGAR" ? "neg" : "pos"}">${brl(l.valor)}</span>`, 1], ["Situação", (l) => tag(l.situacao)],
+    ["", (l) => l.pago_em ? `baixa ${dataBR(l.pago_em)}` : `<button class="btn sec" onclick="baixarLancamento(${l.id})">Baixar hoje</button>`]], lista);
+}
+$("fin-tipo").onchange = $("fin-sit").onchange = () => carregarLancamentos().catch((e) => alert(e.message));
+
+async function baixarLancamento(id) {
+  try { await api(`/api/lancamentos/${id}/baixar`, {method: "POST", json: {data: new Date().toISOString().slice(0, 10)}}); await carregarFinanceiro(); }
+  catch (e) { $("fin-msg").innerHTML = `<div class="msg err">${esc(e.message)}</div>`; }
+}
+
+async function criarLancamento() {
+  try {
+    await api("/api/lancamentos", {method: "POST", json: {tipo: $("l-tipo").value, categoria: $("l-cat").value, descricao: $("l-desc").value.trim(),
+      valor: Number($("l-valor").value.replace(",", ".")), vencimento: $("l-venc").value, projeto_id: Number($("l-proj").value) || null}});
+    $("l-desc").value = $("l-valor").value = ""; $("l-msg").innerHTML = `<div class="msg ok">Lançamento registrado.</div>`;
+    await carregarFinanceiro();
+  } catch (e) { $("l-msg").innerHTML = `<div class="msg err">${esc(e.message.replace(/Value error, /g, ""))}</div>`; }
+}
+
+// --- Configurações da empresa ----------------------------------------------
+const CAMPOS_EMPRESA = [["nome", "Razão social", "text"], ["cnpj", "CNPJ", "text"], ["perda_chapa_pct", "Perda de chapa (%)"], ["perda_fita_pct", "Perda de fita (%)"],
+  ["imposto_venda_pct", "Imposto sobre a venda (%)"], ["chapa_comprimento_mm", "Chapa padrão: comprimento (mm)"], ["chapa_largura_mm", "Chapa padrão: largura (mm)"],
+  ["serra_mm", "Espessura da serra (mm)"], ["refilo_mm", "Refilo da chapa (mm)"]];
+async function carregarEmpresa() {
+  const e = await api("/api/empresas/atual");
+  $("cfg-empresa").innerHTML = CAMPOS_EMPRESA.map(([k, r, t]) => `<label>${r}<input id="cfg-${k}" value="${esc(e[k] ?? "")}" ${t ? "" : 'inputmode="decimal"'}></label>`).join("");
+}
+async function salvarEmpresa() {
+  const dados = {};
+  for (const [k, , t] of CAMPOS_EMPRESA) { const v = $(`cfg-${k}`).value.trim(); dados[k] = t ? (v || null) : Number(v.replace(",", ".")); }
+  try { const e = await api("/api/empresas/atual", {method: "PUT", json: dados}); $("empresa").textContent = e.nome; $("cfg-msg").innerHTML = `<div class="msg ok">Configurações salvas.</div>`; }
+  catch (e) { $("cfg-msg").innerHTML = `<div class="msg err">${esc(e.message)}</div>`; }
+}
+
 // --- Acesso -----------------------------------------------------------------
 const ABAS = {
-  ADMIN: ["painel", "projetos", "ops", "apontamento", "estoque", "compras", "materiais", "usuarios"],
-  GESTOR: ["painel", "projetos", "ops", "apontamento", "estoque", "compras", "materiais"],
+  ADMIN: ["painel", "projetos", "ops", "apontamento", "estoque", "compras", "financeiro", "materiais", "usuarios"],
+  GESTOR: ["painel", "projetos", "ops", "apontamento", "estoque", "compras", "financeiro", "materiais"],
+  FINANCEIRO: ["financeiro", "projetos", "painel"],
   ENGENHARIA: ["painel", "projetos", "ops", "estoque", "materiais"],
   PCP: ["painel", "projetos", "ops", "apontamento", "estoque", "materiais"],
   COMPRAS: ["compras", "estoque", "materiais", "painel"],
   OPERADOR: ["apontamento", "ops", "painel"],
 };
-const NOME_PERFIL = {ADMIN: "Administrador", GESTOR: "Gestor", ENGENHARIA: "Engenharia", PCP: "PCP", COMPRAS: "Compras", OPERADOR: "Operador"};
+const NOME_PERFIL = {ADMIN: "Administrador", GESTOR: "Gestor", ENGENHARIA: "Engenharia", PCP: "PCP", COMPRAS: "Compras", FINANCEIRO: "Financeiro", OPERADOR: "Operador"};
+const VE_FINANCEIRO = () => ["ADMIN", "GESTOR", "FINANCEIRO"].includes(sessao?.usuario.perfil);
 
 function mostrarAcesso(msg) {
   sessao = null; $("app").hidden = true; $("tela-acesso").hidden = false;
@@ -690,6 +834,7 @@ $("sair").onclick = () => { guardarToken(null); mostrarAcesso(); };
 
 // --- Usuários (administrador) ----------------------------------------------
 async function carregarUsuarios() {
+  carregarEmpresa().catch(() => {});
   const lista = await api("/api/usuarios");
   $("lista-usuarios").innerHTML = tabela([["Nome", (u) => `<span class="${u.ativo ? "" : "inativo"}">${esc(u.nome)}</span>`],
     ["E-mail", (u) => esc(u.email)],

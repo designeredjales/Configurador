@@ -68,6 +68,18 @@ class ModuloXML:
 
 
 @dataclass
+class ComercialXML:
+    valor_tabela: float | None = None   # custo de tabela
+    valor_pedido: float | None = None   # pedido à fábrica (impostos e descontos)
+    valor_venda: float | None = None    # orçamento ao cliente
+    frete: float | None = None
+    montagem: float | None = None
+    condicao: str | None = None
+    parcelas: int | None = None
+    entrada: bool | None = None
+
+
+@dataclass
 class ProjetoXML:
     cliente: str | None
     email: str | None
@@ -75,6 +87,7 @@ class ProjetoXML:
     ambientes: dict[str, list[ModuloXML]]
     materiais: dict[str, MaterialXML]
     avisos: list[str]
+    comercial: ComercialXML = field(default_factory=ComercialXML)
 
 
 def _f(valor: str | None, padrao: float | None = None) -> float | None:
@@ -253,6 +266,28 @@ def ler_xml_promob(conteudo: bytes | str) -> ProjetoXML:
     if leitor.repeticoes:
         leitor.avisos.append(f"{leitor.repeticoes} item(ns) com REPETITION diferente de 1: confira as quantidades")
 
+    comercial = ComercialXML()
+    totais = raiz.find("TOTALPRICES")
+    if totais is not None:
+        comercial.valor_tabela = _f(totais.get("TABLE"))
+        pedido, orcamento = totais.find("MARGINS/ORDER"), totais.find("MARGINS/BUDGET")
+        if pedido is not None:
+            comercial.valor_pedido = _f(pedido.get("VALUE"))
+        if orcamento is not None:
+            comercial.valor_venda = _f(orcamento.get("VALUE"))
+            for m in orcamento.iterfind("MARGIN"):
+                if (m.get("ID") or "").lower() == "frete":
+                    comercial.frete = _f(m.get("VALUE"))
+                elif (m.get("ID") or "").lower() == "montagem":
+                    comercial.montagem = _f(m.get("VALUE"))
+    for termo in raiz.iterfind("PAYMENTTERMS/PAYMENTTERMCOLLECTION/PAYMENTTERM"):
+        if termo.get("SELECTED") == "Y" and termo.get("DELETED") != "Y":
+            comercial.condicao = termo.get("DESCRIPTION")
+            comercial.parcelas = int(_f(termo.get("PARCELQUANTITY"), 1) or 1)
+            comercial.entrada = termo.get("HASDOWNPAYMENT") == "Y"
+            comercial.valor_venda = _f(termo.get("GENERALTOTAL"), comercial.valor_venda)
+            break
+
     dados = {d.get("ID"): (d.get("VALUE") or "").strip() for d in raiz.iterfind("CUSTOMERSDATA/DATA")}
     guid = raiz.find("PROJECTGUID")
     return ProjetoXML(
@@ -262,4 +297,5 @@ def ler_xml_promob(conteudo: bytes | str) -> ProjetoXML:
         ambientes=ambientes,
         materiais=leitor.materiais,
         avisos=leitor.avisos,
+        comercial=comercial,
     )
