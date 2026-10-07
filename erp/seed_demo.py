@@ -18,6 +18,7 @@ with TestClient(app) as c:
     h = {"Authorization": f"Bearer {sessao['token']}"}
     c.post("/api/usuarios", json={"nome": "João (corte)", "email": "operador@demo.com",
                                   "senha": "demo12345", "perfil": "OPERADOR"}, headers=h)
+    c.post("/api/carrinhos", json={"quantidade": 3}, headers=h)  # carrinhos da fábrica
     # Estação de expedição isolada: só a função de caixa master
     c.post("/api/usuarios", json={"nome": "Marcos (expedição)", "email": "expedicao@demo.com", "senha": "demo12345",
                                   "perfil": "OPERADOR", "funcoes": ["expedicao"]}, headers=h)

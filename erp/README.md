@@ -141,6 +141,18 @@ Na aba **Projetos → Lotes de produção**, marque os projetos liberados e form
 - Progresso por projeto e "onde estão as peças" do lote na consulta de produção (`?lote_id=`).
 - **Voltar para programação**, do lote inteiro (`POST /api/lotes/{id}/voltar-programacao`) ou projeto a projeto (`POST /api/ops/{id}/voltar-programacao`): a OP sai da fábrica e o projeto volta a LIBERADO, pronto para outro lote. Só vale para OP que a fábrica não tocou (sem baixa, refugo ou peça em caixa); no lote é tudo ou nada. A OP fica cancelada com o motivo e o número nunca é reaproveitado, então etiqueta velha impressa é recusada no leitor. Cancelar uma OP também devolve o projeto a LIBERADO.
 
+## Carrinhos, conferência por setor e separação de peças
+
+Tudo fica na aba **Configurações** (função "Usuários e configurações"), junto com os dados da empresa.
+
+- **Carrinho no apontamento.** No modo *Carrinho*, cada peça bipada recebe a baixa do setor e entra no carrinho escolhido. Peça que já tinha a baixa só muda de carrinho. O carrinho mistura obras, como sai do corte de um lote, e por isso agrupa as peças por **lote, obra/cliente e separação**. Cada grupo imprime um **marcador** (HTML ou ZPL) que vai entre as peças.
+- **Conferência do carrinho.** O setor seguinte bipa a etiqueta do carrinho (`98…`) e todas as peças que esperam por ele recebem a baixa de uma vez. O retorno mostra quantas peças foram baixadas, quantas já tinham baixa, quantas não passam pelo setor e quais ficaram bloqueadas, com o motivo.
+- **Pular conferência.** Cada setor tem a opção *Conferência obrigatória*. Desmarcada, o setor não é bipado e some da fila do painel. A etapa fecha sozinha, com o operador "Sem conferência", quando a peça passa pelo setor seguinte. Se o setor sem conferência for o último da peça, ela termina junto com a última baixa.
+- **Separação de peças (tupia, tamburato, peça que vira outra).** A classe da peça vem de **palavras-chave**, procuradas na descrição e no código da peça, no módulo e nas operações do Promob, ou é marcada à mão pelo PCP no detalhe da OP. Ela aparece na etiqueta (`SEPARAR TUPIA`), dispara o aviso **SEPARAR** no apontamento e separa os grupos do carrinho. A classe pode ainda:
+  - colocar um setor próprio no roteiro, com um setor de regra *Só peças separadas*;
+  - impedir a caixa master (*Vai para caixa master* desmarcado), porque a peça vira outra peça.
+- *Reaplicar regras* reclassifica os projetos que ainda não foram para a fábrica. A marcação manual nunca é sobrescrita.
+
 ## Expedição por caixa master
 
 A aba **Expedição** é a estação de embalagem: o operador só bipa.

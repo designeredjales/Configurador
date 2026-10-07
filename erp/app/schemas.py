@@ -221,10 +221,44 @@ class CentroIn(Schema):
     sequencia: int
     regra: RegraCentro = RegraCentro.TODAS
     ativo: bool = True
+    exige_apontamento: bool = True
 
 
 class CentroOut(CentroIn):
     id: int
+
+
+class CentroAtualizar(Schema):
+    nome: str | None = Field(None, min_length=2)
+    sequencia: int | None = None
+    regra: RegraCentro | None = None
+    ativo: bool | None = None
+    exige_apontamento: bool | None = None
+
+
+class ClasseIn(Schema):
+    codigo: str = Field(min_length=2, max_length=20, pattern=r"^[A-Za-z0-9_]+$")
+    nome: str = Field(min_length=2, max_length=60)
+    palavras_chave: str = Field("", max_length=400)
+    centro_codigo: str | None = Field(None, max_length=20)
+    vai_para_caixa: bool = True
+    ativo: bool = True
+
+
+class ClasseOut(ClasseIn):
+    id: int
+
+
+class ClasseAtualizar(Schema):
+    nome: str | None = Field(None, min_length=2, max_length=60)
+    palavras_chave: str | None = Field(None, max_length=400)
+    centro_codigo: str | None = Field(None, max_length=20)
+    vai_para_caixa: bool | None = None
+    ativo: bool | None = None
+
+
+class SeparacaoPecaIn(Schema):
+    separacao: str | None = None  # None devolve a peça às regras automáticas
 
 
 # --- Engenharia --------------------------------------------------------------
@@ -689,6 +723,8 @@ class PecaConsulta(Schema):
     op_numero: int
     lote_numero: int | None = None
     caixa_numero: int | None = None
+    carrinho_numero: int | None = None
+    separacao: str | None = None
     op_status: str = ""
     projeto_codigo: str
     ambiente: str
@@ -782,6 +818,8 @@ class EtapaOut(Schema):
 
 class UnidadeOut(Schema):
     codigo_barras: str
+    peca_id: int | None = None
+    separacao: str | None = None
     status: str = "ATIVA"
     reposicao: bool = False
     sequencial: int
@@ -827,6 +865,11 @@ class ApontamentoOut(Schema):
     peca: str
     centro_codigo: str
     proxima_etapa: str | None
+    separacao: str | None = None
+    separacao_nome: str | None = None
+    lote_numero: int | None = None
+    projeto_codigo: str = ""
+    cliente: str | None = None
     op_numero: int
     op_status: StatusOP
     op_progresso_pct: float
@@ -959,3 +1002,75 @@ class ExpedicaoProjeto(Schema):
     pronto_para_expedir: bool
     pendentes: list[PendenteExpedicao]
     caixas: list[CaixaOut]
+
+
+# --- Carrinhos ----------------------------------------------------------------------
+
+class CarrinhoPeca(Schema):
+    codigo_barras: str
+    peca: str
+    modulo: str
+    centro_codigo: str
+    proxima_etapa: str | None
+
+
+class CarrinhoGrupo(Schema):
+    lote_numero: int | None
+    projeto_codigo: str
+    projeto_nome: str
+    cliente: str | None
+    separacao: str | None
+    separacao_nome: str | None
+    rotulo: str
+    quantidade: int
+    pecas: list[CarrinhoPeca]
+
+
+class CarrinhoOut(Schema):
+    id: int
+    numero: int
+    codigo_barras: str
+    ativo: bool
+    total_pecas: int
+    grupos: list[CarrinhoGrupo]
+
+
+class CriarCarrinhosIn(Schema):
+    quantidade: int = Field(1, ge=1, le=50)
+
+
+class BipeCarrinhoIn(Schema):
+    codigo_barras: str = Field(min_length=1, max_length=40)
+    centro_codigo: str
+
+
+class BipeCarrinhoOut(Schema):
+    carrinho: CarrinhoOut
+    apontou: bool
+    veio_de_carrinho: int | None
+    codigo_barras: str
+    peca: str
+    proxima_etapa: str | None
+    separacao: str | None
+    separacao_nome: str | None
+    grupo: str
+
+
+class ConferirCarrinhoIn(Schema):
+    codigo_barras: str = Field(min_length=1, max_length=40)
+    centro_codigo: str
+
+
+class Bloqueada(Schema):
+    codigo_barras: str
+    peca: str
+    motivo: str
+
+
+class ConferenciaOut(Schema):
+    carrinho: CarrinhoOut
+    centro_codigo: str
+    baixadas: int
+    ja_feitas: int
+    nao_passam: int
+    bloqueadas: list[Bloqueada]

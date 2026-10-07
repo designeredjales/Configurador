@@ -35,7 +35,10 @@ def criar_centros_padrao(db: Session, empresa_id: int) -> None:
                               sequencia=seq, regra=regra))
 
 
-def _aplica(centro: CentroTrabalho, peca) -> bool:
+def _aplica(centro: CentroTrabalho, peca, classes: dict | None = None) -> bool:
+    if centro.regra == RegraCentro.SOB_DEMANDA:  # só entra se a separação da peça pede este setor
+        classe = (classes or {}).get(peca.separacao)
+        return bool(classe and classe.ativo and classe.centro_codigo == centro.codigo)
     if centro.regra == RegraCentro.COM_FITA:
         return peca.tem_fita
     if centro.regra == RegraCentro.COM_USINAGEM:
@@ -55,6 +58,9 @@ def gerar_op(db: Session, projeto: Projeto, prioridade: int = 3,
     ))
     if not centros:
         raise ErroPCP("Nenhum centro de trabalho ativo cadastrado", 422)
+    from . import separacao  # classifica as peças pelas regras atuais antes de montar o roteiro
+    separacao.aplicar_projeto(db, projeto)
+    classes = separacao.mapa(db, projeto.empresa_id)
 
     ultimo = db.scalar(
         select(func.max(OrdemProducao.numero)).where(OrdemProducao.empresa_id == projeto.empresa_id)
@@ -73,7 +79,7 @@ def gerar_op(db: Session, projeto: Projeto, prioridade: int = 3,
     for amb in projeto.ambientes:
         for mod in amb.modulos:
             for peca in mod.pecas:
-                roteiro = [c for c in centros if _aplica(c, peca)]
+                roteiro = [c for c in centros if _aplica(c, peca, classes)]
                 for _ in range(peca.quantidade * mod.quantidade):
                     seq += 1
                     unidade = UnidadePeca(
@@ -120,13 +126,23 @@ def apontar(db: Session, empresa_id: int, codigo_barras: str, centro_codigo: str
     if etapa.concluida_em:
         raise ErroPCP(f"Peça já apontada em {centro_codigo} em {etapa.concluida_em:%d/%m %H:%M}")
     anteriores = [e for e in unidade.etapas if e.sequencia < etapa.sequencia and not e.concluida_em]
-    if anteriores:
-        raise ErroPCP(f"Etapa anterior pendente: {anteriores[0].centro.codigo}")
+    obrigatorias = [e for e in anteriores if e.centro.exige_apontamento]
+    if obrigatorias:
+        raise ErroPCP(f"Etapa anterior pendente: {obrigatorias[0].centro.codigo}")
 
-    etapa.concluida_em = datetime.now()
+    agora = datetime.now()
+    for e in anteriores:  # setores sem conferência fecham sozinhos quando a peça passa adiante
+        e.concluida_em, e.operador = agora, "Sem conferência"
+    etapa.concluida_em = agora
     if usuario is not None:
         etapa.operador = usuario.nome
         etapa.usuario_id = usuario.id
+    for e in unidade.etapas:  # e os setores sem conferência logo em seguida também
+        if e.sequencia <= etapa.sequencia or e.concluida_em:
+            continue
+        if e.centro.exige_apontamento:
+            break
+        e.concluida_em, e.operador = agora, "Sem conferência"
 
     if op.status == StatusOP.ABERTA:
         op.status = StatusOP.EM_PRODUCAO
@@ -173,7 +189,7 @@ def fila_por_centro(db: Session, empresa_id: int) -> list[dict]:
                 if etapa.concluida_em:
                     if etapa.concluida_em >= inicio_dia:
                         hoje[etapa.centro_id] += 1
-                elif op.status != StatusOP.CONCLUIDA:
+                elif op.status != StatusOP.CONCLUIDA and etapa.centro.exige_apontamento:
                     fila[etapa.centro_id] += 1
                     break  # só a primeira etapa pendente está na fila
     return [

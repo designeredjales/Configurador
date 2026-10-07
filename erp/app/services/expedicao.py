@@ -86,12 +86,18 @@ def bipar(db: Session, emp: Empresa, usuario: Usuario, codigo: str, caixa_id: in
     if ja is not None:
         raise ErroExpedicao(f"{unidade.peca.descricao} já está na caixa {ja.numero}", "JA_EMBALADA", caixa_id=ja.id)
 
+    from . import separacao
+    classe = separacao.mapa(db, emp.id).get(unidade.peca.separacao)
+    if classe is not None and not classe.vai_para_caixa:
+        raise ErroExpedicao(f"{unidade.peca.descricao} é de {classe.nome.upper()}: vira outra peça e não vai para caixa master",
+                            "SEPARACAO", sugestao="SEPARAR")
     pendentes = [e for e in unidade.etapas if not e.concluida_em]
-    falta_so_embalagem = (len(pendentes) == 1 and pendentes[0] is unidade.etapas[-1]
-                          and pendentes[0].centro.codigo == CENTRO_EMBALAGEM)
-    if pendentes and not falta_so_embalagem:
-        raise ErroExpedicao(f"{unidade.peca.descricao} ainda não está pronta: falta {pendentes[0].centro.codigo}",
+    embalagem = next((e for e in pendentes if e.centro.codigo == CENTRO_EMBALAGEM), None)
+    faltam = [e for e in pendentes if e is not embalagem and e.centro.exige_apontamento]
+    if faltam:
+        raise ErroExpedicao(f"{unidade.peca.descricao} ainda não está pronta: falta {faltam[0].centro.codigo}",
                             "PRODUCAO_PENDENTE", sugestao="SEPARAR")
+    falta_so_embalagem = embalagem is not None
 
     projeto, modulo = unidade.op.projeto, unidade.peca.modulo
     if nova or caixa_id is None:
@@ -129,6 +135,8 @@ def bipar(db: Session, emp: Empresa, usuario: Usuario, codigo: str, caixa_id: in
         apontou = True
     if caixa is None:
         caixa = nova_caixa(db, emp.id, unidade, usuario)
+    from .carrinhos import tirar_de_carrinho
+    tirar_de_carrinho(db, unidade.id)  # foi para a caixa: saiu do carrinho
     db.add(ItemCaixa(caixa=caixa, unidade=unidade, usuario_nome=usuario.nome))
     db.flush()
     db.refresh(caixa)

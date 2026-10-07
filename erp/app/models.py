@@ -124,6 +124,7 @@ class RegraCentro(str, Enum):
     TODAS = "TODAS"
     COM_FITA = "COM_FITA"
     COM_USINAGEM = "COM_USINAGEM"
+    SOB_DEMANDA = "SOB_DEMANDA"  # só peças cuja separação pede este setor (tupia, tamburato...)
 
 
 class Empresa(Base):
@@ -249,6 +250,8 @@ class CentroTrabalho(Base):
     sequencia: Mapped[int] = mapped_column(Integer)
     regra: Mapped[RegraCentro] = mapped_column(String(20), default=RegraCentro.TODAS)
     ativo: Mapped[bool] = mapped_column(default=True)
+    # Sem conferência: o setor não é bipado; a etapa fecha sozinha quando a peça passa no setor seguinte
+    exige_apontamento: Mapped[bool] = mapped_column(default=True, server_default="1")
 
 
 class Projeto(Base):
@@ -345,6 +348,9 @@ class Peca(Base):
     programa_usinagem: Mapped[str | None] = mapped_column(String(120))
     # Operações do roteiro produtivo do Promob, separadas por vírgula (CORTE,BORDA,FURAR...)
     operacoes: Mapped[str | None] = mapped_column(String(200))
+    # Separação (tupia, tamburato, transformação...): vem das regras ou do PCP (manual não é sobrescrita)
+    separacao: Mapped[str | None] = mapped_column(String(20))
+    separacao_manual: Mapped[bool] = mapped_column(default=False, server_default="0")
 
     modulo: Mapped[Modulo] = relationship(back_populates="pecas")
     material: Mapped[Material | None] = relationship()
@@ -747,4 +753,51 @@ class ItemCaixa(Base):
     usuario_nome: Mapped[str | None] = mapped_column(String(120))
 
     caixa: Mapped[CaixaMaster] = relationship(back_populates="itens")
+    unidade: Mapped[UnidadePeca] = relationship()
+
+
+class ClasseSeparacao(Base):
+    """Peças que seguem caminho próprio na fábrica e precisam ser separadas no apontamento."""
+    __tablename__ = "classes_separacao"
+    __table_args__ = (UniqueConstraint("empresa_id", "codigo"),)
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    empresa_id: Mapped[int] = mapped_column(ForeignKey("empresas.id"), index=True)
+    codigo: Mapped[str] = mapped_column(String(20))
+    nome: Mapped[str] = mapped_column(String(60))
+    # Palavras procuradas na descrição/código da peça, no módulo e nas operações do Promob (vírgula)
+    palavras_chave: Mapped[str] = mapped_column(String(400), default="")
+    centro_codigo: Mapped[str | None] = mapped_column(String(20))  # setor extra no roteiro
+    vai_para_caixa: Mapped[bool] = mapped_column(default=True)  # False: vira outra peça, não é expedida sozinha
+    ativo: Mapped[bool] = mapped_column(default=True)
+
+
+class Carrinho(Base):
+    """Carrinho físico da fábrica (reutilizável), com etiqueta própria."""
+    __tablename__ = "carrinhos"
+    __table_args__ = (UniqueConstraint("empresa_id", "numero"),)
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    empresa_id: Mapped[int] = mapped_column(ForeignKey("empresas.id"), index=True)
+    numero: Mapped[int] = mapped_column(Integer)
+    codigo_barras: Mapped[str] = mapped_column(String(20), unique=True, index=True)
+    ativo: Mapped[bool] = mapped_column(default=True)
+    criado_em: Mapped[datetime] = mapped_column(DateTime, default=agora)
+
+    itens: Mapped[list["ItemCarrinho"]] = relationship(
+        back_populates="carrinho", cascade="all, delete-orphan", order_by="ItemCarrinho.id"
+    )
+
+
+class ItemCarrinho(Base):
+    __tablename__ = "itens_carrinho"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    carrinho_id: Mapped[int] = mapped_column(ForeignKey("carrinhos.id"), index=True)
+    unidade_id: Mapped[int] = mapped_column(ForeignKey("unidades_peca.id"), unique=True)
+    centro_codigo: Mapped[str] = mapped_column(String(20))  # setor em que a peça entrou no carrinho
+    adicionado_em: Mapped[datetime] = mapped_column(DateTime, default=agora)
+    usuario_nome: Mapped[str | None] = mapped_column(String(120))
+
+    carrinho: Mapped[Carrinho] = relationship(back_populates="itens")
     unidade: Mapped[UnidadePeca] = relationship()

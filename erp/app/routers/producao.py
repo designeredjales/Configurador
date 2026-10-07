@@ -93,6 +93,7 @@ def detalhe_op(op_id: int, emp: Empresa = Depends(empresa_atual), db: Session = 
             "status": u.status, "reposicao": u.reposicao_de_id is not None,
             "codigo_barras": u.codigo_barras,
             "sequencial": u.sequencial,
+            "peca_id": peca.id, "separacao": peca.separacao,
             "peca_codigo": peca.codigo,
             "peca_descricao": peca.descricao,
             "modulo": peca.modulo.codigo,
@@ -154,7 +155,12 @@ def apontar(dados: ApontamentoIn, usuario: Usuario = Depends(APONTAR),
         raise HTTPException(e.status, str(e))
     db.commit()
     op = unidade.op
+    from ..services import separacao
+    classe = separacao.mapa(db, usuario.empresa_id).get(unidade.peca.separacao)
     return {
+        "separacao": classe.codigo if classe else None, "separacao_nome": classe.nome if classe else None,
+        "lote_numero": op.lote.numero if op.lote else None, "projeto_codigo": op.projeto.codigo,
+        "cliente": op.projeto.cliente.nome if op.projeto.cliente else None,
         "codigo_barras": unidade.codigo_barras,
         "peca": f"{unidade.peca.modulo.codigo}/{unidade.peca.codigo} - {unidade.peca.descricao}",
         "centro_codigo": dados.centro_codigo.upper(),
@@ -236,7 +242,8 @@ def _origem(u) -> str:
     """Quem é o dono da peça: cliente (projeto), ambiente e lote. É o que separa a expedição."""
     op = u.op
     lote = f"L{op.lote.numero} " if op.lote else ""
-    return f"{lote}{op.projeto.codigo} · {op.projeto.nome} · {u.peca.modulo.ambiente.nome}"
+    sep = f" · SEPARAR {u.peca.separacao}" if u.peca.separacao else ""
+    return f"{lote}{op.projeto.codigo} · {op.projeto.nome} · {u.peca.modulo.ambiente.nome}{sep}"
 
 
 def montar_zpl(unidades: list) -> str:
