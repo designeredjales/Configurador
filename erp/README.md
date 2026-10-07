@@ -201,6 +201,32 @@ O orçamento continua no Promob. O ERP recebe o resultado e conduz a negociaçã
 - **Promob Prices:** com o token da conta (gravado só pela tela, nunca exibido), o ERP baixa a tabela ativa (`prices-api.promob.com`) e confere os itens do orçamento.
 - **Configurações do comercial** (administrador): limites de desconto, margem mínima, comissão, limite de divergência, validade da proposta, etapas do funil, condições de pagamento, parceiros com % de RT e o token do Prices.
 
+## Setup da base
+
+Cada fábrica é uma base com a sua parametrização. Em **Configurações → Setup da base** o administrador:
+
+- **exporta** toda a parametrização num arquivo JSON: parâmetros de produção, padrões fiscais, setores e regras do roteiro, separação de peças, política comercial, integração Promob Prices (endereço, tabela e colunas), parceiros e metas da gestão à vista. **Tokens e senhas nunca entram no arquivo**;
+- **aplica** um arquivo personalizado ou um **modelo pronto** (`app/setups/*.json`: "Marcenaria sob medida" e "Indústria com tupia e tamburato"). Antes de gravar, o ERP mostra a prévia do que muda, seção por seção, e só aplica as seções marcadas. Setores, separações e parceiros são casados pelo código ou nome; nada é apagado.
+
+Para criar um modelo próprio da consultoria, exporte de uma base bem configurada, ajuste `nome` e `descricao` e salve em `app/setups/`. API: `GET /api/setup/exportar`, `GET /api/setup/modelos`, `POST /api/setup/aplicar` (`{"setup" | "modelo", "secoes", "simular"}`).
+
+### Integração Promob Prices por base
+
+Endereço da API, tabela a usar (vazio = a ativa) e nome das colunas do CSV (vazio = detecção automática) fazem parte do setup. O botão **Ver formatos da conta** (`POST /api/comercial/prices/diagnostico`) lista as tabelas da conta e mostra o cabeçalho e as primeiras linhas do CSV, sem gravar nada: é como se acerta o mapeamento de cada base. O token só viaja para endereços `https` em domínios `promob.com`.
+
+## Gestão à vista
+
+Aba **Gestão à vista** (função *Indicadores do dono*), feita para a reunião diária e para a TV da fábrica (**Modo TV**: tela cheia, sem menus, atualiza a cada minuto).
+
+- **KPIs do mês em m² e em valor** contra as metas da base: vendido, m² vendidos, m² produzidos, preço e custo por m², margem prevista, entregas no prazo, refugo e conversão comercial. Metas acumuladas são cobradas na proporção dos dias úteis já passados.
+- **Ritmo × takt (Toyota):** m² produzidos por dia nos últimos 14 dias contra o takt da meta, projeção do mês e quanto é preciso produzir por dia útil para fechar.
+- **Restrição (Teoria das Restrições):** fila e vazão de cada setor; o setor com mais dias de fila é a restrição que dita o ritmo da fábrica.
+- **Pulmão das obras:** prazo consumido × trabalho apontado, em verde, amarelo, vermelho e preto (vencida).
+- **Kanban do fluxo da obra** (negociação, engenharia, liberado, produção, expedição, entregue) com **limite de WIP** por coluna.
+- **Andon:** obras vencidas ou no vermelho, restrição com fila longa, WIP estourado, refugos e estornos por setor, chamados abertos, descontos aguardando aprovação e auditorias de venda travando a liberação.
+
+Metas, limites de WIP, dias úteis e horas do turno ficam no setup da base (`GET/PUT /api/gestao/config`); o painel é `GET /api/gestao/painel`.
+
 ## Comercial e financeiro
 
 - **Do XML do Promob**: `TOTALPRICES/@TABLE` (valor de tabela), `MARGINS/ORDER/@VALUE` (pedido à fábrica com ICMS, IPI e descontos), `MARGINS/BUDGET/@VALUE` (venda ao cliente), frete e montagem do orçamento e a condição de pagamento selecionada.

@@ -861,6 +861,10 @@ class ConfigComercial(Base):
     prices_token: Mapped[str | None] = mapped_column(String(2000))
     prices_tabela: Mapped[str | None] = mapped_column(String(200))
     prices_sincronizado_em: Mapped[datetime | None] = mapped_column(DateTime)
+    # Setup da integração por base: endereço da API, tabela escolhida (vazio = a ativa) e colunas do CSV
+    prices_url: Mapped[str | None] = mapped_column(String(300))
+    prices_tabela_preferida: Mapped[str | None] = mapped_column(String(200))
+    prices_colunas: Mapped[dict | None] = mapped_column(JSON)  # {"sku": "...", "descricao": "...", "preco": "..."}
 
 
 class Parceiro(Base):
@@ -965,3 +969,14 @@ class PrecoPromob(Base):
     sku: Mapped[str] = mapped_column(String(80), index=True)
     descricao: Mapped[str] = mapped_column(String(300), default="")
     preco: Mapped[float] = mapped_column(Float)
+
+
+class ConfigGestao(Base):
+    """Gestão à vista: metas do mês, limites de WIP do kanban e calendário da fábrica (uma linha por empresa)."""
+    __tablename__ = "config_gestao"
+
+    empresa_id: Mapped[int] = mapped_column(ForeignKey("empresas.id"), primary_key=True)
+    metas: Mapped[dict | None] = mapped_column(JSON)
+    limites_wip: Mapped[dict | None] = mapped_column(JSON)
+    dias_uteis_mes: Mapped[int] = mapped_column(Integer, default=22)
+    horas_turno: Mapped[float] = mapped_column(Float, default=8.8)

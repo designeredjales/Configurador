@@ -1,0 +1,302 @@
+"""Setup da base: toda a parametrização de uma fábrica num arquivo JSON.
+
+O consultor monta o setup uma vez (ou parte de um modelo pronto), personaliza para cada base e aplica:
+parâmetros da fábrica, setores e roteiro, separação de peças, política comercial, integração com o
+Promob Prices, parceiros e metas da gestão à vista. Tokens e senhas nunca entram no arquivo.
+
+Aplicar é idempotente: setores, separações e parceiros são casados pelo código (ou nome) e atualizados;
+nada é apagado, porque peças e ordens já produzidas apontam para eles.
+"""
+import json
+from datetime import datetime
+from pathlib import Path
+
+from pydantic import BaseModel, ConfigDict, Field, ValidationError
+from sqlalchemy import select
+from sqlalchemy.orm import Session
+
+from ..models import CentroTrabalho, ClasseSeparacao, Empresa, Parceiro, RegraCentro
+from . import comercial, gestao, promob_prices, separacao
+
+FORMATO = "erp-moveleiro-setup"
+VERSAO = 1
+PASTA_MODELOS = Path(__file__).resolve().parent.parent / "setups"
+SECOES = {
+    "fabrica": "Parâmetros da fábrica (perdas, chapa, serra, imposto, garantia, caixa master)",
+    "fiscal": "Padrões fiscais (NCM, CFOP, CSOSN)",
+    "setores": "Setores e regras do roteiro",
+    "separacoes": "Separação de peças (tupia, tamburato...)",
+    "comercial": "Política comercial e integração Promob Prices (sem token)",
+    "parceiros": "Parceiros e RT",
+    "gestao": "Metas, WIP do kanban e calendário da gestão à vista",
+}
+CAMPOS_FABRICA = ["perda_chapa_pct", "perda_fita_pct", "chapa_comprimento_mm", "chapa_largura_mm", "serra_mm",
+                  "refilo_mm", "imposto_venda_pct", "garantia_meses", "caixa_max_modulos"]
+CAMPOS_FISCAL = ["ncm_padrao", "cfop_interno", "cfop_interestadual", "csosn_padrao"]
+CAMPOS_COMERCIAL = ["desconto_max_vendedor", "desconto_max_gerente", "margem_minima", "comissao_vendedor_pct",
+                    "limite_divergencia_pct", "validade_proposta_dias", "etapas", "condicoes", "prices_url",
+                    "prices_tabela_preferida", "prices_colunas"]
+
+
+class ErroSetup(ValueError):
+    status = 422
+
+
+class _M(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+
+
+class Fabrica(_M):
+    perda_chapa_pct: float | None = Field(None, ge=0, le=100)
+    perda_fita_pct: float | None = Field(None, ge=0, le=100)
+    chapa_comprimento_mm: float | None = Field(None, gt=0)
+    chapa_largura_mm: float | None = Field(None, gt=0)
+    serra_mm: float | None = Field(None, ge=0, le=20)
+    refilo_mm: float | None = Field(None, ge=0, le=100)
+    imposto_venda_pct: float | None = Field(None, ge=0, le=60)
+    garantia_meses: int | None = Field(None, ge=0, le=120)
+    caixa_max_modulos: int | None = Field(None, ge=1, le=50)
+
+
+class Fiscal(_M):
+    ncm_padrao: str | None = Field(None, pattern=r"^\d{8}$")
+    cfop_interno: str | None = Field(None, pattern=r"^\d{4}$")
+    cfop_interestadual: str | None = Field(None, pattern=r"^\d{4}$")
+    csosn_padrao: str | None = Field(None, pattern=r"^\d{3}$")
+
+
+class Setor(_M):
+    codigo: str = Field(min_length=2, max_length=20, pattern=r"^[A-Za-z0-9_]+$")
+    nome: str = Field(min_length=2, max_length=100)
+    sequencia: int
+    regra: RegraCentro = RegraCentro.TODAS
+    ativo: bool = True
+    exige_apontamento: bool = True
+
+
+class Separacao(_M):
+    codigo: str = Field(min_length=2, max_length=20, pattern=r"^[A-Za-z0-9_]+$")
+    nome: str = Field(min_length=2, max_length=60)
+    palavras_chave: str = Field("", max_length=400)
+    centro_codigo: str | None = Field(None, max_length=20)
+    vai_para_caixa: bool = True
+    ativo: bool = True
+
+
+class Condicao(_M):
+    nome: str = Field(min_length=1, max_length=60)
+    parcelas: int = Field(ge=1, le=60)
+    ajuste_pct: float = Field(ge=-50, le=50)
+
+
+class Comercial(_M):
+    desconto_max_vendedor: float | None = Field(None, ge=0, le=100)
+    desconto_max_gerente: float | None = Field(None, ge=0, le=100)
+    margem_minima: float | None = Field(None, ge=-100, le=100)
+    comissao_vendedor_pct: float | None = Field(None, ge=0, le=50)
+    limite_divergencia_pct: float | None = Field(None, ge=0, le=100)
+    validade_proposta_dias: int | None = Field(None, ge=1, le=180)
+    etapas: list[str] | None = None
+    condicoes: list[Condicao] | None = None
+    prices_url: str | None = Field(None, max_length=300)
+    prices_tabela_preferida: str | None = Field(None, max_length=200)
+    prices_colunas: dict[str, str] | None = None
+
+
+class ParceiroSetup(_M):
+    nome: str = Field(min_length=2, max_length=160)
+    tipo: str = Field("ARQUITETO", max_length=20)
+    documento: str | None = Field(None, max_length=20)
+    telefone: str | None = Field(None, max_length=30)
+    email: str | None = Field(None, max_length=160)
+    rt_pct: float = Field(0.0, ge=0, le=30)
+    ativo: bool = True
+
+
+class Gestao(_M):
+    metas: dict[str, float | None] | None = None
+    limites_wip: dict[str, int | None] | None = None
+    dias_uteis_mes: int | None = Field(None, ge=1, le=31)
+    horas_turno: float | None = Field(None, gt=0, le=24)
+
+
+class Setup(_M):
+    formato: str = FORMATO
+    versao: int = VERSAO
+    nome: str | None = None
+    descricao: str | None = None
+    fabrica: Fabrica | None = None
+    fiscal: Fiscal | None = None
+    setores: list[Setor] | None = None
+    separacoes: list[Separacao] | None = None
+    comercial: Comercial | None = None
+    parceiros: list[ParceiroSetup] | None = None
+    gestao: Gestao | None = None
+
+
+def validar(dados: dict) -> Setup:
+    if not isinstance(dados, dict) or dados.get("formato") != FORMATO:
+        raise ErroSetup("Arquivo não é um setup do ERP Moveleiro (campo 'formato' ausente ou diferente)")
+    if (dados.get("versao") or 0) > VERSAO:
+        raise ErroSetup(f"Setup na versão {dados.get('versao')}: atualize o ERP para aplicá-lo")
+    try:
+        return Setup.model_validate(dados)
+    except ValidationError as e:
+        erros = "; ".join(f"{'.'.join(str(x) for x in err['loc'])}: {err['msg']}" for err in e.errors()[:8])
+        raise ErroSetup(f"Setup com campos inválidos: {erros}")
+
+
+# --- Exportar -----------------------------------------------------------------------------------
+
+def exportar(db: Session, emp: Empresa, nome: str | None = None) -> dict:
+    cc = comercial.config(db, emp.id)
+    cg = gestao.config(db, emp.id)
+    centros = db.scalars(select(CentroTrabalho).where(CentroTrabalho.empresa_id == emp.id).order_by(CentroTrabalho.sequencia))
+    parceiros = db.scalars(select(Parceiro).where(Parceiro.empresa_id == emp.id).order_by(Parceiro.nome))
+    return {
+        "formato": FORMATO, "versao": VERSAO, "nome": nome or f"Setup {emp.nome}",
+        "descricao": f"Exportado de {emp.nome} em {datetime.now():%d/%m/%Y %H:%M}",
+        "fabrica": {k: getattr(emp, k) for k in CAMPOS_FABRICA},
+        "fiscal": {k: getattr(emp, k) for k in CAMPOS_FISCAL},
+        "setores": [{"codigo": c.codigo, "nome": c.nome, "sequencia": c.sequencia, "regra": RegraCentro(c.regra).value,
+                     "ativo": c.ativo, "exige_apontamento": c.exige_apontamento} for c in centros],
+        "separacoes": [{"codigo": c.codigo, "nome": c.nome, "palavras_chave": c.palavras_chave, "centro_codigo": c.centro_codigo,
+                        "vai_para_caixa": c.vai_para_caixa, "ativo": c.ativo} for c in separacao.garantir_padroes(db, emp.id)],
+        "comercial": {k: getattr(cc, k) for k in CAMPOS_COMERCIAL} | {
+            "etapas": cc.etapas or comercial.ETAPAS_PADRAO, "condicoes": cc.condicoes or comercial.CONDICOES_PADRAO},
+        "parceiros": [{k: getattr(p, k) for k in ("nome", "tipo", "documento", "telefone", "email", "rt_pct", "ativo")}
+                      for p in parceiros],
+        "gestao": {"metas": cg.metas or {}, "limites_wip": cg.limites_wip or {}, "dias_uteis_mes": cg.dias_uteis_mes,
+                   "horas_turno": cg.horas_turno},
+    }
+
+
+# --- Aplicar ------------------------------------------------------------------------------------
+
+def _fmt(v) -> str:
+    if isinstance(v, (list, dict)):
+        return json.dumps(v, ensure_ascii=False)[:80]
+    return "—" if v is None else str(v)
+
+
+def _campos(obj, novos: dict, rotulo: str, mudancas: list, secao: str) -> None:
+    for k, v in novos.items():
+        if v is None:
+            continue
+        atual = getattr(obj, k)
+        if atual != v:
+            mudancas.append({"secao": secao, "texto": f"{rotulo}{k}: {_fmt(atual)} → {_fmt(v)}"})
+            setattr(obj, k, v)
+
+
+def aplicar(db: Session, emp: Empresa, s: Setup, secoes: list[str] | None = None) -> list[dict]:
+    """Aplica as seções pedidas na sessão e devolve o que mudou. Quem chama decide entre commit e rollback."""
+    escolhidas = [x for x in (secoes or SECOES) if x in SECOES and getattr(s, x) is not None]
+    mud: list[dict] = []
+    if "fabrica" in escolhidas:
+        _campos(emp, s.fabrica.model_dump(), "", mud, "fabrica")
+    if "fiscal" in escolhidas:
+        _campos(emp, s.fiscal.model_dump(), "", mud, "fiscal")
+    if "setores" in escolhidas:
+        codigos = [x.codigo.upper() for x in s.setores]
+        if len(set(codigos)) != len(codigos):
+            raise ErroSetup("Setup com setor repetido")
+        existentes = {c.codigo: c for c in db.scalars(select(CentroTrabalho).where(CentroTrabalho.empresa_id == emp.id))}
+        for st in s.setores:
+            dados = st.model_dump(mode="json") | {"codigo": st.codigo.upper()}
+            c = existentes.get(dados["codigo"])
+            if c is None:
+                db.add(CentroTrabalho(empresa_id=emp.id, **dados))
+                mud.append({"secao": "setores", "texto": f"Novo setor {dados['codigo']} · {st.nome} (seq. {st.sequencia}, {st.regra.value})"})
+            else:
+                _campos(c, {k: v for k, v in dados.items() if k != "codigo"}, f"Setor {c.codigo} · ", mud, "setores")
+        for cod in sorted(set(existentes) - set(codigos)):
+            mud.append({"secao": "setores", "texto": f"Setor {cod} não está no setup: mantido como está"})
+        db.flush()
+    if "separacoes" in escolhidas:
+        setores_ok = {c.codigo for c in db.scalars(select(CentroTrabalho).where(CentroTrabalho.empresa_id == emp.id))}
+        existentes = {c.codigo: c for c in separacao.garantir_padroes(db, emp.id)}
+        for sp in s.separacoes:
+            dados = sp.model_dump() | {"codigo": sp.codigo.upper(),
+                                       "centro_codigo": sp.centro_codigo.upper() if sp.centro_codigo else None}
+            if dados["centro_codigo"] and dados["centro_codigo"] not in setores_ok:
+                raise ErroSetup(f"Separação {dados['codigo']} aponta para o setor {dados['centro_codigo']}, que não existe nesta base")
+            c = existentes.get(dados["codigo"])
+            if c is None:
+                db.add(ClasseSeparacao(empresa_id=emp.id, **dados))
+                mud.append({"secao": "separacoes", "texto": f"Nova separação {dados['codigo']} · {sp.nome}"})
+            else:
+                _campos(c, {k: v for k, v in dados.items() if k != "codigo"} | {"centro_codigo": dados["centro_codigo"]},
+                        f"Separação {c.codigo} · ", mud, "separacoes")
+                if c.centro_codigo != dados["centro_codigo"]:
+                    c.centro_codigo = dados["centro_codigo"]
+        db.flush()
+    if "comercial" in escolhidas:
+        cfg = comercial.config(db, emp.id)
+        dados = s.comercial.model_dump()
+        if dados.get("etapas") is not None:
+            dados["etapas"] = [e.strip()[:40] for e in dados["etapas"] if e and e.strip()]
+            if len(dados["etapas"]) < 2:
+                raise ErroSetup("O funil do setup precisa de pelo menos duas etapas")
+        if dados.get("condicoes") is not None and not dados["condicoes"]:
+            raise ErroSetup("O setup precisa de ao menos uma condição de pagamento")
+        if dados.get("prices_url"):
+            try:
+                promob_prices.validar_url(dados["prices_url"])
+            except promob_prices.ErroPrices as e:
+                raise ErroSetup(str(e))
+        for k in ("prices_url", "prices_tabela_preferida"):  # vazio no setup = padrão
+            if k in s.comercial.model_fields_set and not dados.get(k) and getattr(cfg, k):
+                mud.append({"secao": "comercial", "texto": f"{k}: {getattr(cfg, k)} → padrão"})
+                setattr(cfg, k, None)
+        if dados.get("prices_colunas") is not None:
+            dados["prices_colunas"] = {k: v.strip() for k, v in dados["prices_colunas"].items()
+                                       if k in ("sku", "descricao", "preco") and v and v.strip()} or None
+            if dados["prices_colunas"] is None and cfg.prices_colunas:
+                mud.append({"secao": "comercial", "texto": "prices_colunas → detecção automática"})
+                cfg.prices_colunas = None
+        _campos(cfg, dados, "", mud, "comercial")
+        if cfg.desconto_max_vendedor > cfg.desconto_max_gerente:
+            raise ErroSetup("No setup, o limite de desconto do vendedor passa o do gerente")
+    if "parceiros" in escolhidas:
+        existentes = {p.nome.strip().lower(): p for p in db.scalars(select(Parceiro).where(Parceiro.empresa_id == emp.id))}
+        for ps in s.parceiros:
+            p = existentes.get(ps.nome.strip().lower())
+            if p is None:
+                db.add(Parceiro(empresa_id=emp.id, **ps.model_dump()))
+                mud.append({"secao": "parceiros", "texto": f"Novo parceiro {ps.nome} (RT {ps.rt_pct:g}%)"})
+            else:
+                _campos(p, ps.model_dump(), f"Parceiro {p.nome} · ", mud, "parceiros")
+    if "gestao" in escolhidas:
+        cfg = gestao.config(db, emp.id)
+        dados = s.gestao.model_dump()
+        validas = {c for c, *_ in gestao.METAS}
+        if dados.get("metas") is not None:
+            dados["metas"] = {k: v for k, v in dados["metas"].items() if k in validas and v is not None}
+        colunas = {c for c, _ in gestao.COLUNAS}
+        if dados.get("limites_wip") is not None:
+            dados["limites_wip"] = {k: v for k, v in dados["limites_wip"].items() if k in colunas and v}
+        _campos(cfg, dados, "", mud, "gestao")
+    db.flush()
+    return mud
+
+
+# --- Modelos prontos ----------------------------------------------------------------------------
+
+def modelos() -> list[dict]:
+    lista = []
+    for arq in sorted(PASTA_MODELOS.glob("*.json")):
+        try:
+            d = json.loads(arq.read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            continue
+        lista.append({"codigo": arq.stem, "nome": d.get("nome") or arq.stem, "descricao": d.get("descricao"),
+                      "secoes": [x for x in SECOES if d.get(x) is not None]})
+    return lista
+
+
+def modelo(codigo: str) -> dict:
+    arq = PASTA_MODELOS / f"{codigo}.json"
+    if not codigo.replace("-", "").replace("_", "").isalnum() or not arq.is_file():
+        raise ErroSetup("Modelo de setup não encontrado")
+    return json.loads(arq.read_text(encoding="utf-8"))

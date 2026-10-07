@@ -60,6 +60,9 @@ class ConfigIn(BaseModel):
     etapas: list[str] | None = None
     condicoes: list[CondicaoIn] | None = None
     prices_token: str | None = Field(None, max_length=2000)
+    prices_url: str | None = Field(None, max_length=300)
+    prices_tabela_preferida: str | None = Field(None, max_length=200)
+    prices_colunas: dict[str, str] | None = None
 
 
 def config_out(db: Session, cfg) -> dict:
@@ -69,7 +72,9 @@ def config_out(db: Session, cfg) -> dict:
             "limite_divergencia_pct": cfg.limite_divergencia_pct, "validade_proposta_dias": cfg.validade_proposta_dias,
             "etapas": cfg.etapas or comercial.ETAPAS_PADRAO, "condicoes": cfg.condicoes or comercial.CONDICOES_PADRAO,
             "prices_token_configurado": bool(cfg.prices_token), "prices_tabela": cfg.prices_tabela,
-            "prices_sincronizado_em": cfg.prices_sincronizado_em, "prices_itens": itens}
+            "prices_sincronizado_em": cfg.prices_sincronizado_em, "prices_itens": itens,
+            "prices_url": cfg.prices_url or promob_prices.BASE, "prices_tabela_preferida": cfg.prices_tabela_preferida,
+            "prices_colunas": cfg.prices_colunas or {}}
 
 
 @router.get("/api/comercial/config", dependencies=[Depends(COMERCIAL)])
@@ -93,6 +98,21 @@ def salvar_config(dados: ConfigIn, emp: Empresa = Depends(empresa_atual), db: Se
     token = campos.pop("prices_token", None)
     if token:  # vazio não apaga o token já salvo
         cfg.prices_token = token.strip()
+    # Campos do setup da integração: vazio volta ao padrão
+    if "prices_url" in campos:
+        url = (campos.pop("prices_url") or "").strip().rstrip("/")
+        if url:
+            try:
+                promob_prices.validar_url(url)
+            except promob_prices.ErroPrices as e:
+                raise HTTPException(e.status, str(e))
+        cfg.prices_url = None if not url or url == promob_prices.BASE else url
+    if "prices_tabela_preferida" in campos:
+        cfg.prices_tabela_preferida = (campos.pop("prices_tabela_preferida") or "").strip() or None
+    if "prices_colunas" in campos:
+        mapa = {k: v.strip() for k, v in (campos.pop("prices_colunas") or {}).items()
+                if k in ("sku", "descricao", "preco") and v and v.strip()}
+        cfg.prices_colunas = mapa or None
     for k, v in campos.items():
         if v is not None:
             setattr(cfg, k, v)
@@ -110,6 +130,15 @@ def sincronizar_prices(emp: Empresa = Depends(empresa_atual), db: Session = Depe
         _erro(db, e)
     db.commit()
     return r
+
+
+@router.post("/api/comercial/prices/diagnostico", dependencies=[Depends(ADMIN)])
+def diagnosticar_prices(emp: Empresa = Depends(empresa_atual), db: Session = Depends(get_db)):
+    """Mostra o formato real das tabelas e do CSV da conta (nada é gravado)."""
+    try:
+        return promob_prices.diagnosticar(comercial.config(db, emp.id))
+    except promob_prices.ErroPrices as e:
+        _erro(db, e)
 
 
 # --- Parceiros (arquitetos, designers, lojas) --------------------------------------------

@@ -58,6 +58,14 @@ O módulo Comercial puxa a tabela de preços ativa da conta Promob para conferir
 - O **token da conta** é informado pelo administrador em **Comercial → Configurações do comercial**. Ele fica só no banco, nunca volta para a tela nem aparece na auditoria. Não coloque o token em `.env`, código ou chamados.
 - O servidor precisa de saída HTTPS para `prices-api.promob.com` e para o armazenamento de onde a Promob serve o `.zip` da tabela. Num VPS comum isso já é liberado; em rede corporativa com firewall, libere esses domínios.
 - Token recusado (401/403) aparece como mensagem na tela; gere um novo na conta Promob e grave de novo.
+- Antes da primeira sincronização de uma base nova, use **Ver formatos da conta** para conferir a tabela e as colunas do CSV e acerte o mapeamento no setup.
+
+## Implantar uma base nova
+
+1. Cadastre a empresa (primeiro acesso) e entre como administrador.
+2. Em **Configurações → Setup da base**, aplique o modelo mais próximo ou o arquivo de setup preparado para o cliente; confira a prévia e aplique.
+3. Informe os segredos pela tela, nunca no arquivo: token do Promob Prices (Comercial) e token fiscal (Configurações da empresa).
+4. Cadastre os usuários e ajuste as funções de cada login.
 
 Os renders enviados nas negociações ficam no volume `arquivos`. O backup do banco **não** inclui esse volume: inclua `arquivos` na sua cópia para a nuvem se quiser preservá-los.
 

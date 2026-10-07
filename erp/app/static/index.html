@@ -106,16 +106,30 @@ td input.num { width: 90px; text-align: right; }
 .funcoes label input { margin-top: 3px; width: 16px; height: 16px; accent-color: var(--brand); }
 .funcoes label small { display: block; color: var(--muted); font-size: 12px; }
 .check { display: grid; gap: 6px; } .check label { display: flex; gap: 10px; align-items: center; padding: 8px 10px; border: 1px solid var(--line); border-radius: 8px; }
-#ind-kpis { grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); }
+#ind-kpis, #gv-kpis { grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); }
 @media (max-width: 640px) {
   header nav { flex-wrap: nowrap; overflow-x: auto; width: 100%; scrollbar-width: none; -webkit-overflow-scrolling: touch; }
   header nav button { flex: none; }
-  #ind-kpis .kpi { font-size: 21px; padding: 12px; }
+  #ind-kpis .kpi, #gv-kpis .kpi { font-size: 21px; padding: 12px; }
 }
 .ind-grade { display: grid; gap: 16px; grid-template-columns: repeat(auto-fit, minmax(min(100%, 460px), 1fr)); }
 .ind-grade .card { margin: 0; min-width: 0; }
 .kpi .sub { display: block; font-size: 12px; font-weight: 400; color: var(--muted); margin-top: 2px; }
 .kpi.alerta { border-color: var(--err); }
+.kpi.gv-OK { border-left: 6px solid var(--ok); } .kpi.gv-ATENCAO { border-left: 6px solid var(--warn); } .kpi.gv-CRITICO { border-left: 6px solid var(--err); }
+.tag.VERDE { background: var(--ok); color: #fff; } .tag.AMARELO { background: var(--warn); color: #fff; } .tag.VERMELHO, .tag.RESTRICAO { background: var(--err); color: #fff; } .tag.PRETO { background: #111; color: #fff; }
+.gv-topo { align-items: center; } .gv-topo b { font-size: 18px; margin-right: auto; }
+.takt svg { width: 100%; height: 170px; display: block; } .takt .eixo { fill: var(--muted); font-size: 11px; }
+.takt .bar { fill: var(--brand); } .takt .bar.hoje { fill: color-mix(in srgb, var(--brand) 60%, var(--ink)); } .takt .linha-takt { stroke: var(--err); stroke-width: 2; stroke-dasharray: 6 4; }
+.andon { display: grid; gap: 8px; } .andon div { padding: 8px 12px; border-radius: 8px; border-left: 5px solid var(--warn); background: color-mix(in srgb, var(--warn) 12%, transparent); }
+.andon div.CRITICO { border-left-color: var(--err); background: color-mix(in srgb, var(--err) 14%, transparent); font-weight: 600; }
+.pulmao { display: grid; grid-template-columns: auto 1fr; gap: 6px 12px; align-items: center; font-size: 13px; }
+.pulmao .barras { display: grid; gap: 3px; } .pulmao .barra { height: 8px; }
+.pulmao .barra.tempo i { background: var(--warn); }
+.funil .col.excedido { outline: 2px solid var(--err); } .funil .col.excedido h3 { color: var(--err); } .funil .op.atrasado { border-color: var(--err); }
+body.tv header, body.tv .demo, body.tv #gv-config, body.tv .gv-acoes { display: none !important; } body.tv main { max-width: none; }
+body.tv #gv-kpis .kpi { font-size: 30px; } body.tv .andon div { font-size: 17px; }
+.diag pre { max-height: 220px; overflow: auto; background: var(--bg); padding: 10px; border-radius: 6px; font-size: 12px; }
 .hbar { display: grid; grid-template-columns: minmax(70px, 120px) 1fr auto; gap: 4px 10px; align-items: center; font-size: 13px; }
 .hbar .rot { color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .hbar .trilho { height: 14px; position: relative; border-left: 1px solid var(--line); }
@@ -131,7 +145,9 @@ td input.num { width: 90px; text-align: right; }
 .alertas li { display: flex; gap: 8px; align-items: baseline; }
 .check input[type=checkbox] { width: 20px; height: 20px; accent-color: var(--ok); } .check small { color: var(--muted); margin-left: auto; } .tag.PAGO { background: var(--ok); color: #fff; }
 .cfg { display: grid; gap: 10px; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); }
-.cfg label { display: grid; gap: 4px; font-size: 13px; color: var(--muted); }
+.cfg label { display: grid; gap: 4px; font-size: 13px; color: var(--muted); min-width: 0; align-content: end; }
+.cfg input { min-width: 0; width: 100%; box-sizing: border-box; }
+#gv-metas, #gv-wip { grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); }
 .dre td:first-child { color: var(--muted); } .dre tr.total td { font-weight: 700; color: var(--ink); border-top: 2px solid var(--line); }
 .chapas { display: grid; gap: 14px; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); }
 .chapa { margin: 0; min-width: 0; } .chapa figcaption { font-size: 12px; color: var(--muted); margin-bottom: 4px; }
@@ -187,6 +203,7 @@ td input.num { width: 90px; text-align: right; }
   <h1>ERP <span>Moveleiro</span></h1>
   <nav id="abas">
     <button data-aba="indicadores">Indicadores</button>
+    <button data-aba="gestao">Gestão à vista</button>
     <button data-aba="painel">Painel PCP</button>
     <button data-aba="comercial">Comercial</button>
     <button data-aba="projetos">Projetos</button>
@@ -229,6 +246,25 @@ td input.num { width: 90px; text-align: right; }
     </div>
   </section>
 
+  <section id="gestao">
+    <div class="linha gv-topo"><b id="gv-titulo">Gestão à vista</b><span class="dica" id="gv-hora"></span>
+      <span class="gv-acoes"><button class="btn sec" onclick="carregarGestao()">Atualizar</button> <button class="btn" onclick="modoTV()">Modo TV</button></span></div>
+    <div class="grid" id="gv-kpis"></div>
+    <div class="ind-grade">
+      <div class="card takt"><h2>Ritmo × takt: m² produzidos por dia</h2><div id="gv-takt"></div></div>
+      <div class="card"><h2>Andon: o que pede ação hoje</h2><div class="andon" id="gv-andon"></div></div>
+      <div class="card"><h2>Restrição da fábrica</h2><p class="dica">Teoria das Restrições: o setor com mais dias de fila (m² parados ÷ vazão dos últimos 7 dias) dita o ritmo da fábrica inteira. Uma hora perdida nele é uma hora perdida no faturamento.</p><div class="tabela" id="gv-setores"></div></div>
+      <div class="card"><h2>Pulmão das obras</h2><p class="dica">Prazo consumido × trabalho feito (etapas apontadas). <b>Verde</b>: adiantada. <b>Amarelo</b>: atenção. <b>Vermelho</b>: priorize hoje. <b>Preto</b>: entrega vencida.</p><div id="gv-pulmoes"></div></div>
+    </div>
+    <div class="card"><h2>Kanban do fluxo da obra</h2><p class="dica">Limite de WIP por coluna (setup da base): coluna em vermelho tem obra demais. Termine antes de puxar a próxima.</p><div class="funil" id="gv-kanban"></div></div>
+    <div class="card" id="gv-config" hidden><h2>Metas e limites desta base</h2>
+      <p class="dica">Metas mensais em m² e em valor; em branco, o indicador aparece sem cobrança. As metas acumuladas no mês são cobradas proporcionalmente aos dias úteis já passados.</p>
+      <div class="cfg" id="gv-metas"></div>
+      <h2>Limite de obras por coluna (WIP)</h2><div class="cfg" id="gv-wip"></div>
+      <div class="linha" style="margin-top:10px"><button class="btn" onclick="salvarMetas()">Salvar metas</button></div><div id="gv-msg"></div>
+    </div>
+  </section>
+
   <section id="painel">
     <div class="grid" id="kpis"></div>
     <div class="card"><h2>Fila por centro de trabalho</h2><div class="tabela" id="filas"></div></div>
@@ -262,6 +298,16 @@ td input.num { width: 90px; text-align: right; }
       <h2>Promob Prices</h2>
       <div class="linha"><input id="cc-token" type="password" placeholder="Token da conta (só gravação)" size="34" style="max-width:100%" autocomplete="off" aria-label="Token do Promob Prices">
         <button class="btn sec" onclick="sincronizarPrices()">Sincronizar tabela vigente</button><span class="dica" id="cc-prices"></span></div>
+      <div class="cfg">
+        <label>Endereço da API<input id="cc-prices-url" placeholder="https://prices-api.promob.com/api"></label>
+        <label>Tabela a usar (vazio = a ativa)<input id="cc-prices-tabela" placeholder="Descrição exata da tabela"></label>
+        <label>Coluna do código (SKU)<input id="cc-col-sku" placeholder="automático"></label>
+        <label>Coluna da descrição<input id="cc-col-descricao" placeholder="automático"></label>
+        <label>Coluna do preço<input id="cc-col-preco" placeholder="automático"></label>
+      </div>
+      <div class="linha" style="margin-top:8px"><button class="btn sec" onclick="diagnosticarPrices()">Ver formatos da conta</button>
+        <span class="dica">Lista as tabelas e mostra o cabeçalho e as primeiras linhas do CSV, sem gravar nada: use para acertar as colunas desta base.</span></div>
+      <div class="diag" id="cc-diag"></div>
       <div class="linha"><button class="btn" onclick="salvarConfigComercial()">Salvar configurações do comercial</button></div>
       <div id="cc-msg"></div>
       <h2>Parceiros (arquitetos, designers, lojas)</h2>
@@ -398,6 +444,13 @@ td input.num { width: 90px; text-align: right; }
   </section>
 
   <section id="configuracoes">
+    <div class="card"><h2>Setup da base</h2>
+      <p class="dica">Toda a parametrização desta fábrica num arquivo: parâmetros de produção, setores, separação de peças, política comercial, integração com o Promob Prices, parceiros e metas. Exporte, personalize e aplique em outra base, ou parta de um modelo pronto. Tokens e senhas nunca entram no arquivo. Aplicar sempre mostra antes o que vai mudar; nada é apagado.</p>
+      <div class="linha"><button class="btn sec" onclick="exportarSetup()">Exportar setup desta base</button>
+        <label class="btn sec">Importar arquivo de setup<input type="file" id="su-arq" accept=".json,application/json" hidden onchange="lerSetup(this)"></label></div>
+      <div class="tabela" id="su-modelos"></div>
+      <div id="su-previa"></div>
+    </div>
     <div class="card"><h2>Saúde do sistema</h2>
       <div class="grid" id="sis-kpis"></div>
       <div id="sis-detalhe"></div>
@@ -654,7 +707,7 @@ function tabela(colunas, linhas) {
 const carregadores = {painel: carregarPainel, projetos: carregarProjetos, ops: carregarOps, usuarios: carregarUsuarios,
                       estoque: carregarEstoque, compras: carregarCompras, financeiro: carregarFinanceiro,
                       montagem: carregarMontagem, assistencia: carregarAssistencia, indicadores: carregarIndicadores,
-                      apontamento: carregarApontamento, materiais: carregarMateriais, producao: carregarProducao, expedicao: carregarExpedicao, configuracoes: carregarConfiguracoes, comercial: carregarComercial};
+                      apontamento: carregarApontamento, materiais: carregarMateriais, producao: carregarProducao, expedicao: carregarExpedicao, configuracoes: carregarConfiguracoes, comercial: carregarComercial, gestao: carregarGestao};
 function abrir(aba) {
   document.querySelectorAll("section").forEach((s) => s.classList.toggle("ativo", s.id === aba));
   document.querySelectorAll("#abas button").forEach((b) => b.classList.toggle("ativo", b.dataset.aba === aba));
@@ -1449,7 +1502,7 @@ async function salvarEmpresa() {
 // --- Acesso -----------------------------------------------------------------
 // Cada aba aparece se o login opera ao menos uma das funções listadas (null = aberta a todos)
 const ABA_FUNCOES = {
-  indicadores: ["indicadores"], comercial: ["comercial", "aprovar_venda"], painel: null, projetos: ["projetos", "pcp", "financeiro", "fiscal"], ops: null,
+  indicadores: ["indicadores"], gestao: ["indicadores"], comercial: ["comercial", "aprovar_venda"], painel: null, projetos: ["projetos", "pcp", "financeiro", "fiscal"], ops: null,
   apontamento: ["apontamento"], producao: ["pcp", "apontamento", "estorno", "refugo", "indicadores"], expedicao: ["expedicao"],
   estoque: ["estoque", "compras", "projetos", "pcp"], compras: ["compras"], montagem: ["montagem"], assistencia: ["assistencia"],
   financeiro: ["financeiro", "fiscal", "conciliacao"], materiais: ["materiais", "projetos", "compras", "pcp"], usuarios: ["usuarios"], configuracoes: ["usuarios"],
@@ -1823,6 +1876,8 @@ function mostrarConfigComercial() {
   $("cc-politica").innerHTML = CAMPOS_COM.map(([k, t]) => `<label>${t}<input id="cc-${k}" type="number" step="0.5" value="${cfgCom[k]}"></label>`).join("");
   $("cc-etapas").value = cfgCom.etapas.join("\n");
   condicoesEd = cfgCom.condicoes.map((c) => ({...c})); desenharCondicoes();
+  $("cc-prices-url").value = cfgCom.prices_url || ""; $("cc-prices-tabela").value = cfgCom.prices_tabela_preferida || "";
+  ["sku", "descricao", "preco"].forEach((k) => $("cc-col-" + k).value = (cfgCom.prices_colunas || {})[k] || "");
   $("cc-prices").textContent = cfgCom.prices_token_configurado ? `Token salvo · ${cfgCom.prices_tabela ? `tabela "${cfgCom.prices_tabela}" com ${cfgCom.prices_itens} itens, sincronizada em ${quando(cfgCom.prices_sincronizado_em)}` : "ainda não sincronizado"}` : "Token não configurado";
   $("cc-parceiros").innerHTML = tabela([["Parceiro", (p) => `<b>${esc(p.nome)}</b>`], ["Tipo", (p) => esc(p.tipo)], ["Telefone", (p) => esc(p.telefone || "—")],
     ["RT", (p) => `<input type="number" step="0.5" value="${p.rt_pct}" style="width:80px" onchange="alterarParceiro(${p.id}, {rt_pct: Number(this.value)})" aria-label="RT">`],
@@ -1840,6 +1895,8 @@ async function salvarConfigComercial() {
   const dados = Object.fromEntries(CAMPOS_COM.map(([k]) => [k, Number($("cc-" + k).value)]));
   dados.etapas = $("cc-etapas").value.split("\n").map((x) => x.trim()).filter(Boolean); dados.condicoes = condicoesEd;
   if ($("cc-token").value.trim()) dados.prices_token = $("cc-token").value.trim();
+  dados.prices_url = $("cc-prices-url").value.trim(); dados.prices_tabela_preferida = $("cc-prices-tabela").value.trim();
+  dados.prices_colunas = Object.fromEntries(["sku", "descricao", "preco"].map((k) => [k, $("cc-col-" + k).value.trim()]).filter(([, v]) => v));
   try { cfgCom = await api("/api/comercial/config", {method: "PUT", json: dados}); $("cc-token").value = ""; mostrarConfigComercial(); msgCc(true, "Configurações do comercial salvas."); carregarComercial(); }
   catch (e) { msgCc(false, e.message); }
 }
@@ -1885,6 +1942,7 @@ async function carregarConfiguracoes() {
   carregarSistema().catch((e) => $("sis-detalhe").innerHTML = `<div class="msg err">${esc(e.message)}</div>`);
   if (!$("au-de").value) { const d = new Date(); $("au-ate").value = d.toISOString().slice(0, 10); d.setDate(d.getDate() - 7); $("au-de").value = d.toISOString().slice(0, 10); }
   carregarAuditoria().catch(() => {});
+  carregarSetups().catch((e) => $("su-modelos").innerHTML = `<div class="msg err">${esc(e.message)}</div>`);
   const [centros, classes, carros] = await Promise.all([api("/api/centros"), api("/api/separacoes"), api("/api/carrinhos")]);
   separacoesCache = classes;
   $("cfg-centros").innerHTML = tabela([["Ordem", (c) => `<input type="number" value="${c.sequencia}" style="width:70px" onchange="salvarSetor(${c.id}, {sequencia: Number(this.value)})" aria-label="Ordem">`],
@@ -2201,6 +2259,120 @@ async function iniciar() {
   if (!token) return mostrarAcesso();
   try { entrar(await api("/api/auth/eu")); } catch (e) { mostrarAcesso(); }
 }
+// --- Diagnóstico do Promob Prices: formatos reais da conta --------------------------------------
+async function diagnosticarPrices() {
+  $("cc-diag").innerHTML = `<p class="dica">Consultando o Promob Prices...</p>`;
+  try {
+    const d = await api("/api/comercial/prices/diagnostico", {method: "POST"});
+    $("cc-diag").innerHTML = `<p class="dica">Endereço ${esc(d.endereco)} · tabela usada: <b>${esc(String(d.tabela_escolhida))}</b> · campos de cada tabela: ${d.campos_da_tabela.map(esc).join(", ")}</p>
+      ${tabela([["Id", (t) => esc(String(t.id))], ["Tabela", (t) => esc(t.description || "—")], ["Ativa", (t) => t.active ? tag("OK") : ""]], d.tabelas)}
+      <p class="dica">CSV <b>${esc(d.arquivo_csv)}</b> · separador "${esc(d.separador)}" · ${d.total_linhas} linha(s) ·
+      ${d.mapeamento ? `colunas usadas: código = <b>${esc(d.mapeamento.sku)}</b>, descrição = <b>${esc(d.mapeamento.descricao || "—")}</b>, preço = <b>${esc(d.mapeamento.preco)}</b>` : `<span class="neg">${esc(d.erro_mapeamento)}</span>`}</p>
+      <div class="tabela"><table><thead><tr>${d.cabecalho.map((c) => `<th>${esc(c)}</th>`).join("")}</tr></thead>
+      <tbody>${d.linhas_exemplo.map((l) => `<tr>${l.map((c) => `<td>${esc(c)}</td>`).join("")}</tr>`).join("")}</tbody></table></div>`;
+  } catch (e) { $("cc-diag").innerHTML = `<div class="msg err">${esc(e.message)}</div>`; }
+}
+
+// --- Setup da base -------------------------------------------------------------------------------
+let setupPendente = null, secoesSetup = {};
+async function carregarSetups() {
+  const r = await api("/api/setup/modelos"); secoesSetup = r.secoes;
+  $("su-modelos").innerHTML = tabela([["Modelo pronto", (m) => `<b>${esc(m.nome)}</b><br><span class="dica">${esc(m.descricao || "")}</span>`],
+    ["Seções", (m) => m.secoes.length, 1],
+    ["", (m) => `<button class="btn sec" onclick="simularSetup({modelo: '${m.codigo}'})">Ver o que muda</button> <button class="btn sec" onclick="baixarArquivo('/api/setup/modelos/${m.codigo}', '${m.codigo}.json')">Baixar para personalizar</button>`]], r.modelos);
+}
+async function exportarSetup() { await baixarArquivo("/api/setup/exportar", `setup-${(sessao.empresa.nome || "base").toLowerCase().replace(/[^a-z0-9]+/g, "-")}.json`); }
+function lerSetup(input) {
+  const f = input.files[0]; if (!f) return;
+  const r = new FileReader();
+  r.onload = () => { try { simularSetup({setup: JSON.parse(r.result)}); } catch (e) { $("su-previa").innerHTML = `<div class="msg err">Arquivo não é um JSON válido.</div>`; } input.value = ""; };
+  r.readAsText(f, "utf-8");
+}
+async function simularSetup(origem) {
+  setupPendente = origem;
+  try {
+    const r = await api("/api/setup/aplicar", {method: "POST", json: {...origem, simular: true}});
+    const por = {}; r.mudancas.forEach((m) => (por[m.secao] ||= []).push(m.texto));
+    $("su-previa").innerHTML = `<h2>Prévia: ${esc(r.nome || "setup")}</h2>
+      <p class="dica">Nada foi gravado ainda. Desmarque as seções que não quer aplicar nesta base.</p>
+      <div class="check">${r.secoes.map((s) => `<label><input type="checkbox" class="su-sec" value="${s}" checked>
+        <span><b>${esc(secoesSetup[s] || s)}</b><br><span class="dica">${por[s] ? por[s].map(esc).join("<br>") : "sem mudanças"}</span></span></label>`).join("")}</div>
+      <div class="linha" style="margin-top:10px"><button class="btn" onclick="aplicarSetup()">Aplicar seções marcadas</button><button class="btn sec" onclick="$('su-previa').innerHTML = ''">Cancelar</button></div><div id="su-msg"></div>`;
+  } catch (e) { $("su-previa").innerHTML = `<div class="msg err">${esc(e.message)}</div>`; }
+}
+async function aplicarSetup() {
+  const secoes = [...document.querySelectorAll(".su-sec:checked")].map((x) => x.value);
+  if (!secoes.length) { $("su-msg").innerHTML = `<div class="msg err">Marque ao menos uma seção.</div>`; return; }
+  try {
+    const r = await api("/api/setup/aplicar", {method: "POST", json: {...setupPendente, secoes, simular: false}});
+    $("su-previa").innerHTML = `<div class="msg ok">Setup aplicado: ${r.mudancas.length} mudança(s) em ${r.secoes.length} seção(ões).</div>`;
+    carregarConfiguracoes(); carregarEmpresa().catch(() => {});
+  } catch (e) { $("su-msg").innerHTML = `<div class="msg err">${esc(e.message)}</div>`; }
+}
+
+// --- Gestão à vista ------------------------------------------------------------------------------
+let gvTimer = null, gvConfig = null;
+const fmtGv = (u, v) => v == null ? "—" : u === "R$" ? brl(v) : u === "%" ? pctTxt(v) : `${num(v, 1)} m²`;
+function graficoTakt(t) {
+  const W = 560, H = 170, base = H - 22, topo = 14, n = t.serie.length, larg = W / n;
+  const max = Math.max(1, t.takt_m2_dia || 0, ...t.serie.map((d) => d.m2)) * 1.1, y = (v) => base - (base - topo) * v / max;
+  const barras = t.serie.map((d, i) => { const dt = new Date(d.dia + "T12:00");
+    return `<rect class="bar ${i === n - 1 ? "hoje" : ""}" x="${i * larg + 4}" y="${y(d.m2)}" width="${larg - 8}" height="${Math.max(0, base - y(d.m2))}"><title>${dt.toLocaleDateString("pt-BR")}: ${num(d.m2, 1)} m²</title></rect>
+      <text class="eixo" x="${i * larg + larg / 2}" y="${H - 6}" text-anchor="middle">${dt.getDate()}</text>`; }).join("");
+  const linha = t.takt_m2_dia ? `<line class="linha-takt" x1="0" x2="${W}" y1="${y(t.takt_m2_dia)}" y2="${y(t.takt_m2_dia)}"/><text class="eixo" x="${W - 4}" y="${y(t.takt_m2_dia) - 4}" text-anchor="end">takt ${num(t.takt_m2_dia, 1)} m²/dia</text>` : "";
+  return `<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="m² produzidos por dia nos últimos 14 dias">${barras}${linha}</svg>`;
+}
+async function carregarGestao() {
+  const g = await api("/api/gestao/painel"), t = g.takt;
+  $("gv-hora").textContent = `${new Date(g.mes + "-15").toLocaleDateString("pt-BR", {month: "long", year: "numeric"})} · atualizado ${quando(g.gerado_em)}`;
+  $("gv-kpis").innerHTML = g.kpis.map((k) => `<div class="card kpi gv-${k.status || "sem"}">${fmtGv(k.unidade, k.valor)}<small>${esc(k.nome)}</small>
+    <span class="sub">${k.meta == null ? "sem meta" : `meta ${fmtGv(k.unidade, k.meta)}${k.esperado_ate_hoje != null ? ` · até hoje ${fmtGv(k.unidade, k.esperado_ate_hoje)}` : ""}`}</span></div>`).join("");
+  $("gv-takt").innerHTML = graficoTakt(t) + `<p class="dica">Ritmo dos últimos 7 dias: <b>${num(t.ritmo_m2_dia, 1)} m²/dia</b> · produzido no mês: <b>${num(t.produzido_mes_m2, 1)} m²</b> · projeção do mês: <b>${num(t.projecao_mes_m2, 1)} m²</b>
+    ${t.meta_m2_mes ? `<br>Meta ${num(t.meta_m2_mes)} m² em ${t.dias_uteis_mes} dias úteis: takt de <b>${num(t.takt_m2_dia, 1)} m²/dia</b> (${num(t.takt_min_por_m2, 1)} min por m² no turno). Para fechar o mês: <b>${num(t.necessario_m2_dia, 1)} m²</b> por dia útil nos ${t.dias_uteis_restantes} restantes.` : "<br>Defina a meta de m² produzidos para ver o takt."}</p>`;
+  $("gv-andon").innerHTML = g.andon.length ? g.andon.map((a) => `<div class="${a.nivel}">${esc(a.texto)}</div>`).join("") : `<p class="feito">Nada pedindo ação agora: fábrica sob controle.</p>`;
+  $("gv-setores").innerHTML = tabela([["Setor", (s) => `<b>${esc(s.centro_codigo)}</b> ${esc(s.centro_nome)} ${s.centro_codigo === g.restricao ? tag("RESTRICAO").replace("RESTRICAO<", "restrição<") : ""}${s.conferencia ? "" : ' <span class="dica">sem conferência</span>'}`],
+    ["Fila (peças)", (s) => s.fila_pecas, 1], ["Fila (m²)", (s) => num(s.fila_m2, 1), 1], ["Vazão (m²/dia)", (s) => num(s.vazao_m2_dia, 1), 1],
+    ["Dias de fila", (s) => s.dias_de_fila == null ? (s.fila_pecas ? "sem vazão" : "—") : num(s.dias_de_fila, 1), 1]], g.setores);
+  $("gv-pulmoes").innerHTML = g.pulmoes.length ? `<div class="pulmao">${g.pulmoes.map((b) => `${tag(b.zona)}<div><b>${esc(b.codigo)}</b> ${esc(b.nome)} · entrega ${dataBR(b.data_entrega)} (${b.dias_restantes >= 0 ? `faltam ${b.dias_restantes} dia(s)` : `vencida há ${-b.dias_restantes}`})
+      <div class="barras"><div class="barra tempo" title="Prazo consumido"><i style="width:${b.tempo_pct}%"></i></div><div class="barra" title="Trabalho feito"><i style="width:${b.trabalho_pct}%"></i></div></div>
+      <span class="dica">prazo usado ${b.tempo_pct}% · trabalho feito ${b.trabalho_pct}%</span></div>`).join("")}</div>` : `<p class="pend">Nenhuma obra liberada com data de entrega.</p>`;
+  $("gv-kanban").innerHTML = g.kanban.map((c) => `<div class="col ${c.excedido ? "excedido" : ""}"><h3><span>${esc(c.nome)}</span><span>${c.quantidade}${c.limite ? ` / ${c.limite}` : ""}</span></h3>
+    ${c.valor ? `<p class="dica" style="margin:0 4px 8px">${brl(c.valor)}</p>` : ""}
+    ${c.itens.map((i) => `<div class="op ${i.atrasado ? "atrasado" : ""}"><b>${esc(i.codigo)}</b>${esc(i.nome)}
+      <div class="dica">${i.etapa ? esc(i.etapa) + " · " : ""}${i.data_entrega ? "entrega " + dataBR(i.data_entrega) + " · " : ""}${i.dias_na_etapa != null ? `${i.dias_na_etapa} dia(s) aqui` : ""}</div></div>`).join("")}</div>`).join("");
+  if (opera("usuarios") && !document.body.classList.contains("tv")) carregarMetas().catch(() => {});
+}
+async function carregarMetas() {
+  gvConfig = await api("/api/gestao/config"); $("gv-config").hidden = false;
+  $("gv-metas").innerHTML = gvConfig.catalogo_metas.map((m) => `<label>${esc(m.nome)} (${m.unidade}, ${m.maior_melhor ? "mínimo" : "máximo"})
+    <input id="gm-${m.codigo}" type="number" step="0.1" value="${gvConfig.metas[m.codigo] ?? ""}" placeholder="sem meta"></label>`).join("")
+    + `<label>Dias úteis no mês<input id="gm-dias" type="number" min="1" max="31" value="${gvConfig.dias_uteis_mes}"></label>
+       <label>Horas do turno<input id="gm-horas" type="number" step="0.1" value="${gvConfig.horas_turno}"></label>`;
+  $("gv-wip").innerHTML = gvConfig.colunas.map((c) => `<label>${esc(c.nome)}<input id="gw-${c.codigo}" type="number" min="1" value="${gvConfig.limites_wip[c.codigo] ?? ""}" placeholder="sem limite"></label>`).join("");
+}
+async function salvarMetas() {
+  const valor = (id) => $(id).value === "" ? null : Number($(id).value);
+  const dados = {metas: Object.fromEntries(gvConfig.catalogo_metas.map((m) => [m.codigo, valor("gm-" + m.codigo)])),
+    limites_wip: Object.fromEntries(gvConfig.colunas.map((c) => [c.codigo, valor("gw-" + c.codigo)])),
+    dias_uteis_mes: valor("gm-dias"), horas_turno: valor("gm-horas")};
+  try { await api("/api/gestao/config", {method: "PUT", json: dados}); $("gv-msg").innerHTML = `<div class="msg ok">Metas salvas.</div>`; carregarGestao(); }
+  catch (e) { $("gv-msg").innerHTML = `<div class="msg err">${esc(e.message)}</div>`; }
+}
+// Modo TV: tela cheia, sem menus, atualiza a cada minuto. Esc ou clique em qualquer lugar sai.
+function modoTV() {
+  document.body.classList.add("tv"); $("gv-config").hidden = true;
+  try { document.documentElement.requestFullscreen?.().catch(() => {}); } catch (e) {}
+  clearInterval(gvTimer);
+  gvTimer = setInterval(() => { if ($("gestao").classList.contains("ativo")) carregarGestao().catch(() => {}); }, 60000);
+  setTimeout(() => document.addEventListener("click", sairTV, {once: true}), 300);
+}
+function sairTV() {
+  document.body.classList.remove("tv"); clearInterval(gvTimer); gvTimer = null;
+  try { if (document.fullscreenElement) document.exitFullscreen(); } catch (e) {}
+  if (opera("usuarios")) carregarMetas().catch(() => {});
+}
+document.addEventListener("keydown", (e) => { if (e.key === "Escape" && document.body.classList.contains("tv")) sairTV(); });
+
 iniciar();
 </script>
 </body>
