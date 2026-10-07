@@ -93,3 +93,20 @@ def test_etiquetas_html_com_codigo_de_barras(client, empresa):
     assert r.status_code == 200 and r.headers["content-type"].startswith("text/html")
     assert r.text.count('<section class="etq">') == 34 and r.text.count("<svg") == 34
     assert "size: 100mm 50mm" in r.text and "00100000100001" in r.text
+
+
+def test_code128_segue_a_norma_inclusive_com_par_99():
+    from app.services import code128
+    # Verificador = (105 + Σ posição × valor) mod 103
+    seq = code128.modulos("99999999999999")
+    valores = [105] + [99] * 7
+    esperado = (105 + sum(i * 99 for i in range(1, 8))) % 103
+    assert esperado == 96
+    assert seq == "".join(code128.PADROES[v] for v in valores + [esperado]) + code128.PARADA
+    # Todo símbolo tem 11 módulos (6 elementos); a parada tem 13
+    assert len(seq) == 11 * 9 + 13
+    assert all(len(p) == 11 for p in code128.PADROES) and len(code128.PADROES) == 106
+    # Exemplo de referência: "00100000100001" → 105 + 2×10 + 5×10 + 7×1 = 182; 182 mod 103 = 79
+    vals = [105, 0, 10, 0, 0, 10, 0, 1]
+    assert (vals[0] + sum(i * v for i, v in enumerate(vals[1:], 1))) % 103 == 79
+    assert code128.modulos("00100000100001").endswith(code128.PADROES[79] + code128.PARADA)

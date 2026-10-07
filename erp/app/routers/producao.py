@@ -1,9 +1,6 @@
 import html
-import io
 from datetime import date
 
-import barcode
-from barcode.writer import SVGWriter
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import HTMLResponse, PlainTextResponse
 from sqlalchemy import select
@@ -13,7 +10,7 @@ from ..db import get_db
 from ..deps import APONTAR, PCP, empresa_atual
 from ..models import Empresa, OrdemProducao, StatusOP, Usuario
 from ..schemas import ApontamentoIn, ApontamentoOut, GerarOPIn, OPDetalhe, OPResumo, Painel, PlanoCorte
-from ..services import corte, pcp
+from ..services import code128, corte, pcp
 from .projetos import carregar
 
 router = APIRouter(prefix="/api", tags=["pcp"])
@@ -206,14 +203,6 @@ def etiquetas_zpl(op_id: int, emp: Empresa = Depends(empresa_atual), db: Session
         "Content-Disposition": f'attachment; filename="op{op.numero}_etiquetas.zpl"'})
 
 
-def _codigo_barras_svg(codigo: str) -> str:
-    buffer = io.BytesIO()
-    barcode.get("code128", codigo, writer=SVGWriter()).write(
-        buffer, {"write_text": False, "module_height": 11, "module_width": 0.33, "quiet_zone": 2})
-    svg = buffer.getvalue().decode()
-    return svg[svg.index("<svg"):]
-
-
 @router.get("/ops/{op_id}/etiquetas.html", response_class=HTMLResponse)
 def etiquetas_html(op_id: int, emp: Empresa = Depends(empresa_atual), db: Session = Depends(get_db)):
     """Etiquetas 100 x 50 mm para imprimir pelo navegador (térmica ou A4 de etiquetas)."""
@@ -229,7 +218,7 @@ def etiquetas_html(op_id: int, emp: Empresa = Depends(empresa_atual), db: Sessio
   <div class="mod">{e(p.modulo.codigo)} · {e(p.modulo.descricao)}</div>
   <div class="med">{p.comprimento_mm:g} × {p.largura_mm:g} × {(p.espessura_mm or 0):g} mm <small>{e(p.material_codigo)}</small></div>
   <div class="rot">{e(roteiro)}</div>
-  <div class="cb">{_codigo_barras_svg(u.codigo_barras)}<span>{u.codigo_barras}</span></div>
+  <div class="cb">{code128.svg(u.codigo_barras)}<span>{u.codigo_barras}</span></div>
 </section>""")
     pagina = f"""<!doctype html><html lang="pt-BR"><head><meta charset="utf-8">
 <title>Etiquetas OP {op.numero}</title>
