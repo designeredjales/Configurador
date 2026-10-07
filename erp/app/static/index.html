@@ -317,12 +317,22 @@ td input.num { width: 90px; text-align: right; }
       <div id="ex-alerta"></div>
     </div>
     <div class="card caixa-ativa" id="ex-caixa" hidden></div>
+    <div class="card" id="ex-abertas"></div>
+    <div class="card"><h2>Configurações da caixa master</h2>
+      <p class="dica">Regras fixas: uma caixa leva peças de um único cliente, de uma única obra e de um único ambiente. O limite abaixo define quantos módulos diferentes cabem na mesma caixa antes de o leitor sugerir abrir outra.</p>
+      <div class="linha">
+        <label class="dica" for="ex-max">Máximo de módulos por caixa</label>
+        <input id="ex-max" type="number" min="1" max="50" size="4" style="width:80px">
+        <button class="btn" id="ex-max-salvar" onclick="salvarLimiteCaixa()">Salvar</button>
+      </div>
+      <div id="ex-cfg-msg"></div>
+    </div>
     <div class="card"><h2>Expedição por projeto</h2>
       <div class="linha"><select id="ex-proj" aria-label="Projeto" onchange="carregarExpProjeto()"></select>
         <button class="btn sec" onclick="abrirPagina(`/api/projetos/${$('ex-proj').value}/romaneio.html`)">Romaneio de carga</button></div>
       <div class="grid" id="ex-kpis"></div>
       <h2>Caixas</h2><div class="tabela" id="ex-caixas"></div>
-      <h2>Peças fora de caixa</h2><p class="dica">Inclui as separadas para bipar depois e as que ainda estão na fábrica.</p><div class="tabela" id="ex-pendentes"></div>
+      <details><summary id="ex-pend-titulo">Peças fora de caixa</summary><p class="dica">Inclui as separadas para bipar depois e as que ainda estão na fábrica.</p><div class="tabela" id="ex-pendentes"></div></details>
     </div>
   </section>
 
@@ -1533,7 +1543,10 @@ async function carregarExpedicao() {
     : `<option value="">Nenhum projeto em produção</option>`;
   if (atual && projetos.some((p) => String(p.id) === atual)) $("ex-proj").value = atual;
   if (caixaAtiva) await mostrarCaixa(await api(`/api/caixas/${caixaAtiva}`)); else mostrarCaixa(null);
-  await carregarExpProjeto();
+  const emp = await api("/api/empresas/atual");
+  $("ex-max").value = emp.caixa_max_modulos; $("ex-max").disabled = $("ex-max-salvar").hidden = !opera("usuarios");
+  if (!opera("usuarios")) $("ex-cfg-msg").innerHTML = `<p class="dica">Só o administrador altera o limite.</p>`;
+  await Promise.all([carregarExpProjeto(), carregarAbertas()]);
   $("ex-scan").focus();
 }
 function modoExpedicao(m) {
@@ -1556,7 +1569,8 @@ function mostrarCaixa(c) {
         <button class="btn sec" onclick="proximaNova = true; mostrarCaixa(caixaAtual)">Próxima peça em caixa nova</button>` : ""}
       ${c.status === "FECHADA" ? `<button class="btn sec" onclick="acaoCaixa(${c.id}, 'reabrir')">Reabrir</button>` : ""}
       <button class="btn sec" onclick="abrirPagina('/api/caixas/${c.id}/etiqueta.html')">Etiqueta</button>
-      <button class="btn sec" onclick="mostrarCaixa(null); proximaNova = false">Soltar caixa</button>
+      <button class="btn sec" onclick="baixarArquivo('/api/caixas/${c.id}/etiqueta.zpl', 'caixa${c.numero}.zpl')">ZPL (Zebra)</button>
+      <button class="btn sec" onclick="mostrarCaixa(null); proximaNova = false; carregarAbertas()">Soltar caixa</button>
     </div>
     <div class="tabela">${tabela([["Etiqueta", (i) => `<code>${i.codigo_barras}</code>`], ["Módulo", (i) => `<b>${esc(i.modulo)}</b> ${esc(i.modulo_descricao)}`],
       ["Peça", (i) => esc(i.peca)], ["Medida", (i) => esc(i.medidas), 1],
@@ -1612,6 +1626,21 @@ async function removerDaCaixa(id, cb) {
   try { mostrarCaixa(await api(`/api/caixas/${id}/remover`, {method: "POST", json: {codigo_barras: cb}})); alertaEx("aviso", `Peça ${cb} retirada da caixa.`); carregarExpProjeto(); }
   catch (e) { alertaEx("err", e.message); }
 }
+// Caixas ainda abertas: daqui se volta a uma caixa ou se fecha e etiqueta, sem precisar bipar
+async function carregarAbertas() {
+  const abertas = await api("/api/caixas?status=ABERTA");
+  $("ex-abertas").innerHTML = `<h2>Caixas abertas · ${abertas.length}</h2>` + (abertas.length
+    ? `<div class="tabela">${tabela([["Caixa", (c) => `<b>${c.numero}</b>`], ["Cliente / obra", (c) => `${esc(c.cliente || c.projeto_nome)} · ${esc(c.projeto_codigo)}`],
+        ["Ambiente", (c) => esc(c.ambiente)], ["Peças", (c) => c.total_itens, 1], ["Módulos", (c) => c.modulos.map(esc).join(", ")],
+        ["", (c) => `${c.id === caixaAtiva ? `<span class="tag OK">Ativa</span>` : `<button class="btn sec" onclick="api('/api/caixas/${c.id}').then(mostrarCaixa)">Continuar nesta</button>`}
+          <button class="btn" onclick="fecharCaixa(${c.id})">Fechar e imprimir etiqueta</button>`]], abertas)}</div>`
+    : `<p class="dica">Nenhuma caixa aberta. Bipe a primeira peça na estação acima para abrir uma.</p>`);
+}
+async function salvarLimiteCaixa() {
+  try { const e = await api("/api/empresas/atual", {method: "PUT", json: {caixa_max_modulos: Number($("ex-max").value)}});
+    $("ex-cfg-msg").innerHTML = `<div class="msg ok">Limite salvo: até ${e.caixa_max_modulos} módulo(s) por caixa.</div>`; }
+  catch (e) { $("ex-cfg-msg").innerHTML = `<div class="msg err">${esc(e.message)}</div>`; }
+}
 async function carregarExpProjeto() {
   const id = $("ex-proj").value; if (!id) { $("ex-kpis").innerHTML = $("ex-caixas").innerHTML = $("ex-pendentes").innerHTML = ""; return; }
   const r = await api(`/api/projetos/${id}/expedicao`);
@@ -1620,7 +1649,14 @@ async function carregarExpProjeto() {
     [r.pronto_para_expedir ? "Sim" : "Não", "Pronto para carregar"]].map(([v, t]) => `<div class="card kpi">${v}<small>${t}</small></div>`).join("");
   $("ex-caixas").innerHTML = tabela([["Caixa", (c) => `<a onclick="api('/api/caixas/${c.id}').then(mostrarCaixa)">${c.numero}</a>`],
     ["Volume", (c) => `${c.volume}/${c.volumes_projeto}`], ["Ambiente", (c) => esc(c.ambiente)], ["Módulos", (c) => c.modulos.map(esc).join(", ")],
-    ["Peças", (c) => c.total_itens, 1], ["Status", (c) => tag(c.status)]], r.caixas);
+    ["Peças", (c) => c.total_itens, 1], ["Status", (c) => tag(c.status)],
+    ["", (c) => (c.status === "ABERTA" ? `<button class="btn" onclick="fecharCaixa(${c.id})">Fechar e etiquetar</button> `
+      : c.status === "FECHADA" ? `<button class="btn sec" onclick="acaoCaixa(${c.id}, 'reabrir')">Reabrir</button> ` : "")
+      + `<button class="btn sec" onclick="abrirPagina('/api/caixas/${c.id}/etiqueta.html')">Etiqueta</button>`
+      + ` <button class="btn sec" onclick="baixarArquivo('/api/caixas/${c.id}/etiqueta.zpl', 'caixa${c.numero}.zpl')">ZPL</button>`]], r.caixas);
+  carregarAbertas();
+  const prontas = r.pendentes.filter((p) => p.proxima_etapa === "EMBALAGEM" || p.situacao === "CONCLUIDA").length;
+  $("ex-pend-titulo").textContent = `Peças fora de caixa · ${r.pendentes.length} (${prontas} prontas para embalar)`;
   $("ex-pendentes").innerHTML = tabela([["Etiqueta", (p) => `<code>${p.codigo_barras}</code>`], ["Ambiente", (p) => esc(p.ambiente)],
     ["Módulo", (p) => esc(p.modulo)], ["Peça", (p) => esc(p.peca)],
     ["Situação", (p) => p.proxima_etapa === "EMBALAGEM" || p.situacao === "CONCLUIDA" ? `<span class="tag OK">Pronta para embalar</span>` : `na fábrica: ${esc(p.proxima_etapa || "—")}`]],

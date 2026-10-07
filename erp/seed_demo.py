@@ -18,6 +18,9 @@ with TestClient(app) as c:
     h = {"Authorization": f"Bearer {sessao['token']}"}
     c.post("/api/usuarios", json={"nome": "João (corte)", "email": "operador@demo.com",
                                   "senha": "demo12345", "perfil": "OPERADOR"}, headers=h)
+    # Estação de expedição isolada: só a função de caixa master
+    c.post("/api/usuarios", json={"nome": "Marcos (expedição)", "email": "expedicao@demo.com", "senha": "demo12345",
+                                  "perfil": "OPERADOR", "funcoes": ["expedicao"]}, headers=h)
     with open(XML, "rb") as f:
         r = c.post("/api/projetos/importar-xml", files={"arquivo": ("Cozinha.xml", f)}, headers=h).json()
     pid = r["projeto_id"]
@@ -62,4 +65,4 @@ with TestClient(app) as c:
                headers=h)
     print(f"Demonstração criada: {r['pecas']} peças importadas do XML.\n"
           "Abra http://localhost:8000 e entre com admin@demo.com / demo12345 "
-          "(operador: operador@demo.com / demo12345)")
+          "(operador: operador@demo.com, expedição: expedicao@demo.com, senha demo12345)")
