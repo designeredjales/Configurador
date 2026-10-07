@@ -18,6 +18,8 @@ Projeto (Promob) → Engenharia (BOM + consumo + gate) → Ordem de Produção �
 | **PCP** | Geração de OP com uma etiqueta (código de barras) por peça física e roteiro pelas operações do Promob: CORTE → BORDA (se a peça tem borda) → USINAGEM (se tem FURAR/RASGO) → EMBALAGEM |
 | **Apontamento** | Baixa por leitor de código de barras, registrada em nome do usuário logado: bloqueia etapa fora de ordem, centro fora do roteiro e baixa duplicada. Fecha a OP e o projeto sozinho |
 | **Controle de produção** | Consulta de peças (onde cada peça está parada, quem deu a última baixa), estorno da última baixa com motivo, refugo com etiqueta de reposição, baixa do material perdido e custo no DRE da obra; baixas por operador e setor; histórico de ocorrências |
+| **Lotes de produção** | Vários projetos liberados entram juntos na fábrica: um plano de corte para o lote inteiro, etiquetas com lote, cliente e ambiente, progresso por projeto e consulta das peças do lote |
+| **Expedição (caixa master)** | Estação de embalagem por leitor: cada caixa é de um único cliente, obra e ambiente; peça de outro cliente é recusada, ambiente ou módulos demais sugerem outra caixa ou separar para depois; etiqueta de volume, carregamento por leitor e romaneio de carga |
 | **Painel** | OPs abertas, em produção e atrasadas, fila de peças por centro, baixas do dia, progresso por OP |
 | **Chão de fábrica** | Plano de corte guilhotinado por material (serra, refilo, veio) com desenho de cada chapa; etiquetas 100 × 50 mm com código de barras para imprimir no navegador ou em ZPL (Zebra); apontamento pela câmera do celular |
 | **Estoque** | Saldo por movimentação, reserva automática na liberação do projeto, baixa automática na conclusão, inventário com ajuste pela diferença, custo médio ponderado |
@@ -49,7 +51,8 @@ Cada tela e cada ação do sistema é uma **função**. O perfil define o modelo
 | Gestão | Indicadores do dono | Administrador, Gestor |
 | Engenharia | Projetos e engenharia · Cadastro de materiais | Engenharia (+ Compras: materiais) |
 | Comercial | Cadastro de clientes | Engenharia, Financeiro |
-| Produção | Ordens de produção · Apontamento · Estornar apontamento · Refugo e reposição | PCP (todas) · Operador (só apontamento) |
+| Produção | Ordens de produção (inclui lotes) · Apontamento · Estornar apontamento · Refugo e reposição | PCP (todas) · Operador (só apontamento) |
+| Expedição | Caixa master e expedição | PCP |
 | Obra | Montagem · Assistência técnica | Montagem, PCP |
 | Suprimentos | Estoque e inventário · Compras | Compras |
 | Financeiro | Financeiro · NF-e · Conciliação bancária | Financeiro |
@@ -127,6 +130,31 @@ Inspirado nas consultas de controle de produção dos ERPs industriais, sem a co
 - **Estorno** (`POST /api/apontamentos/estorno`, função *Estornar apontamento*): desfaz só a **última** baixa da peça, com motivo obrigatório. Sem baixas, a OP volta para ABERTA. OP concluída não estorna: o material já saiu do estoque e o caso vai para a Assistência.
 - **Refugo e reposição** (`POST /api/apontamentos/refugo`, função *Refugo e reposição*): a peça vira REFUGADA e sai da contagem da OP; nasce uma peça de reposição com nova etiqueta e o mesmo roteiro desde o corte; o material perdido sai do estoque (fração de chapa ou m²) e o custo entra no **DRE da obra** e nos indicadores de qualidade. A etiqueta antiga é recusada no apontamento. `?apenas_reposicoes=true` nas etiquetas e no plano de corte imprime e corta só as reposições.
 - **Baixas por operador e setor** (`GET /api/producao/baixas?de=&ate=`) e **ocorrências** (`GET /api/producao/ocorrencias`): quem produziu o quê, e cada estorno e refugo com motivo, custo e responsável.
+
+## Lotes de produção
+
+Na aba **Projetos → Lotes de produção**, marque os projetos liberados e forme o lote (`POST /api/lotes`). Cada projeto ganha a sua OP (o rastreio continua por cliente), mas a fábrica trabalha o lote inteiro:
+
+- **Plano de corte do lote** (`GET /api/lotes/{id}/plano-corte`): junta as peças de todos os clientes por material, o que reduz chapas em relação a cortar cada obra separada. Cada peça no desenho mostra a obra a que pertence.
+- **Etiquetas do lote** (`/etiquetas.html` e `/etiquetas.zpl`): a primeira linha de toda etiqueta diz de quem é a peça: `L<lote> <obra> · <cliente> · <ambiente>`. É ela que separa a expedição depois.
+- Enquanto nenhuma peça foi apontada, dá para incluir projetos no lote; depois que a produção começa, o lote fecha.
+- Progresso por projeto e "onde estão as peças" do lote na consulta de produção (`?lote_id=`).
+
+## Expedição por caixa master
+
+A aba **Expedição** é a estação de embalagem: o operador só bipa.
+
+| Situação ao bipar | O que o sistema faz |
+|---|---|
+| Primeira peça (sem caixa ativa) | Abre uma caixa master daquela obra e ambiente; se faltava só a EMBALAGEM, dá essa baixa sozinho |
+| Peça da mesma obra, mesmo ambiente | Entra na caixa |
+| **Peça de outro cliente** | **Recusa** (alerta vermelho e bipe grave). A peça não recebe baixa |
+| Peça de outra obra do mesmo cliente | Recusa: entregas diferentes, caixas diferentes |
+| Mesmo cliente, outro ambiente, ou módulo além do limite da caixa (padrão 3, configurável) | Alerta laranja com duas saídas: **abrir nova caixa master com esta peça** ou **separar para bipar depois** |
+| Peça que ainda não passou pela fábrica, refugada ou já embalada | Recusa, dizendo o que falta ou em que caixa ela está |
+| Etiqueta de uma caixa | Volta para aquela caixa (se aberta) |
+
+Ao fechar, sai a **etiqueta de volume** (caixa, volume X de Y, cliente, obra, ambiente, módulos e código de barras). No modo **Carregar caminhão** o leitor aceita só etiquetas de caixa fechada, uma vez cada. O **romaneio de carga** lista cada volume com as peças dentro e avisa o que ficou fora. Peça embalada não pode ser estornada; peça refugada sai da caixa e a reposição entra quando ficar pronta.
 
 ## Compras e estoque
 
@@ -219,6 +247,8 @@ erp/
       engenharia.py    # consumo, pendências, liberação
       pcp.py           # OP, roteiro, apontamento, filas
       producao.py      # estorno, refugo/reposição, consulta de peças e baixas
+      lotes.py         # formação e controle de lotes de produção
+      expedicao.py     # caixa master, carregamento e romaneio
       estoque.py       # reservas, MRP, recebimento, custo médio, inventário
       corte.py         # otimizador de plano de corte
       financeiro.py    # contrato, contas, DRE por obra, fluxo de caixa

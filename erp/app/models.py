@@ -151,6 +151,8 @@ class Empresa(Base):
     csosn_padrao: Mapped[str] = mapped_column(String(3), default="102")
     fiscal_ambiente: Mapped[str] = mapped_column(String(12), default="homologacao")
     fiscal_token: Mapped[str | None] = mapped_column(String(200))
+    # Expedição: quantos módulos diferentes cabem numa caixa master antes de sugerir outra caixa
+    caixa_max_modulos: Mapped[int] = mapped_column(Integer, default=3, server_default="3")
 
     @property
     def fiscal_token_configurado(self) -> bool:
@@ -380,6 +382,22 @@ class ItemModulo(Base):
     material: Mapped[Material | None] = relationship()
 
 
+class LoteProducao(Base):
+    """Vários projetos liberados produzidos juntos: um plano de corte e uma sequência de etiquetas."""
+    __tablename__ = "lotes_producao"
+    __table_args__ = (UniqueConstraint("empresa_id", "numero"),)
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    empresa_id: Mapped[int] = mapped_column(ForeignKey("empresas.id"), index=True)
+    numero: Mapped[int] = mapped_column(Integer)
+    descricao: Mapped[str] = mapped_column(String(120))
+    data_entrega: Mapped[date | None] = mapped_column(Date)
+    criado_em: Mapped[datetime] = mapped_column(DateTime, default=agora)
+    criado_por: Mapped[str | None] = mapped_column(String(120))
+
+    ops: Mapped[list["OrdemProducao"]] = relationship(back_populates="lote", order_by="OrdemProducao.numero")
+
+
 class OrdemProducao(Base):
     __tablename__ = "ordens_producao"
     __table_args__ = (UniqueConstraint("empresa_id", "numero"),)
@@ -388,6 +406,7 @@ class OrdemProducao(Base):
     empresa_id: Mapped[int] = mapped_column(ForeignKey("empresas.id"), index=True)
     numero: Mapped[int] = mapped_column(Integer)
     projeto_id: Mapped[int] = mapped_column(ForeignKey("projetos.id"), index=True)
+    lote_id: Mapped[int | None] = mapped_column(ForeignKey("lotes_producao.id"), index=True)
     status: Mapped[StatusOP] = mapped_column(String(20), default=StatusOP.ABERTA)
     prioridade: Mapped[int] = mapped_column(Integer, default=3)
     data_entrega: Mapped[date | None] = mapped_column(Date)
@@ -395,6 +414,7 @@ class OrdemProducao(Base):
     concluida_em: Mapped[datetime | None] = mapped_column(DateTime)
 
     projeto: Mapped[Projeto] = relationship()
+    lote: Mapped[LoteProducao | None] = relationship(back_populates="ops")
     unidades: Mapped[list["UnidadePeca"]] = relationship(
         back_populates="op", cascade="all, delete-orphan", order_by="UnidadePeca.id"
     )
@@ -690,3 +710,40 @@ class Ocorrencia(Base):
     op: Mapped[OrdemProducao] = relationship()
     unidade: Mapped[UnidadePeca] = relationship(foreign_keys=[unidade_id])
     nova_unidade: Mapped[UnidadePeca | None] = relationship(foreign_keys=[nova_unidade_id])
+
+
+class CaixaMaster(Base):
+    """Volume da expedição: peças de um único projeto (cliente) e ambiente, com etiqueta própria."""
+    __tablename__ = "caixas_master"
+    __table_args__ = (UniqueConstraint("empresa_id", "numero"),)
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    empresa_id: Mapped[int] = mapped_column(ForeignKey("empresas.id"), index=True)
+    numero: Mapped[int] = mapped_column(Integer)
+    codigo_barras: Mapped[str] = mapped_column(String(20), unique=True, index=True)
+    projeto_id: Mapped[int] = mapped_column(ForeignKey("projetos.id"), index=True)
+    ambiente_id: Mapped[int] = mapped_column(ForeignKey("ambientes.id"))
+    status: Mapped[str] = mapped_column(String(10), default="ABERTA")  # ABERTA, FECHADA, EXPEDIDA
+    criado_em: Mapped[datetime] = mapped_column(DateTime, default=agora)
+    criado_por: Mapped[str | None] = mapped_column(String(120))
+    fechada_em: Mapped[datetime | None] = mapped_column(DateTime)
+    expedida_em: Mapped[datetime | None] = mapped_column(DateTime)
+
+    projeto: Mapped[Projeto] = relationship()
+    ambiente: Mapped[Ambiente] = relationship()
+    itens: Mapped[list["ItemCaixa"]] = relationship(
+        back_populates="caixa", cascade="all, delete-orphan", order_by="ItemCaixa.id"
+    )
+
+
+class ItemCaixa(Base):
+    __tablename__ = "itens_caixa"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    caixa_id: Mapped[int] = mapped_column(ForeignKey("caixas_master.id"), index=True)
+    unidade_id: Mapped[int] = mapped_column(ForeignKey("unidades_peca.id"), unique=True)
+    adicionado_em: Mapped[datetime] = mapped_column(DateTime, default=agora)
+    usuario_nome: Mapped[str | None] = mapped_column(String(120))
+
+    caixa: Mapped[CaixaMaster] = relationship(back_populates="itens")
+    unidade: Mapped[UnidadePeca] = relationship()

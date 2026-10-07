@@ -9,7 +9,7 @@ from sqlalchemy import text
 
 from . import models  # noqa: F401  (registra as tabelas)
 from .db import Base, engine
-from .routers import auth, cadastros, compras, financeiro, pos_obra, producao, projetos
+from .routers import auth, cadastros, compras, expedicao, financeiro, lotes, pos_obra, producao, projetos
 
 STATIC = Path(__file__).parent / "static"
 # Em produção o schema vem das migrações (alembic upgrade head); create_all fica para desenvolvimento
@@ -50,6 +50,8 @@ app.include_router(producao.router)
 app.include_router(compras.router)
 app.include_router(financeiro.router)
 app.include_router(pos_obra.router)
+app.include_router(lotes.router)
+app.include_router(expedicao.router)
 app.mount("/static", StaticFiles(directory=STATIC), name="static")
 
 

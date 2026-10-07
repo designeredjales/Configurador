@@ -46,7 +46,7 @@ button.sec { background: none; color: var(--brand); }
 .msg { padding: 10px 12px; border-radius: 6px; margin-top: 10px; white-space: pre-wrap; }
 .msg.ok { background: color-mix(in srgb, var(--ok) 15%, transparent); }
 .msg.err { background: color-mix(in srgb, var(--err) 15%, transparent); }
-#scan { font-size: 22px; padding: 14px; width: 100%; }
+#scan, .scan { font-size: 22px; padding: 14px; width: 100%; }
 .feito { color: var(--ok); } .pend { color: var(--muted); }
 a { color: var(--brand); cursor: pointer; }
 .dica { color: var(--muted); font-size: 13px; margin: 0 0 10px; }
@@ -73,6 +73,18 @@ td input.num { width: 90px; text-align: right; }
 .tag.ENTREGUE, .tag.RESOLVIDO { background: var(--ok); color: #fff; }
 .tag.AGUARDANDO { background: var(--line); } .tag.EM_PROCESSO { background: var(--warn); color: #fff; }
 .tag.REFUGADA, .tag.REFUGO { background: var(--err); color: #fff; } .tag.ESTORNO { background: var(--warn); color: #fff; } .tag.REPOSICAO { background: var(--brand); color: var(--brand-ink); }
+.tag.ABERTO, .tag.ABERTA { background: var(--line); } .tag.FECHADA { background: var(--warn); color: #fff; } .tag.EXPEDIDA { background: var(--ok); color: #fff; }
+.alerta-ex { padding: 14px 16px; border-radius: 8px; margin-top: 12px; font-size: 16px; font-weight: 600; white-space: pre-wrap; border: 2px solid transparent; }
+.alerta-ex.ok { background: color-mix(in srgb, var(--ok) 16%, transparent); border-color: var(--ok); }
+.alerta-ex.err { background: color-mix(in srgb, var(--err) 18%, transparent); border-color: var(--err); }
+.alerta-ex.aviso { background: color-mix(in srgb, var(--warn) 18%, transparent); border-color: var(--warn); }
+.alerta-ex .linha { margin: 10px 0 0; font-size: 14px; font-weight: 400; }
+.caixa-ativa { border: 2px solid var(--brand); }
+.caixa-ativa .titulo { font-size: 18px; font-weight: 700; } .caixa-ativa .sub { color: var(--muted); }
+.lista-check { display: grid; gap: 4px; max-height: 260px; overflow: auto; margin-bottom: 10px; }
+.lista-check label { display: flex; gap: 10px; align-items: center; padding: 6px 10px; border: 1px solid var(--line); border-radius: 8px; cursor: pointer; }
+.lista-check label input { width: 18px; height: 18px; accent-color: var(--brand); }
+.lista-check small { color: var(--muted); margin-left: auto; }
 .chips { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 10px; }
 .chips button { font: inherit; padding: 5px 12px; border-radius: 99px; border: 1px solid var(--line); background: var(--bg); color: var(--ink); cursor: pointer; }
 .chips button.ativo { border-color: var(--brand); background: var(--brand); color: var(--brand-ink); }
@@ -169,6 +181,7 @@ td input.num { width: 90px; text-align: right; }
     <button data-aba="ops">Ordens de Produção</button>
     <button data-aba="apontamento">Apontamento</button>
     <button data-aba="producao">Controle de Produção</button>
+    <button data-aba="expedicao">Expedição</button>
     <button data-aba="estoque">Estoque</button>
     <button data-aba="compras">Compras</button>
     <button data-aba="montagem">Montagem</button>
@@ -221,6 +234,22 @@ td input.num { width: 90px; text-align: right; }
       <div id="novo-msg"></div>
     </div>
     <div class="card"><h2>Projetos</h2><div class="tabela" id="lista-projetos"></div></div>
+    <div class="card"><h2>Lotes de produção</h2>
+      <p class="dica">Junte projetos liberados num lote: um plano de corte para todos (melhor aproveitamento de chapa) e etiquetas que dizem de quem é cada peça (lote, cliente e ambiente). Cada projeto continua com a sua OP.</p>
+      <div id="lt-form" hidden>
+        <div class="lista-check" id="lt-projetos"></div>
+        <div class="linha">
+          <input id="lt-desc" placeholder="Descrição (ex.: Semana 41, chapas brancas)" size="32" aria-label="Descrição do lote">
+          <input id="lt-entrega" type="date" aria-label="Entrega do lote">
+          <select id="lt-prior" aria-label="Prioridade"><option value="1">Prioridade 1 (urgente)</option><option value="2">Prioridade 2</option>
+            <option value="3" selected>Prioridade 3</option><option value="4">Prioridade 4</option><option value="5">Prioridade 5</option></select>
+          <button class="btn" onclick="formarLote()">Formar lote</button>
+        </div>
+        <div id="lt-msg"></div>
+      </div>
+      <div class="tabela" id="lista-lotes"></div>
+    </div>
+    <div class="card" id="det-lote" hidden></div>
     <div class="card" id="det-projeto" hidden></div>
   </section>
 
@@ -247,6 +276,7 @@ td input.num { width: 90px; text-align: right; }
       <p class="dica">Onde está cada peça: em qual setor ela está parada, quem deu a última baixa e quando.</p>
       <div class="linha">
         <input id="pr-busca" placeholder="Etiqueta, peça ou módulo" size="22" aria-label="Buscar peça">
+        <select id="pr-lote" aria-label="Lote"></select>
         <select id="pr-op" aria-label="Ordem de produção"></select>
         <select id="pr-centro" aria-label="Parada no setor"></select>
         <button class="btn" onclick="consultarPecas()">Consultar</button>
@@ -274,6 +304,26 @@ td input.num { width: 90px; text-align: right; }
       <div class="tabela" id="bx-lista"></div>
     </div>
     <div class="card"><h2>Ocorrências (estornos e refugos)</h2><div class="tabela" id="oc-lista"></div></div>
+  </section>
+
+  <section id="expedicao">
+    <div class="card"><h2>Estação de embalagem (caixa master)</h2>
+      <p class="dica">Cada caixa leva peças de um único cliente e de um único ambiente. Bipe a peça: a primeira abre a caixa, as seguintes entram nela. Peça de outro cliente é recusada; peça do mesmo cliente de outro ambiente (ou de módulos demais) pede outra caixa. Bipar a etiqueta de uma caixa aberta volta a ela.</p>
+      <div class="chips" id="ex-modo">
+        <button class="ativo" data-modo="embalar" onclick="modoExpedicao('embalar')">Embalar</button>
+        <button data-modo="carregar" onclick="modoExpedicao('carregar')">Carregar caminhão</button>
+      </div>
+      <input id="ex-scan" class="scan" placeholder="Bipe a etiqueta da peça e tecle Enter" autocomplete="off" aria-label="Leitura do código de barras">
+      <div id="ex-alerta"></div>
+    </div>
+    <div class="card caixa-ativa" id="ex-caixa" hidden></div>
+    <div class="card"><h2>Expedição por projeto</h2>
+      <div class="linha"><select id="ex-proj" aria-label="Projeto" onchange="carregarExpProjeto()"></select>
+        <button class="btn sec" onclick="abrirPagina(`/api/projetos/${$('ex-proj').value}/romaneio.html`)">Romaneio de carga</button></div>
+      <div class="grid" id="ex-kpis"></div>
+      <h2>Caixas</h2><div class="tabela" id="ex-caixas"></div>
+      <h2>Peças fora de caixa</h2><p class="dica">Inclui as separadas para bipar depois e as que ainda estão na fábrica.</p><div class="tabela" id="ex-pendentes"></div>
+    </div>
   </section>
 
   <section id="estoque">
@@ -466,8 +516,9 @@ async function api(caminho, opcoes = {}) {
   if (!r.ok) {
     const d = corpo.detail;
     const texto = typeof d === "string" ? d : d?.pendencias ? `${d.mensagem}:\n• ${d.pendencias.join("\n• ")}`
-      : Array.isArray(d) ? d.map((x) => x.msg).join("; ") : `Erro ${r.status}`;
-    throw new Error(texto);
+      : Array.isArray(d) ? d.map((x) => x.msg).join("; ") : d?.mensagem || `Erro ${r.status}`;
+    const erro = new Error(texto); erro.detail = d; erro.status = r.status;
+    throw erro;
   }
   return corpo;
 }
@@ -483,7 +534,7 @@ function tabela(colunas, linhas) {
 const carregadores = {painel: carregarPainel, projetos: carregarProjetos, ops: carregarOps, usuarios: carregarUsuarios,
                       estoque: carregarEstoque, compras: carregarCompras, financeiro: carregarFinanceiro,
                       montagem: carregarMontagem, assistencia: carregarAssistencia, indicadores: carregarIndicadores,
-                      apontamento: carregarApontamento, materiais: carregarMateriais, producao: carregarProducao};
+                      apontamento: carregarApontamento, materiais: carregarMateriais, producao: carregarProducao, expedicao: carregarExpedicao};
 function abrir(aba) {
   document.querySelectorAll("section").forEach((s) => s.classList.toggle("ativo", s.id === aba));
   document.querySelectorAll("#abas button").forEach((b) => b.classList.toggle("ativo", b.dataset.aba === aba));
@@ -502,7 +553,7 @@ async function carregarPainel() {
 }
 
 function tabelaOps(ops) {
-  return tabela([["OP", (o) => `<a onclick="verOp(${o.id})">#${o.numero}</a>`], ["Projeto", (o) => esc(o.projeto_nome)],
+  return tabela([["OP", (o) => `<a onclick="verOp(${o.id})">#${o.numero}</a>${o.lote_numero ? ` <span class="dica">lote ${o.lote_numero}</span>` : ""}`], ["Projeto", (o) => esc(o.projeto_nome)],
     ["Status", (o) => tag(o.status)], ["Prior.", (o) => o.prioridade, 1], ["Entrega", (o) => dataBR(o.data_entrega)],
     ["Peças", (o) => o.total_unidades, 1], ["Progresso", (o) => `${barra(o.progresso_pct)} ${o.progresso_pct}%`]], ops);
 }
@@ -513,6 +564,7 @@ async function carregarProjetos() {
   $("lista-projetos").innerHTML = tabela([["Código", (p) => `<a onclick="verProjeto(${p.id})">${esc(p.codigo)}</a>`],
     ["Nome", (p) => esc(p.nome)], ["Status", (p) => tag(p.status)], ["Origem", (p) => esc(p.origem)],
     ["Entrega", (p) => dataBR(p.data_entrega)]], lista);
+  await carregarLotes(lista);
 }
 
 function resumoImportacao(r) {
@@ -690,11 +742,11 @@ async function verOp(id) {
       ${op.unidades.some((u) => u.reposicao && u.status === "ATIVA") ? `<button class="btn sec" onclick="imprimirEtiquetas(${op.id}, true)">Etiquetas só das reposições</button>` : ""}
     </div>
     <div id="op-extra"></div>
-    ${tabela([["Etiqueta", (u) => `<code>${u.codigo_barras}</code>${u.status === "REFUGADA" ? ` <span class="tag REFUGADA">Refugada</span>` : u.reposicao ? ` <span class="tag REPOSICAO">Reposição</span>` : ""}`], ["Ambiente", (u) => esc(u.ambiente)],
+    <div class="tabela">${tabela([["Etiqueta", (u) => `<code>${u.codigo_barras}</code>${u.status === "REFUGADA" ? ` <span class="tag REFUGADA">Refugada</span>` : u.reposicao ? ` <span class="tag REPOSICAO">Reposição</span>` : ""}`], ["Ambiente", (u) => esc(u.ambiente)],
       ["Peça", (u) => `${esc(u.modulo)}/<b>${esc(u.peca_codigo)}</b> ${esc(u.peca_descricao)}`],
       ["Material", (u) => esc(u.material_codigo)], ["Medida", (u) => `${num(u.comprimento_mm, 1)} × ${num(u.largura_mm, 1)}`, 1],
       ["Roteiro", (u) => u.etapas.map((e) => `<span class="${e.concluida_em ? "feito" : "pend"}">${e.concluida_em ? "✔" : "○"} ${e.centro_codigo}</span>`).join(" › ")]],
-      op.unidades)}`;
+      op.unidades)}</div>`;
 }
 
 async function arquivo(caminho) {
@@ -735,9 +787,9 @@ function desenhoChapa(m, ch) {
     <svg viewBox="0 0 ${C} ${L}" role="img" aria-label="Chapa ${ch.numero} com ${ch.pecas.length} peças"><rect width="${C}" height="${L}" class="ch"/>${pecas}</svg></figure>`;
 }
 
-async function verPlanoCorte(id) {
-  const plano = await api(`/api/ops/${id}/plano-corte`);
-  $("op-extra").innerHTML = `<h2>Plano de corte · ${plano.total_chapas} chapa(s)</h2>
+async function verPlanoCorte(id) { desenharPlano(await api(`/api/ops/${id}/plano-corte`), "op-extra"); }
+function desenharPlano(plano, alvo) {
+  $(alvo).innerHTML = `<h2>Plano de corte${plano.titulo ? " do " + esc(plano.titulo.toLowerCase()) : ""} · ${plano.total_chapas} chapa(s)</h2>
     <p class="dica">Serra ${plano.serra_mm} mm, refilo ${plano.refilo_mm} mm. Passe o mouse sobre a peça para ver a etiqueta.</p>` +
     plano.materiais.map((m) => `<h2>${esc(m.material_codigo)} · ${esc(m.descricao)}</h2>
       <p class="dica">${m.total_pecas} peças em ${m.total_chapas} chapa(s) de ${m.chapa_comprimento_mm} × ${m.chapa_largura_mm} mm · aproveitamento ${m.aproveitamento_pct}%
@@ -1164,7 +1216,7 @@ async function criarLancamento() {
 
 // --- Configurações da empresa ----------------------------------------------
 const CAMPOS_EMPRESA = [["nome", "Razão social", "text"], ["cnpj", "CNPJ", "text"], ["perda_chapa_pct", "Perda de chapa (%)"], ["perda_fita_pct", "Perda de fita (%)"],
-  ["imposto_venda_pct", "Imposto sobre a venda (%)"], ["garantia_meses", "Garantia (meses)"], ["chapa_comprimento_mm", "Chapa padrão: comprimento (mm)"], ["chapa_largura_mm", "Chapa padrão: largura (mm)"],
+  ["imposto_venda_pct", "Imposto sobre a venda (%)"], ["garantia_meses", "Garantia (meses)"], ["caixa_max_modulos", "Caixa master: máx. de módulos"], ["chapa_comprimento_mm", "Chapa padrão: comprimento (mm)"], ["chapa_largura_mm", "Chapa padrão: largura (mm)"],
   ["serra_mm", "Espessura da serra (mm)"], ["refilo_mm", "Refilo da chapa (mm)"],
   ["uf", "UF da empresa", "text"], ["inscricao_estadual", "Inscrição estadual", "text"], ["ncm_padrao", "NCM padrão (móveis)", "text"],
   ["cfop_interno", "CFOP venda no estado", "text"], ["cfop_interestadual", "CFOP venda fora do estado", "text"], ["csosn_padrao", "CSOSN (Simples)", "text"],
@@ -1192,7 +1244,7 @@ async function salvarEmpresa() {
 // Cada aba aparece se o login opera ao menos uma das funções listadas (null = aberta a todos)
 const ABA_FUNCOES = {
   indicadores: ["indicadores"], painel: null, projetos: ["projetos", "pcp", "financeiro", "fiscal"], ops: null,
-  apontamento: ["apontamento"], producao: ["pcp", "apontamento", "estorno", "refugo", "indicadores"],
+  apontamento: ["apontamento"], producao: ["pcp", "apontamento", "estorno", "refugo", "indicadores"], expedicao: ["expedicao"],
   estoque: ["estoque", "compras", "projetos", "pcp"], compras: ["compras"], montagem: ["montagem"], assistencia: ["assistencia"],
   financeiro: ["financeiro", "fiscal", "conciliacao"], materiais: ["materiais", "projetos", "compras", "pcp"], usuarios: ["usuarios"],
 };
@@ -1203,7 +1255,7 @@ function abasDoLogin() {
 function abaInicial(abas) {
   if (abas.includes("indicadores")) return "indicadores";
   if (opera("pcp") || opera("projetos")) return "painel";
-  return ["apontamento", "montagem", "assistencia", "financeiro", "compras"].find((a) => abas.includes(a)) || "painel";
+  return ["apontamento", "expedicao", "montagem", "assistencia", "financeiro", "compras"].find((a) => abas.includes(a)) || "painel";
 }
 const NOME_PERFIL = {ADMIN: "Administrador", GESTOR: "Gestor", ENGENHARIA: "Engenharia", PCP: "PCP", COMPRAS: "Compras", FINANCEIRO: "Financeiro", MONTAGEM: "Montagem", OPERADOR: "Operador"};
 const VE_FINANCEIRO = () => opera("financeiro");
@@ -1336,6 +1388,10 @@ async function carregarProducao() {
   const centros = painel.centros.map((c) => `<option value="${c.centro_codigo}">${esc(c.centro_codigo)} · ${esc(c.centro_nome)}</option>`).join("");
   $("pr-centro").innerHTML = `<option value="">Parada em qualquer setor</option>` + centros;
   $("oc-centro").innerHTML = centros;
+  const lotesAbertos = (await api("/api/lotes")).filter((l) => l.status !== "CANCELADO");
+  const loteSel = $("pr-lote").value;
+  $("pr-lote").innerHTML = `<option value="">Todos os lotes</option>` + lotesAbertos.map((l) => `<option value="${l.id}">Lote ${l.numero} · ${esc(l.descricao)}</option>`).join("");
+  $("pr-lote").value = loteSel;
   $("pr-op").innerHTML = `<option value="">Todas as OPs</option>` + ops.filter((o) => o.status !== "CANCELADA")
     .map((o) => `<option value="${o.id}">OP #${o.numero} · ${esc(o.projeto_nome)}</option>`).join("");
   $("pr-ocorrencia").hidden = !(opera("estorno") || opera("refugo"));
@@ -1348,6 +1404,7 @@ async function consultarPecas() {
   const q = new URLSearchParams();
   if ($("pr-busca").value.trim()) q.set("busca", $("pr-busca").value.trim());
   if ($("pr-op").value) q.set("op_id", $("pr-op").value);
+  if ($("pr-lote").value) q.set("lote_id", $("pr-lote").value);
   if ($("pr-centro").value) q.set("centro", $("pr-centro").value);
   if (situacaoPr) q.set("situacao", situacaoPr);
   const r = await api(`/api/producao/pecas?${q}`);
@@ -1355,9 +1412,10 @@ async function consultarPecas() {
   const acoes = opera("estorno") || opera("refugo");
   $("pr-pecas").innerHTML = tabela([
     ["Etiqueta", (p) => `<code>${p.codigo_barras}</code>${p.reposicao ? ` <span class="tag REPOSICAO">Reposição</span>` : ""}`],
-    ["OP", (p) => `<a onclick="verOp(${p.op_id})">#${p.op_numero}</a>`], ["Ambiente", (p) => esc(p.ambiente)],
+    ["OP", (p) => `<a onclick="verOp(${p.op_id})">#${p.op_numero}</a>${p.lote_numero ? ` <span class="dica">L${p.lote_numero}</span>` : ""}`],
+    ["Cliente / ambiente", (p) => `${esc(p.projeto_codigo)} · ${esc(p.ambiente)}`],
     ["Peça", (p) => `${esc(p.modulo)} <b>${esc(p.peca)}</b>`], ["Material", (p) => esc(p.material_codigo)], ["Medida", (p) => esc(p.medidas), 1],
-    ["Situação", (p) => `<span class="tag ${p.situacao}">${ROTULO_SITUACAO[p.situacao]}</span>`], ["Próximo setor", (p) => p.proxima_etapa ? `<b>${p.proxima_etapa}</b>` : "—"],
+    ["Situação", (p) => `<span class="tag ${p.situacao}">${ROTULO_SITUACAO[p.situacao]}</span>${p.caixa_numero ? ` <span class="dica">caixa ${p.caixa_numero}</span>` : ""}`], ["Próximo setor", (p) => p.proxima_etapa ? `<b>${p.proxima_etapa}</b>` : "—"],
     ["Última baixa", (p) => p.ultima_etapa ? `${p.ultima_etapa} · ${esc(p.ultimo_operador || "—")} · ${new Date(p.ultima_baixa_em).toLocaleString("pt-BR", {dateStyle: "short", timeStyle: "short"})}` : "—"],
     ...(acoes ? [["", (p) => p.situacao === "REFUGADA" || p.op_status === "CONCLUIDA" ? "" : `<button class="btn sec" onclick="prepararOcorrencia('${p.codigo_barras}', '${p.ultima_etapa || p.proxima_etapa || ""}')">Ocorrência</button>`]] : []),
   ], r.pecas.slice(0, verTodasPr ? undefined : 25)) + (!verTodasPr && r.pecas.length > 25
@@ -1397,6 +1455,176 @@ async function carregarOcorrencias() {
     ["Peça", (o) => `<code>${o.codigo_barras}</code> ${esc(o.peca)}`], ["Setor", (o) => esc(o.centro_codigo)], ["Motivo", (o) => esc(o.motivo)],
     ["Material perdido", (o) => o.custo_material ? brl(o.custo_material) : "—", 1],
     ["Reposição", (o) => o.nova_etiqueta ? `<code>${o.nova_etiqueta}</code>` : "—"], ["Por", (o) => esc(o.usuario || "—")]], lista);
+}
+
+// --- Lotes de produção -----------------------------------------------------
+async function carregarLotes(projetos) {
+  const lotes = await api("/api/lotes");
+  const livres = projetos.filter((p) => p.status === "LIBERADO");
+  $("lt-form").hidden = !opera("pcp");
+  $("lt-projetos").innerHTML = livres.length ? livres.map((p) => `<label><input type="checkbox" value="${p.id}">
+      <b>${esc(p.codigo)}</b> ${esc(p.nome)}<small>entrega ${dataBR(p.data_entrega)}</small></label>`).join("")
+    : `<p class="dica">Nenhum projeto liberado aguardando produção. Libere projetos na engenharia para formar um lote.</p>`;
+  $("lista-lotes").innerHTML = tabela([["Lote", (l) => `<a onclick="verLote(${l.id})">Lote ${l.numero}</a>`], ["Descrição", (l) => esc(l.descricao)],
+    ["Projetos", (l) => l.projetos.map((p) => esc(p.codigo)).join(", ")], ["Peças", (l) => l.total_pecas, 1],
+    ["Status", (l) => tag(l.status)], ["Entrega", (l) => dataBR(l.data_entrega)],
+    ["Progresso", (l) => `${barra(l.progresso_pct)} ${l.progresso_pct}%`]], lotes);
+}
+const marcados = () => [...document.querySelectorAll("#lt-projetos input:checked")].map((c) => Number(c.value));
+async function formarLote() {
+  try {
+    const l = await api("/api/lotes", {method: "POST", json: {descricao: $("lt-desc").value.trim(), projeto_ids: marcados(),
+      prioridade: Number($("lt-prior").value), data_entrega: $("lt-entrega").value || null}});
+    $("lt-desc").value = ""; $("lt-msg").innerHTML = `<div class="msg ok">Lote ${l.numero} formado com ${l.projetos.length} projeto(s) e ${l.total_pecas} peças. As OPs já estão na fila da fábrica.</div>`;
+    await carregarProjetos(); verLote(l.id);
+  } catch (e) { $("lt-msg").innerHTML = `<div class="msg err">${esc(e.status === 422 ? "Marque ao menos um projeto e informe a descrição do lote." : e.message)}</div>`; }
+}
+async function verLote(id) {
+  const l = await api(`/api/lotes/${id}`);
+  const card = $("det-lote"); card.hidden = false;
+  card.innerHTML = `<h2>Lote ${l.numero} · ${esc(l.descricao)} ${tag(l.status)}</h2>
+    <div class="linha">${barra(l.progresso_pct)} ${l.etapas_concluidas}/${l.etapas_total} etapas (${l.progresso_pct}%) · ${l.total_pecas} peças · formado por ${esc(l.criado_por || "—")}</div>
+    <div class="linha">
+      <button class="btn" onclick="abrirPagina('/api/lotes/${l.id}/etiquetas.html')">Etiquetas do lote</button>
+      <button class="btn sec" onclick="baixarArquivo('/api/lotes/${l.id}/etiquetas.zpl', 'lote${l.numero}_etiquetas.zpl')">ZPL do lote</button>
+      <button class="btn sec" onclick="api('/api/lotes/${l.id}/plano-corte').then((p) => desenharPlano(p, 'lote-extra')).catch((e) => alert(e.message))">Plano de corte do lote</button>
+      <button class="btn sec" onclick="pecasDoLote(${l.id})">Onde estão as peças</button>
+      ${l.status === "ABERTO" && opera("pcp") ? `<button class="btn sec" onclick="adicionarAoLote(${l.id})">Incluir projetos marcados</button>` : ""}
+    </div><div id="lote-msg"></div>
+    <div class="tabela">${tabela([["Projeto", (p) => `<b>${esc(p.codigo)}</b> ${esc(p.nome)}`], ["Cliente", (p) => esc(p.cliente || "—")],
+      ["OP", (p) => `<a onclick="verOp(${p.op_id})">#${p.op_numero}</a>`], ["Status", (p) => tag(p.op_status)], ["Peças", (p) => p.pecas, 1],
+      ["Progresso", (p) => `${barra(p.progresso_pct)} ${p.progresso_pct}%`]], l.projetos)}</div>
+    <div id="lote-extra"></div>`;
+  card.scrollIntoView({behavior: "smooth", block: "start"});
+}
+async function adicionarAoLote(id) {
+  try { await api(`/api/lotes/${id}/projetos`, {method: "POST", json: {projeto_ids: marcados()}}); await carregarProjetos(); verLote(id); }
+  catch (e) { $("lote-msg").innerHTML = `<div class="msg err">${esc(e.status === 422 ? "Marque os projetos liberados na lista acima." : e.message)}</div>`; }
+}
+async function pecasDoLote(id) { abrir("producao"); await new Promise((ok) => setTimeout(ok, 300)); $("pr-lote").value = id; consultarPecas(); }
+
+// Abre uma página gerada pelo servidor (etiquetas, romaneio) e baixa arquivos (ZPL)
+async function abrirPagina(caminho) {
+  try { window.open(URL.createObjectURL(await arquivo(caminho)), "_blank"); } catch (e) { alert(e.message); }
+}
+async function baixarArquivo(caminho, nome) {
+  try {
+    const a = document.createElement("a"); a.href = URL.createObjectURL(await arquivo(caminho)); a.download = nome;
+    document.body.append(a); a.click(); a.remove();
+  } catch (e) { alert(e.message); }
+}
+
+// --- Expedição: caixa master -------------------------------------------------
+let caixaAtiva = null, proximaNova = false, modoEx = "embalar", recusada = null;
+function bip(ok) {  // som curto: agudo para ok, grave duplo para recusa (o operador não precisa olhar a tela)
+  try {
+    const ctx = bip.ctx ||= new (window.AudioContext || window.webkitAudioContext)();
+    (ok ? [[880, 0]] : [[220, 0], [220, 0.22]]).forEach(([f, t]) => {
+      const o = ctx.createOscillator(), g = ctx.createGain(); o.frequency.value = f; o.type = ok ? "sine" : "square";
+      g.gain.value = 0.08; o.connect(g); g.connect(ctx.destination); o.start(ctx.currentTime + t); o.stop(ctx.currentTime + t + 0.15);
+    });
+  } catch (e) {}
+  if (!ok && navigator.vibrate) navigator.vibrate([120, 60, 120]);
+}
+async function carregarExpedicao() {
+  const projetos = (await api("/api/projetos")).filter((p) => ["PRODUCAO", "CONCLUIDO", "ENTREGUE"].includes(p.status));
+  const atual = $("ex-proj").value;
+  $("ex-proj").innerHTML = projetos.length ? projetos.map((p) => `<option value="${p.id}">${esc(p.codigo)} · ${esc(p.nome)}</option>`).join("")
+    : `<option value="">Nenhum projeto em produção</option>`;
+  if (atual && projetos.some((p) => String(p.id) === atual)) $("ex-proj").value = atual;
+  if (caixaAtiva) await mostrarCaixa(await api(`/api/caixas/${caixaAtiva}`)); else mostrarCaixa(null);
+  await carregarExpProjeto();
+  $("ex-scan").focus();
+}
+function modoExpedicao(m) {
+  modoEx = m;
+  document.querySelectorAll("#ex-modo button").forEach((b) => b.classList.toggle("ativo", b.dataset.modo === m));
+  $("ex-scan").placeholder = m === "embalar" ? "Bipe a etiqueta da peça e tecle Enter" : "Bipe a etiqueta da CAIXA ao subir no caminhão";
+  $("ex-alerta").innerHTML = ""; $("ex-scan").focus();
+}
+function alertaEx(classe, texto, extra = "") { $("ex-alerta").innerHTML = `<div class="alerta-ex ${classe}">${esc(texto)}${extra}</div>`; }
+function mostrarCaixa(c) {
+  const card = $("ex-caixa");
+  if (!c) { card.hidden = true; caixaAtiva = null; return; }
+  caixaAtiva = c.status === "ABERTA" ? c.id : null;
+  card.hidden = false;
+  card.innerHTML = `<div class="titulo">Caixa ${c.numero} · volume ${c.volume}/${c.volumes_projeto} ${tag(c.status)}</div>
+    <div class="sub">${esc(c.cliente || c.projeto_nome)} · ${esc(c.projeto_codigo)} · <b>${esc(c.ambiente)}</b> · módulos: ${c.modulos.map(esc).join(", ") || "—"}</div>
+    ${proximaNova ? `<div class="msg ok">A próxima peça bipada abre uma caixa nova.</div>` : ""}
+    <div class="linha" style="margin-top:10px">
+      ${c.status === "ABERTA" ? `<button class="btn" onclick="fecharCaixa(${c.id})">Fechar e imprimir etiqueta</button>
+        <button class="btn sec" onclick="proximaNova = true; mostrarCaixa(caixaAtual)">Próxima peça em caixa nova</button>` : ""}
+      ${c.status === "FECHADA" ? `<button class="btn sec" onclick="acaoCaixa(${c.id}, 'reabrir')">Reabrir</button>` : ""}
+      <button class="btn sec" onclick="abrirPagina('/api/caixas/${c.id}/etiqueta.html')">Etiqueta</button>
+      <button class="btn sec" onclick="mostrarCaixa(null); proximaNova = false">Soltar caixa</button>
+    </div>
+    <div class="tabela">${tabela([["Etiqueta", (i) => `<code>${i.codigo_barras}</code>`], ["Módulo", (i) => `<b>${esc(i.modulo)}</b> ${esc(i.modulo_descricao)}`],
+      ["Peça", (i) => esc(i.peca)], ["Medida", (i) => esc(i.medidas), 1],
+      ["", (i) => c.status === "ABERTA" ? `<button class="btn sec" onclick="removerDaCaixa(${c.id}, '${i.codigo_barras}')">Tirar</button>` : ""]], c.itens)}</div>`;
+  caixaAtual = c;
+}
+let caixaAtual = null;
+$("ex-scan").addEventListener("keydown", (ev) => {
+  if (ev.key !== "Enter") return;
+  const cb = ev.target.value.trim(); ev.target.value = "";
+  if (cb) (modoEx === "embalar" ? biparCaixa(cb) : carregarCaixa(cb));
+});
+async function biparCaixa(cb, nova = false) {
+  try {
+    const r = await api("/api/expedicao/bipar", {method: "POST", json: {codigo_barras: cb, caixa_id: caixaAtiva, nova_caixa: nova || proximaNova}});
+    proximaNova = false; recusada = null; bip(true);
+    alertaEx("ok", r.acao === "CAIXA_SELECIONADA" ? r.mensagem : `${r.mensagem}  ·  projeto: ${r.projeto_embaladas}/${r.projeto_total} peças embaladas`);
+    mostrarCaixa(r.caixa);
+    if (String(r.caixa.projeto_id) !== $("ex-proj").value && [...$("ex-proj").options].some((o) => o.value === String(r.caixa.projeto_id))) $("ex-proj").value = r.caixa.projeto_id;
+    carregarExpProjeto();
+  } catch (e) {
+    bip(false); const d = e.detail || {};
+    recusada = cb;
+    if (d.tipo === "MODULO_DISTINTO" || d.tipo === "CAIXA_FECHADA" && d.sugestao === "NOVA_CAIXA") {
+      alertaEx("aviso", e.message, `<div class="linha"><button class="btn" onclick="biparCaixa(recusada, true)">Abrir nova caixa master com esta peça</button>
+        <button class="btn sec" onclick="separar()">Separar para bipar depois</button></div>`);
+    } else if (d.tipo === "CAIXA_FECHADA" && d.caixa_id) {
+      alertaEx("aviso", e.message, `<div class="linha"><button class="btn" onclick="acaoCaixa(${d.caixa_id}, 'reabrir')">Reabrir a caixa</button></div>`);
+    } else if (d.tipo === "JA_EMBALADA" && d.caixa_id) {
+      alertaEx("aviso", e.message, `<div class="linha"><button class="btn sec" onclick="api('/api/caixas/${d.caixa_id}').then(mostrarCaixa)">Ver a caixa</button></div>`);
+    } else alertaEx("err", e.message);
+  }
+  $("ex-scan").focus();
+}
+function separar() { alertaEx("aviso", `Peça ${recusada} separada. Ela continua na lista de peças fora de caixa até ser bipada.`); recusada = null; $("ex-scan").focus(); }
+async function carregarCaixa(cb) {
+  try { const c = await api("/api/expedicao/carregar", {method: "POST", json: {codigo_barras: cb}}); bip(true);
+    alertaEx("ok", `Caixa ${c.numero} (volume ${c.volume}/${c.volumes_projeto}) carregada · ${c.cliente || c.projeto_nome} · ${c.ambiente}`); carregarExpProjeto(); }
+  catch (e) { bip(false); alertaEx("err", e.message); }
+  $("ex-scan").focus();
+}
+async function fecharCaixa(id) {
+  try { const c = await api(`/api/caixas/${id}/fechar`, {method: "POST"}); mostrarCaixa(c); caixaAtiva = null;
+    alertaEx("ok", `Caixa ${c.numero} fechada com ${c.total_itens} peça(s). Cole a etiqueta de volume.`); abrirPagina(`/api/caixas/${id}/etiqueta.html`); carregarExpProjeto(); }
+  catch (e) { alertaEx("err", e.message); }
+}
+async function acaoCaixa(id, acao) {
+  try { mostrarCaixa(await api(`/api/caixas/${id}/${acao}`, {method: "POST"})); alertaEx("ok", acao === "reabrir" ? "Caixa reaberta: as próximas peças entram nela." : "Feito."); carregarExpProjeto(); }
+  catch (e) { alertaEx("err", e.message); }
+  $("ex-scan").focus();
+}
+async function removerDaCaixa(id, cb) {
+  try { mostrarCaixa(await api(`/api/caixas/${id}/remover`, {method: "POST", json: {codigo_barras: cb}})); alertaEx("aviso", `Peça ${cb} retirada da caixa.`); carregarExpProjeto(); }
+  catch (e) { alertaEx("err", e.message); }
+}
+async function carregarExpProjeto() {
+  const id = $("ex-proj").value; if (!id) { $("ex-kpis").innerHTML = $("ex-caixas").innerHTML = $("ex-pendentes").innerHTML = ""; return; }
+  const r = await api(`/api/projetos/${id}/expedicao`);
+  $("ex-kpis").innerHTML = [[`${r.embaladas}/${r.total_pecas}`, "Peças embaladas"], [r.caixas.length, "Volumes (caixas)"],
+    [r.em_caixas_fechadas, "Peças em caixas fechadas"], [r.expedidas, "Peças carregadas"],
+    [r.pronto_para_expedir ? "Sim" : "Não", "Pronto para carregar"]].map(([v, t]) => `<div class="card kpi">${v}<small>${t}</small></div>`).join("");
+  $("ex-caixas").innerHTML = tabela([["Caixa", (c) => `<a onclick="api('/api/caixas/${c.id}').then(mostrarCaixa)">${c.numero}</a>`],
+    ["Volume", (c) => `${c.volume}/${c.volumes_projeto}`], ["Ambiente", (c) => esc(c.ambiente)], ["Módulos", (c) => c.modulos.map(esc).join(", ")],
+    ["Peças", (c) => c.total_itens, 1], ["Status", (c) => tag(c.status)]], r.caixas);
+  $("ex-pendentes").innerHTML = tabela([["Etiqueta", (p) => `<code>${p.codigo_barras}</code>`], ["Ambiente", (p) => esc(p.ambiente)],
+    ["Módulo", (p) => esc(p.modulo)], ["Peça", (p) => esc(p.peca)],
+    ["Situação", (p) => p.proxima_etapa === "EMBALAGEM" || p.situacao === "CONCLUIDA" ? `<span class="tag OK">Pronta para embalar</span>` : `na fábrica: ${esc(p.proxima_etapa || "—")}`]],
+    r.pendentes.slice(0, 200));
 }
 
 // Link de redefinição: vale tanto abrindo a página nova quanto com o ERP já aberto

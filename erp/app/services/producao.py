@@ -5,6 +5,8 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from ..models import (
+    CaixaMaster,
+    ItemCaixa,
     EtapaUnidade,
     MovimentoEstoque,
     Ocorrencia,
@@ -46,6 +48,9 @@ def estornar(db: Session, empresa_id: int, codigo: str, centro_codigo: str, moti
     motivo = _motivo(motivo)
     if not u.ativa:
         raise ErroPCP("Peça refugada não tem baixa para estornar")
+    item = db.scalar(select(ItemCaixa).where(ItemCaixa.unidade_id == u.id))
+    if item is not None:
+        raise ErroPCP(f"A peça está na caixa master {item.caixa.numero}: remova da caixa antes de estornar")
     centro_codigo = centro_codigo.strip().upper()
     feitas = [e for e in u.etapas if e.concluida_em]
     if not feitas:
@@ -84,6 +89,11 @@ def refugar(db: Session, empresa_id: int, codigo: str, centro_codigo: str, motiv
     motivo = _motivo(motivo)
     if not u.ativa:
         raise ErroPCP(f"Etiqueta {codigo} já foi refugada")
+    item = db.scalar(select(ItemCaixa).where(ItemCaixa.unidade_id == u.id))
+    if item is not None:
+        if item.caixa.status == "EXPEDIDA":
+            raise ErroPCP(f"A peça já saiu na caixa {item.caixa.numero}: defeito depois da expedição vai para a Assistência")
+        db.delete(item)  # sai da caixa; a reposição entra na caixa quando ficar pronta
     u.status = "REFUGADA"
 
     seq = (db.scalar(select(func.max(UnidadePeca.sequencial)).where(UnidadePeca.op_id == op.id)) or 0) + 1
@@ -120,6 +130,7 @@ def situacao(u: UnidadePeca) -> str:
 
 
 def consultar_pecas(db: Session, empresa_id: int, projeto_id: int | None = None, op_id: int | None = None,
+                    lote_id: int | None = None,
                     situacao_filtro: str | None = None, centro: str | None = None, material: str | None = None,
                     busca: str | None = None, limite: int = 500) -> dict:
     consulta = (select(UnidadePeca).join(OrdemProducao)
@@ -128,6 +139,10 @@ def consultar_pecas(db: Session, empresa_id: int, projeto_id: int | None = None,
         consulta = consulta.where(OrdemProducao.projeto_id == projeto_id)
     if op_id:
         consulta = consulta.where(OrdemProducao.id == op_id)
+    if lote_id:
+        consulta = consulta.where(OrdemProducao.lote_id == lote_id)
+    caixas = dict(db.execute(select(ItemCaixa.unidade_id, CaixaMaster.numero).join(CaixaMaster)
+                             .where(CaixaMaster.empresa_id == empresa_id)).all())
     linhas, contagem = [], {"AGUARDANDO": 0, "EM_PROCESSO": 0, "CONCLUIDA": 0, "REFUGADA": 0}
     termo = (busca or "").strip().lower()
     for u in db.scalars(consulta.order_by(OrdemProducao.numero, UnidadePeca.sequencial)):
@@ -146,6 +161,7 @@ def consultar_pecas(db: Session, empresa_id: int, projeto_id: int | None = None,
         if len(linhas) < limite:
             linhas.append({
                 "codigo_barras": u.codigo_barras, "op_id": u.op_id, "op_numero": u.op.numero, "op_status": u.op.status,
+                "lote_numero": u.op.lote.numero if u.op.lote else None, "caixa_numero": caixas.get(u.id),
                 "projeto_codigo": u.op.projeto.codigo, "ambiente": p.modulo.ambiente.nome, "modulo": p.modulo.codigo,
                 "modulo_descricao": p.modulo.descricao or "",
                 "peca": p.descricao, "material_codigo": p.material_codigo,

@@ -44,7 +44,7 @@ def _aplica(centro: CentroTrabalho, peca) -> bool:
 
 
 def gerar_op(db: Session, projeto: Projeto, prioridade: int = 3,
-             data_entrega: date | None = None) -> OrdemProducao:
+             data_entrega: date | None = None, lote=None) -> OrdemProducao:
     if projeto.status != StatusProjeto.LIBERADO:
         raise ErroPCP(f"Projeto precisa estar LIBERADO pela engenharia (status atual: {projeto.status})")
 
@@ -65,6 +65,7 @@ def gerar_op(db: Session, projeto: Projeto, prioridade: int = 3,
         projeto=projeto,
         prioridade=prioridade,
         data_entrega=data_entrega or projeto.data_entrega,
+        lote=lote,
     )
     db.add(op)
 

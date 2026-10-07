@@ -36,6 +36,7 @@ class EmpresaIn(Schema):
     refilo_mm: float = Field(10.0, ge=0)
     imposto_venda_pct: float = Field(0.0, ge=0, le=100)
     garantia_meses: int = Field(12, ge=0, le=120)
+    caixa_max_modulos: int = Field(3, ge=1, le=50)
 
 
 class EmpresaOut(EmpresaIn):
@@ -62,6 +63,7 @@ class EmpresaAtualizar(Schema):
     refilo_mm: float | None = Field(None, ge=0)
     imposto_venda_pct: float | None = Field(None, ge=0, le=100)
     garantia_meses: int | None = Field(None, ge=0, le=120)
+    caixa_max_modulos: int | None = Field(None, ge=1, le=50)
     uf: str | None = Field(None, min_length=2, max_length=2)
     inscricao_estadual: str | None = None
     ncm_padrao: str | None = Field(None, pattern=r"^\d{4}\.?\d{2}\.?\d{2}$")
@@ -685,6 +687,8 @@ class PecaConsulta(Schema):
     codigo_barras: str
     op_id: int
     op_numero: int
+    lote_numero: int | None = None
+    caixa_numero: int | None = None
     op_status: str = ""
     projeto_codigo: str
     ambiente: str
@@ -756,7 +760,8 @@ class PlanoMaterial(Schema):
 
 
 class PlanoCorte(Schema):
-    op_numero: int
+    op_numero: int | None = None
+    titulo: str = ""
     serra_mm: float
     refilo_mm: float
     total_chapas: int
@@ -795,6 +800,8 @@ class OPResumo(Schema):
     numero: int
     projeto_id: int
     projeto_nome: str
+    lote_id: int | None = None
+    lote_numero: int | None = None
     status: StatusOP
     prioridade: int
     data_entrega: date | None
@@ -837,3 +844,117 @@ class Painel(Schema):
     ops_atrasadas: int
     centros: list[FilaCentro]
     ops: list[OPResumo]
+
+
+# --- Lotes de produção ---------------------------------------------------------
+
+class LoteIn(Schema):
+    descricao: str = Field(min_length=2, max_length=120)
+    projeto_ids: list[int] = Field(min_length=1)
+    prioridade: int = Field(3, ge=1, le=5)
+    data_entrega: date | None = None
+
+
+class LoteAdicionar(Schema):
+    projeto_ids: list[int] = Field(min_length=1)
+
+
+class LoteProjeto(Schema):
+    projeto_id: int
+    codigo: str
+    nome: str
+    cliente: str | None
+    op_id: int
+    op_numero: int
+    op_status: str
+    pecas: int
+    progresso_pct: float
+
+
+class LoteOut(Schema):
+    id: int
+    numero: int
+    descricao: str
+    status: str
+    data_entrega: date | None
+    criado_em: datetime
+    criado_por: str | None
+    total_pecas: int
+    etapas_total: int
+    etapas_concluidas: int
+    progresso_pct: float
+    projetos: list[LoteProjeto]
+
+
+# --- Expedição (caixa master) ----------------------------------------------------
+
+class ItemCaixaOut(Schema):
+    codigo_barras: str
+    peca: str
+    modulo: str
+    modulo_descricao: str
+    medidas: str
+    adicionado_em: datetime
+    usuario: str | None
+
+
+class CaixaOut(Schema):
+    id: int
+    numero: int
+    codigo_barras: str
+    projeto_id: int
+    projeto_codigo: str
+    projeto_nome: str
+    cliente: str | None
+    ambiente: str
+    status: str
+    volume: int
+    volumes_projeto: int
+    modulos: list[str]
+    total_itens: int
+    itens: list[ItemCaixaOut]
+    criado_em: datetime
+    criado_por: str | None
+    fechada_em: datetime | None
+    expedida_em: datetime | None
+
+
+class BipeCaixaIn(Schema):
+    codigo_barras: str = Field(min_length=1, max_length=40)
+    caixa_id: int | None = None
+    nova_caixa: bool = False
+
+
+class BipeCaixaOut(Schema):
+    acao: str  # ADICIONADA ou CAIXA_SELECIONADA
+    mensagem: str
+    caixa: CaixaOut
+    embalagem_apontada: bool = False
+    projeto_embaladas: int = 0
+    projeto_total: int = 0
+
+
+class CarregarIn(Schema):
+    codigo_barras: str = Field(min_length=1, max_length=40)
+
+
+class PendenteExpedicao(Schema):
+    codigo_barras: str
+    ambiente: str
+    modulo: str
+    peca: str
+    situacao: str
+    proxima_etapa: str | None
+
+
+class ExpedicaoProjeto(Schema):
+    projeto_id: int
+    codigo: str
+    nome: str
+    total_pecas: int
+    embaladas: int
+    em_caixas_fechadas: int
+    expedidas: int
+    pronto_para_expedir: bool
+    pendentes: list[PendenteExpedicao]
+    caixas: list[CaixaOut]
