@@ -91,7 +91,7 @@ def gerar_op(db: Session, projeto: Projeto, prioridade: int = 3,
 
 
 def progresso(op: OrdemProducao) -> tuple[int, int]:
-    etapas = [e for u in op.unidades for e in u.etapas]
+    etapas = [e for u in op.unidades if u.ativa for e in u.etapas]
     return len(etapas), sum(1 for e in etapas if e.concluida_em)
 
 
@@ -106,6 +106,8 @@ def apontar(db: Session, empresa_id: int, codigo_barras: str, centro_codigo: str
     if unidade is None:
         raise ErroPCP(f"Etiqueta {codigo_barras} não encontrada", 404)
     op = unidade.op
+    if not unidade.ativa:
+        raise ErroPCP(f"Etiqueta {codigo_barras} é de peça refugada: use a etiqueta da reposição")
     if op.status in (StatusOP.CANCELADA, StatusOP.CONCLUIDA):
         raise ErroPCP(f"OP {op.numero} está {op.status}")
 
@@ -165,7 +167,7 @@ def fila_por_centro(db: Session, empresa_id: int) -> list[dict]:
         )
     )
     for op in ops:
-        for unidade in op.unidades:
+        for unidade in (u for u in op.unidades if u.ativa):
             for etapa in unidade.etapas:
                 if etapa.concluida_em:
                     if etapa.concluida_em >= inicio_dia:

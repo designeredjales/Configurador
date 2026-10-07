@@ -126,6 +126,7 @@ class UsuarioIn(Schema):
     email: str
     senha: str
     perfil: Perfil
+    funcoes: list[str] | None = None  # None = padrão do perfil
 
     _senha = field_validator("senha")(_validar_senha)
     _email = field_validator("email")(_validar_email)
@@ -136,6 +137,7 @@ class UsuarioAtualizar(Schema):
     perfil: Perfil | None = None
     ativo: bool | None = None
     senha: str | None = None
+    funcoes: list[str] | None = None  # enviar null volta ao padrão do perfil
 
     _senha = field_validator("senha")(_validar_senha)
 
@@ -147,6 +149,20 @@ class UsuarioOut(Schema):
     perfil: Perfil
     ativo: bool
     ultimo_acesso: datetime | None
+    funcoes_efetivas: list[str]
+    funcoes_personalizadas: bool
+
+
+class FuncaoOut(Schema):
+    codigo: str
+    modulo: str
+    nome: str
+    descricao: str
+
+
+class CatalogoFuncoes(Schema):
+    funcoes: list[FuncaoOut]
+    padrao_por_perfil: dict[str, list[str]]
 
 
 class EmpresaResumo(Schema):
@@ -478,6 +494,7 @@ class DREObra(Schema):
     receita_liquida: float
     material: float
     material_base: str
+    material_refugo: float = 0.0
     custos_diretos: dict[str, float]
     total_custos_diretos: float
     margem_contribuicao: float
@@ -640,6 +657,72 @@ class ChamadoOut(Schema):
     retrabalho: bool
 
 
+# --- Controle de produção ---------------------------------------------------------
+
+class OcorrenciaIn(Schema):
+    codigo_barras: str
+    centro_codigo: str
+    motivo: str
+
+
+class OcorrenciaOut(Schema):
+    id: int
+    tipo: str
+    op_id: int
+    op_numero: int
+    projeto_codigo: str
+    codigo_barras: str
+    peca: str
+    centro_codigo: str
+    motivo: str
+    custo_material: float
+    nova_etiqueta: str | None
+    usuario: str | None
+    criado_em: datetime
+
+
+class PecaConsulta(Schema):
+    codigo_barras: str
+    op_id: int
+    op_numero: int
+    op_status: str = ""
+    projeto_codigo: str
+    ambiente: str
+    modulo: str
+    modulo_descricao: str = ""
+    peca: str
+    material_codigo: str
+    medidas: str
+    situacao: str
+    proxima_etapa: str | None
+    ultima_etapa: str | None
+    ultima_baixa_em: datetime | None
+    ultimo_operador: str | None
+    reposicao: bool
+
+
+class ConsultaPecas(Schema):
+    total: int
+    por_situacao: dict[str, int]
+    pecas: list[PecaConsulta]
+
+
+class BaixaOut(Schema):
+    quando: datetime
+    centro_codigo: str
+    operador: str | None
+    codigo_barras: str
+    peca: str
+    op_numero: int
+
+
+class HistoricoBaixas(Schema):
+    total: int
+    por_operador: dict[str, int]
+    por_centro: dict[str, int]
+    baixas: list[BaixaOut]
+
+
 # --- PCP ---------------------------------------------------------------------
 
 class PosicaoCorte(Schema):
@@ -694,6 +777,8 @@ class EtapaOut(Schema):
 
 class UnidadeOut(Schema):
     codigo_barras: str
+    status: str = "ATIVA"
+    reposicao: bool = False
     sequencial: int
     peca_codigo: str
     peca_descricao: str

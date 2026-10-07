@@ -1,5 +1,5 @@
 import html
-from datetime import date
+from datetime import date, datetime
 
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import HTMLResponse, PlainTextResponse
@@ -7,10 +7,22 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from ..db import get_db
-from ..deps import APONTAR, PCP, empresa_atual
-from ..models import Empresa, OrdemProducao, StatusOP, Usuario
-from ..schemas import ApontamentoIn, ApontamentoOut, GerarOPIn, OPDetalhe, OPResumo, Painel, PlanoCorte
-from ..services import code128, corte, pcp
+from ..deps import APONTAR, ESTORNO, PCP, REFUGO, empresa_atual
+from ..models import Empresa, Ocorrencia, OrdemProducao, StatusOP, Usuario
+from ..schemas import (
+    ApontamentoIn,
+    ApontamentoOut,
+    ConsultaPecas,
+    GerarOPIn,
+    HistoricoBaixas,
+    OcorrenciaIn,
+    OcorrenciaOut,
+    OPDetalhe,
+    OPResumo,
+    Painel,
+    PlanoCorte,
+)
+from ..services import code128, corte, pcp, producao
 from .projetos import carregar
 
 router = APIRouter(prefix="/api", tags=["pcp"])
@@ -32,6 +44,11 @@ def resumo(op: OrdemProducao) -> dict:
         "etapas_concluidas": feitas,
         "progresso_pct": round(100 * feitas / total, 1) if total else 0.0,
     }
+
+
+def _ativas(op: OrdemProducao, apenas_reposicoes: bool = False) -> list:
+    """Peças que ainda vão para a fábrica (refugadas saem), opcionalmente só as reposições."""
+    return [u for u in op.unidades if u.ativa and (not apenas_reposicoes or u.reposicao_de_id)]
 
 
 def carregar_op(db: Session, emp: Empresa, op_id: int) -> OrdemProducao:
@@ -70,6 +87,7 @@ def detalhe_op(op_id: int, emp: Empresa = Depends(empresa_atual), db: Session = 
     for u in op.unidades:
         peca = u.peca
         unidades.append({
+            "status": u.status, "reposicao": u.reposicao_de_id is not None,
             "codigo_barras": u.codigo_barras,
             "sequencial": u.sequencial,
             "peca_codigo": peca.codigo,
@@ -140,10 +158,11 @@ def painel(emp: Empresa = Depends(empresa_atual), db: Session = Depends(get_db))
 
 
 @router.get("/ops/{op_id}/plano-corte", response_model=PlanoCorte)
-def plano_corte(op_id: int, emp: Empresa = Depends(empresa_atual), db: Session = Depends(get_db)):
+def plano_corte(op_id: int, apenas_reposicoes: bool = False, emp: Empresa = Depends(empresa_atual),
+                db: Session = Depends(get_db)):
     op = carregar_op(db, emp, op_id)
     grupos: dict[str, list] = {}
-    for u in op.unidades:
+    for u in _ativas(op, apenas_reposicoes):
         grupos.setdefault(u.peca.material_codigo, []).append(u)
     materiais = []
     for codigo, unidades in sorted(grupos.items()):
@@ -176,7 +195,8 @@ def plano_corte(op_id: int, emp: Empresa = Depends(empresa_atual), db: Session =
 
 
 @router.get("/ops/{op_id}/etiquetas.zpl", response_class=PlainTextResponse)
-def etiquetas_zpl(op_id: int, emp: Empresa = Depends(empresa_atual), db: Session = Depends(get_db)):
+def etiquetas_zpl(op_id: int, apenas_reposicoes: bool = False, emp: Empresa = Depends(empresa_atual),
+                  db: Session = Depends(get_db)):
     """Etiquetas 100 x 50 mm (203 dpi) para impressora Zebra, uma por peça."""
     op = carregar_op(db, emp, op_id)
 
@@ -185,7 +205,7 @@ def etiquetas_zpl(op_id: int, emp: Empresa = Depends(empresa_atual), db: Session
         return (texto or "").replace("^", " ").replace("~", " ")[:n]
 
     blocos = []
-    for u in op.unidades:
+    for u in _ativas(op, apenas_reposicoes):
         p = u.peca
         roteiro = " > ".join(e.centro.codigo for e in u.etapas)
         blocos.append("\n".join([
@@ -204,12 +224,13 @@ def etiquetas_zpl(op_id: int, emp: Empresa = Depends(empresa_atual), db: Session
 
 
 @router.get("/ops/{op_id}/etiquetas.html", response_class=HTMLResponse)
-def etiquetas_html(op_id: int, emp: Empresa = Depends(empresa_atual), db: Session = Depends(get_db)):
+def etiquetas_html(op_id: int, apenas_reposicoes: bool = False, emp: Empresa = Depends(empresa_atual),
+                   db: Session = Depends(get_db)):
     """Etiquetas 100 x 50 mm para imprimir pelo navegador (térmica ou A4 de etiquetas)."""
     op = carregar_op(db, emp, op_id)
     e = html.escape
     etiquetas = []
-    for u in op.unidades:
+    for u in _ativas(op, apenas_reposicoes):
         p = u.peca
         roteiro = " › ".join(et.centro.codigo for et in u.etapas)
         etiquetas.append(f"""<section class="etq">
@@ -242,3 +263,65 @@ body {{ margin: 0; font: 9pt/1.2 system-ui, Arial, sans-serif; color: #000; back
 {''.join(etiquetas)}
 </body></html>"""
     return HTMLResponse(pagina)
+
+
+# --- Controle de produção: estorno, refugo, consulta ------------------------------
+
+@router.post("/apontamentos/estorno", response_model=OcorrenciaOut)
+def estornar(dados: OcorrenciaIn, usuario: Usuario = Depends(ESTORNO), db: Session = Depends(get_db)):
+    try:
+        producao.estornar(db, usuario.empresa_id, dados.codigo_barras, dados.centro_codigo, dados.motivo, usuario)
+    except pcp.ErroPCP as e:
+        db.rollback()
+        raise HTTPException(e.status, str(e))
+    db.commit()
+    return _ocorrencia_out(db.scalars(select(Ocorrencia).where(Ocorrencia.empresa_id == usuario.empresa_id)
+                                      .order_by(Ocorrencia.id.desc())).first())
+
+
+@router.post("/apontamentos/refugo", response_model=OcorrenciaOut)
+def refugar(dados: OcorrenciaIn, usuario: Usuario = Depends(REFUGO), db: Session = Depends(get_db)):
+    try:
+        producao.refugar(db, usuario.empresa_id, dados.codigo_barras, dados.centro_codigo, dados.motivo, usuario)
+    except pcp.ErroPCP as e:
+        db.rollback()
+        raise HTTPException(e.status, str(e))
+    db.commit()
+    return _ocorrencia_out(db.scalars(select(Ocorrencia).where(Ocorrencia.empresa_id == usuario.empresa_id)
+                                      .order_by(Ocorrencia.id.desc())).first())
+
+
+def _ocorrencia_out(o: Ocorrencia) -> dict:
+    return {"id": o.id, "tipo": o.tipo, "op_id": o.op_id, "op_numero": o.op.numero, "projeto_codigo": o.op.projeto.codigo,
+            "codigo_barras": o.unidade.codigo_barras, "peca": o.unidade.peca.descricao, "centro_codigo": o.centro_codigo,
+            "motivo": o.motivo, "custo_material": o.custo_material,
+            "nova_etiqueta": o.nova_unidade.codigo_barras if o.nova_unidade else None,
+            "usuario": o.usuario_nome, "criado_em": o.criado_em}
+
+
+@router.get("/producao/pecas", response_model=ConsultaPecas)
+def consulta_pecas(projeto_id: int | None = None, op_id: int | None = None, situacao: str | None = None,
+                   centro: str | None = None, material: str | None = None, busca: str | None = None,
+                   emp: Empresa = Depends(empresa_atual), db: Session = Depends(get_db)):
+    return producao.consultar_pecas(db, emp.id, projeto_id, op_id, (situacao or "").upper() or None,
+                                    centro, material, busca)
+
+
+@router.get("/producao/baixas", response_model=HistoricoBaixas)
+def baixas(de: date | None = None, ate: date | None = None, centro: str | None = None, operador: str | None = None,
+           emp: Empresa = Depends(empresa_atual), db: Session = Depends(get_db)):
+    ate = ate or date.today()
+    de = de or ate
+    return producao.historico_baixas(db, emp.id, datetime.combine(de, datetime.min.time()),
+                                     datetime.combine(ate, datetime.max.time()), centro, operador)
+
+
+@router.get("/producao/ocorrencias", response_model=list[OcorrenciaOut])
+def ocorrencias(tipo: str | None = None, op_id: int | None = None, emp: Empresa = Depends(empresa_atual),
+                db: Session = Depends(get_db)):
+    consulta = select(Ocorrencia).where(Ocorrencia.empresa_id == emp.id)
+    if tipo:
+        consulta = consulta.where(Ocorrencia.tipo == tipo.upper())
+    if op_id:
+        consulta = consulta.where(Ocorrencia.op_id == op_id)
+    return [_ocorrencia_out(o) for o in db.scalars(consulta.order_by(Ocorrencia.id.desc()).limit(300))]

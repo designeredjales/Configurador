@@ -9,6 +9,7 @@ from sqlalchemy.orm import Session
 from ..models import (
     CentroTrabalho,
     Chamado,
+    Ocorrencia,
     OrdemProducao,
     Projeto,
     StatusChamado,
@@ -94,6 +95,9 @@ def calcular(db: Session, empresa_id: int, dias: int = 90) -> dict:
     for c in resolvidos:
         por_causa[c.causa] += 1
 
+    refugos = list(db.scalars(select(Ocorrencia).where(Ocorrencia.empresa_id == empresa_id, Ocorrencia.tipo == "REFUGO",
+                                                     Ocorrencia.criado_em >= inicio_dt)))
+
     # Caixa e estoque
     fluxo = financeiro.fluxo_caixa(db, empresa_id, 1)
     pos = estoque.posicao(db, empresa_id)
@@ -126,6 +130,7 @@ def calcular(db: Session, empresa_id: int, dias: int = 90) -> dict:
             "custo_assistencia": custo_assist,
             "custo_assistencia_pct": round(100 * custo_assist / faturamento, 2) if faturamento else None,
             "por_causa": dict(sorted(por_causa.items())),
+            "refugos": len(refugos), "custo_refugo": round(sum(o.custo_material for o in refugos), 2),
         },
         "caixa": {
             "vencido_receber": fluxo["vencido_receber"], "vencido_pagar": fluxo["vencido_pagar"],

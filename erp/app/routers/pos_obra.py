@@ -5,7 +5,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from ..db import get_db
-from ..deps import POS_OBRA, empresa_atual
+from ..deps import ASSISTENCIA, MONTAGEM, empresa_atual
 from ..models import Chamado, Empresa, Montagem, Projeto, StatusChamado, StatusProjeto, Usuario
 from ..schemas import (
     ChamadoAtualizar,
@@ -89,7 +89,7 @@ def agenda(de: date | None = None, ate: date | None = None, emp: Empresa = Depen
 
 
 @router.post("/montagens", response_model=MontagemOut, status_code=201)
-def agendar(dados: MontagemIn, usuario: Usuario = Depends(POS_OBRA), db: Session = Depends(get_db)):
+def agendar(dados: MontagemIn, usuario: Usuario = Depends(MONTAGEM), db: Session = Depends(get_db)):
     p = _projeto(db, usuario.empresa_id, dados.projeto_id)
     m = _executar(db, lambda: pos_obra.agendar(db, p, dados.data_inicio, dados.data_fim, dados.equipe,
                                                dados.endereco, dados.observacao))
@@ -102,14 +102,14 @@ def detalhe(montagem_id: int, emp: Empresa = Depends(empresa_atual), db: Session
 
 
 @router.post("/montagens/{montagem_id}/iniciar", response_model=MontagemOut)
-def iniciar(montagem_id: int, usuario: Usuario = Depends(POS_OBRA), db: Session = Depends(get_db)):
+def iniciar(montagem_id: int, usuario: Usuario = Depends(MONTAGEM), db: Session = Depends(get_db)):
     m = _montagem(db, usuario.empresa_id, montagem_id)
     _executar(db, lambda: pos_obra.iniciar(m))
     return _m_out(m)
 
 
 @router.post("/montagens/{montagem_id}/checklist/{item_id}", response_model=MontagemOut)
-def conferir(montagem_id: int, item_id: int, dados: ConferenciaIn, usuario: Usuario = Depends(POS_OBRA),
+def conferir(montagem_id: int, item_id: int, dados: ConferenciaIn, usuario: Usuario = Depends(MONTAGEM),
              db: Session = Depends(get_db)):
     m = _montagem(db, usuario.empresa_id, montagem_id)
     _executar(db, lambda: pos_obra.conferir(m, item_id, dados.ok, dados.observacao, usuario))
@@ -117,7 +117,7 @@ def conferir(montagem_id: int, item_id: int, dados: ConferenciaIn, usuario: Usua
 
 
 @router.post("/montagens/{montagem_id}/concluir", response_model=MontagemOut)
-def concluir(montagem_id: int, dados: ConclusaoMontagemIn, usuario: Usuario = Depends(POS_OBRA),
+def concluir(montagem_id: int, dados: ConclusaoMontagemIn, usuario: Usuario = Depends(MONTAGEM),
              db: Session = Depends(get_db)):
     m = _montagem(db, usuario.empresa_id, montagem_id)
     _executar(db, lambda: pos_obra.concluir(m, dados.recebido_por))
@@ -125,7 +125,7 @@ def concluir(montagem_id: int, dados: ConclusaoMontagemIn, usuario: Usuario = De
 
 
 @router.post("/montagens/{montagem_id}/cancelar", response_model=MontagemOut)
-def cancelar(montagem_id: int, usuario: Usuario = Depends(POS_OBRA), db: Session = Depends(get_db)):
+def cancelar(montagem_id: int, usuario: Usuario = Depends(MONTAGEM), db: Session = Depends(get_db)):
     m = _montagem(db, usuario.empresa_id, montagem_id)
     _executar(db, lambda: pos_obra.cancelar(m))
     return _m_out(m)
@@ -142,14 +142,14 @@ def chamados(abertos: bool = False, emp: Empresa = Depends(empresa_atual), db: S
 
 
 @router.post("/chamados", response_model=ChamadoOut, status_code=201)
-def abrir(dados: ChamadoIn, usuario: Usuario = Depends(POS_OBRA), db: Session = Depends(get_db)):
+def abrir(dados: ChamadoIn, usuario: Usuario = Depends(ASSISTENCIA), db: Session = Depends(get_db)):
     p = _projeto(db, usuario.empresa_id, dados.projeto_id)
     c = _executar(db, lambda: pos_obra.abrir_chamado(db, p, dados.tipo, dados.descricao, usuario))
     return _c_out(c)
 
 
 @router.patch("/chamados/{chamado_id}", response_model=ChamadoOut)
-def agendar_visita(chamado_id: int, dados: ChamadoAtualizar, usuario: Usuario = Depends(POS_OBRA),
+def agendar_visita(chamado_id: int, dados: ChamadoAtualizar, usuario: Usuario = Depends(ASSISTENCIA),
                    db: Session = Depends(get_db)):
     c = _chamado(db, usuario.empresa_id, chamado_id)
     if c.status == StatusChamado.RESOLVIDO:
@@ -161,7 +161,7 @@ def agendar_visita(chamado_id: int, dados: ChamadoAtualizar, usuario: Usuario = 
 
 
 @router.post("/chamados/{chamado_id}/resolver", response_model=ChamadoOut)
-def resolver(chamado_id: int, dados: ResolucaoIn, usuario: Usuario = Depends(POS_OBRA),
+def resolver(chamado_id: int, dados: ResolucaoIn, usuario: Usuario = Depends(ASSISTENCIA),
              db: Session = Depends(get_db)):
     c = _chamado(db, usuario.empresa_id, chamado_id)
     _executar(db, lambda: pos_obra.resolver(db, c, dados.causa, dados.solucao, dados.custo, usuario))

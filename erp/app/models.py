@@ -6,7 +6,7 @@ desde o primeiro dia.
 from datetime import date, datetime
 from enum import Enum
 
-from sqlalchemy import Date, DateTime, Float, ForeignKey, Integer, String, UniqueConstraint
+from sqlalchemy import JSON, Date, DateTime, Float, ForeignKey, Integer, String, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from .db import Base
@@ -68,6 +68,7 @@ class OrigemMovimento(str, Enum):
     RECEBIMENTO = "RECEBIMENTO"
     CONSUMO = "CONSUMO"        # baixa da reserva quando o projeto conclui
     INVENTARIO = "INVENTARIO"  # ajuste de contagem física
+    REFUGO = "REFUGO"          # material perdido em peça refugada
 
 
 class TipoLancamento(str, Enum):
@@ -171,6 +172,17 @@ class Usuario(Base):
     ultimo_acesso: Mapped[datetime | None] = mapped_column(DateTime)
     # Vai dentro do token: trocar a senha incrementa e derruba todas as sessões antigas
     versao_sessao: Mapped[int] = mapped_column(Integer, default=1)
+    # Funções personalizadas pelo administrador; None = padrão do perfil (ver app/funcoes.py)
+    funcoes: Mapped[list[str] | None] = mapped_column(JSON)
+
+    @property
+    def funcoes_efetivas(self) -> list[str]:
+        from .funcoes import efetivas
+        return sorted(efetivas(self))
+
+    @property
+    def funcoes_personalizadas(self) -> bool:
+        return self.funcoes is not None and self.perfil != Perfil.ADMIN
 
     empresa: Mapped[Empresa] = relationship()
 
@@ -397,6 +409,12 @@ class UnidadePeca(Base):
     peca_id: Mapped[int] = mapped_column(ForeignKey("pecas.id"))
     sequencial: Mapped[int] = mapped_column(Integer)
     codigo_barras: Mapped[str] = mapped_column(String(40), unique=True, index=True)
+    status: Mapped[str] = mapped_column(String(10), default="ATIVA", server_default="ATIVA")  # ATIVA ou REFUGADA
+    reposicao_de_id: Mapped[int | None] = mapped_column(ForeignKey("unidades_peca.id"))
+
+    @property
+    def ativa(self) -> bool:
+        return self.status != "REFUGADA"
 
     op: Mapped[OrdemProducao] = relationship(back_populates="unidades")
     peca: Mapped[Peca] = relationship()
@@ -650,3 +668,25 @@ class RedefinicaoSenha(Base):
     criado_em: Mapped[datetime] = mapped_column(DateTime, default=agora)
 
     usuario: Mapped[Usuario] = relationship()
+
+
+class Ocorrencia(Base):
+    """Estorno de apontamento ou refugo de peça: quem, quando, onde e por quê."""
+    __tablename__ = "ocorrencias_producao"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    empresa_id: Mapped[int] = mapped_column(ForeignKey("empresas.id"), index=True)
+    op_id: Mapped[int] = mapped_column(ForeignKey("ordens_producao.id"), index=True)
+    unidade_id: Mapped[int] = mapped_column(ForeignKey("unidades_peca.id"))
+    tipo: Mapped[str] = mapped_column(String(10))  # ESTORNO ou REFUGO
+    centro_codigo: Mapped[str] = mapped_column(String(20))
+    motivo: Mapped[str] = mapped_column(String(300))
+    custo_material: Mapped[float] = mapped_column(Float, default=0.0)
+    nova_unidade_id: Mapped[int | None] = mapped_column(ForeignKey("unidades_peca.id"))
+    usuario_id: Mapped[int | None] = mapped_column(ForeignKey("usuarios.id"))
+    usuario_nome: Mapped[str | None] = mapped_column(String(120))
+    criado_em: Mapped[datetime] = mapped_column(DateTime, default=agora, index=True)
+
+    op: Mapped[OrdemProducao] = relationship()
+    unidade: Mapped[UnidadePeca] = relationship(foreign_keys=[unidade_id])
+    nova_unidade: Mapped[UnidadePeca | None] = relationship(foreign_keys=[nova_unidade_id])

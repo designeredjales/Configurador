@@ -10,13 +10,14 @@ Projeto (Promob) → Engenharia (BOM + consumo + gate) → Ordem de Produção �
 
 | Módulo | Entrega |
 |---|---|
-| **Acesso e segurança** | Cadastro da empresa com o primeiro administrador, login por e-mail e senha, perfis com permissão checada no servidor, gestão da equipe. A empresa (tenant) vem sempre do login |
+| **Acesso e segurança** | Cadastro da empresa com o primeiro administrador, login por e-mail e senha, **configurador de funções por login** (o perfil é o modelo; o administrador libera ou retira cada função), permissão checada no servidor a cada requisição. A empresa (tenant) vem sempre do login |
 | **Cadastros** | Clientes, materiais (chapa, fita, ferragem, acessório) e centros de trabalho, isolados por empresa |
 | **Entrada pelo Promob (XML)** | O projeto inteiro nasce do XML do Promob: cliente, ambientes, módulos, conjuntos (gavetas), peças com medida acabada, chapa, fita (metros), ferragens e o roteiro produtivo de cada peça. Materiais novos entram no cadastro automaticamente com o preço de tabela |
 | **Consumo** | Chapas em m² e em nº de chapas (com % de perda), fita de borda em metros por lado, ferragens, custo de material |
 | **Gate de liberação** | O projeto só vai para a fábrica sem pendências: material sem cadastro, medida inválida, projeto vazio. Depois de liberado, a engenharia fica travada |
 | **PCP** | Geração de OP com uma etiqueta (código de barras) por peça física e roteiro pelas operações do Promob: CORTE → BORDA (se a peça tem borda) → USINAGEM (se tem FURAR/RASGO) → EMBALAGEM |
 | **Apontamento** | Baixa por leitor de código de barras, registrada em nome do usuário logado: bloqueia etapa fora de ordem, centro fora do roteiro e baixa duplicada. Fecha a OP e o projeto sozinho |
+| **Controle de produção** | Consulta de peças (onde cada peça está parada, quem deu a última baixa), estorno da última baixa com motivo, refugo com etiqueta de reposição, baixa do material perdido e custo no DRE da obra; baixas por operador e setor; histórico de ocorrências |
 | **Painel** | OPs abertas, em produção e atrasadas, fila de peças por centro, baixas do dia, progresso por OP |
 | **Chão de fábrica** | Plano de corte guilhotinado por material (serra, refilo, veio) com desenho de cada chapa; etiquetas 100 × 50 mm com código de barras para imprimir no navegador ou em ZPL (Zebra); apontamento pela câmera do celular |
 | **Estoque** | Saldo por movimentação, reserva automática na liberação do projeto, baixa automática na conclusão, inventário com ajuste pela diferença, custo médio ponderado |
@@ -39,24 +40,28 @@ uvicorn app.main:app --reload
 
 Abra `http://localhost:8000` e cadastre sua empresa, ou entre na demonstração com `admin@demo.com` / `demo12345` (operador: `operador@demo.com` / `demo12345`). A API documentada fica em `http://localhost:8000/docs`.
 
-## Acesso e perfis
+## Acesso, perfis e funções
 
-| Perfil | Pode |
-|---|---|
-| **Administrador** | Tudo, inclusive criar, desativar e trocar o perfil dos usuários |
-| **Gestor** | Engenharia, PCP, compras, estoque, apontamento e cadastros |
-| **Engenharia** | Importar o XML, criar e liberar projetos, cadastrar materiais e clientes |
-| **PCP** | Gerar e cancelar OPs, cadastrar centros de trabalho, apontar |
-| **Compras** | Fornecedores, pedidos, recebimento, inventário e cadastro de materiais |
-| **Financeiro** | Contrato, contas a pagar e receber, fluxo de caixa e DRE (valores financeiros só para Administrador, Gestor e Financeiro) |
-| **Montagem** | Agenda de montagem, checklist de entrega e assistência técnica (Gestor e PCP também) |
-| **Operador** | Apontar (dar baixa) e consultar OPs e painel |
+Cada tela e cada ação do sistema é uma **função**. O perfil define o modelo inicial; na aba **Usuários → Funções**, o administrador marca exatamente o que cada login opera. Exemplos: o operador líder do corte que também estorna baixas; o PCP que não registra refugo; o financeiro que concilia o banco mas não emite NF-e. A mudança vale na próxima ação da pessoa, sem novo login; "Voltar ao modelo do perfil" desfaz a personalização e trocar o perfil reaplica o modelo novo.
+
+| Módulo | Função | Modelo por perfil |
+|---|---|---|
+| Gestão | Indicadores do dono | Administrador, Gestor |
+| Engenharia | Projetos e engenharia · Cadastro de materiais | Engenharia (+ Compras: materiais) |
+| Comercial | Cadastro de clientes | Engenharia, Financeiro |
+| Produção | Ordens de produção · Apontamento · Estornar apontamento · Refugo e reposição | PCP (todas) · Operador (só apontamento) |
+| Obra | Montagem · Assistência técnica | Montagem, PCP |
+| Suprimentos | Estoque e inventário · Compras | Compras |
+| Financeiro | Financeiro · NF-e · Conciliação bancária | Financeiro |
+| Administração | Usuários e configurações | só Administrador |
+
+O **Administrador** opera tudo, sempre (a empresa nunca fica sem quem administre); o **Gestor** tem tudo menos usuários. Consultas (painel, OPs, consulta de peças) ficam abertas a todos os logins da empresa. Catálogo e modelos: `GET /api/funcoes`; personalizar: `PATCH /api/usuarios/{id}` com `{"funcoes": [...]}` (`null` volta ao modelo).
 
 Todos os perfis consultam os dados da própria empresa. Detalhes de segurança:
 
 - Senhas guardadas só como hash `scrypt` com sal; mínimo de 8 caracteres.
 - Sessão por token JWT (HS256) válido por 12 horas (`ERP_SESSAO_HORAS`). **Defina `ERP_SECRET` em produção**: sem ele, o servidor gera um segredo temporário e todos precisam entrar de novo a cada reinício.
-- O perfil e a situação do usuário são lidos do banco a cada requisição: desativar alguém corta o acesso na hora, mesmo com token emitido.
+- O perfil, as funções e a situação do usuário são lidos do banco a cada requisição: desativar alguém corta o acesso na hora, mesmo com token emitido.
 - Login com erro não revela se o e-mail existe; a empresa nunca fica sem um administrador ativo.
 - **Recuperação de senha** por e-mail: link de uso único, válido por 1 hora, guardado só como hash; a resposta não revela se o e-mail existe e há no máximo 3 pedidos por hora por endereço.
 - **Trocar a senha** (no menu "Senha"), redefini-la ou o administrador mudar senha ou perfil derruba as outras sessões do usuário na hora (versão de sessão dentro do token).
@@ -113,6 +118,15 @@ O exemplo anonimizado fica em `exemplos/promob_cozinha.xml`. Os testes conferem 
 - **Plano de corte** (`GET /api/ops/{id}/plano-corte`): agrupa as peças da OP por material e encaixa com corte guilhotina (melhor ajuste por área). Usa a medida de chapa do cadastro do material; sem ela, a medida padrão da empresa (2750 × 1850 mm). Serra (4 mm) e refilo (10 mm) também são da empresa. Peça com veio não gira. Num lote de 150 peças o aproveitamento fica em 86 a 87%, a 1 ou 2 chapas do mínimo teórico. Para chegar a 90% ou mais, integre a otimizadora da fábrica: o plano já sai por etiqueta.
 - **Etiquetas**: `GET /api/ops/{id}/etiquetas.html` (100 × 50 mm, Code128, para impressora térmica ou folha de etiquetas) e `GET /api/ops/{id}/etiquetas.zpl` (Zebra, 203 dpi).
 - **Câmera**: no Chrome do Android e no Safari recente, o apontamento ganha o botão "Ler pela câmera do celular" (API `BarcodeDetector`).
+
+## Controle de produção
+
+Inspirado nas consultas de controle de produção dos ERPs industriais, sem a complexidade deles: três ações e três consultas.
+
+- **Consulta de peças** (`GET /api/producao/pecas`): filtra por OP, projeto, setor onde a peça está parada, material, situação (aguardando, em processo, concluída, refugada) e busca livre por etiqueta, peça ou módulo. Mostra a próxima etapa e a última baixa (setor, operador, horário).
+- **Estorno** (`POST /api/apontamentos/estorno`, função *Estornar apontamento*): desfaz só a **última** baixa da peça, com motivo obrigatório. Sem baixas, a OP volta para ABERTA. OP concluída não estorna: o material já saiu do estoque e o caso vai para a Assistência.
+- **Refugo e reposição** (`POST /api/apontamentos/refugo`, função *Refugo e reposição*): a peça vira REFUGADA e sai da contagem da OP; nasce uma peça de reposição com nova etiqueta e o mesmo roteiro desde o corte; o material perdido sai do estoque (fração de chapa ou m²) e o custo entra no **DRE da obra** e nos indicadores de qualidade. A etiqueta antiga é recusada no apontamento. `?apenas_reposicoes=true` nas etiquetas e no plano de corte imprime e corta só as reposições.
+- **Baixas por operador e setor** (`GET /api/producao/baixas?de=&ate=`) e **ocorrências** (`GET /api/producao/ocorrencias`): quem produziu o quê, e cada estorno e refugo com motivo, custo e responsável.
 
 ## Compras e estoque
 
@@ -197,12 +211,14 @@ erp/
   app/
     models.py          # modelo de dados (multiempresa)
     security.py        # hash de senha e tokens de sessão
-    deps.py            # usuário logado, empresa e permissões por perfil
+    deps.py            # usuário logado, empresa e checagem de funções
+    funcoes.py         # catálogo de funções e modelo por perfil
     services/
       promob_xml.py    # leitor do XML do Promob
       importacao.py    # XML/CSV → árvore do projeto, cadastro automático de materiais
       engenharia.py    # consumo, pendências, liberação
       pcp.py           # OP, roteiro, apontamento, filas
+      producao.py      # estorno, refugo/reposição, consulta de peças e baixas
       estoque.py       # reservas, MRP, recebimento, custo médio, inventário
       corte.py         # otimizador de plano de corte
       financeiro.py    # contrato, contas, DRE por obra, fluxo de caixa
@@ -227,6 +243,6 @@ erp/
 2. **Lados da fita e furação**: ler o XML de máquina do Promob (ou o relatório com bordas) para etiquetas com C1/C2/L1/L2 e programas CNC.
 3. **Integração com a otimizadora** (Corte Certo, Optiplanning) e programas CNC por peça.
 4. **Compras 2.0**: cotação entre fornecedores, envio do pedido por e-mail/WhatsApp, lotes e sobras de chapa reaproveitáveis.
-5. **Pós-obra 2.0**: fotos da obra no checklist, assinatura do cliente na tela e peça de reposição gerando OP.
+5. **Pós-obra 2.0**: fotos da obra no checklist, assinatura do cliente na tela e reposição de peça com defeito na obra gerando OP.
 6. **Fiscal 2.0**: cancelamento e carta de correção da NF-e, NFS-e da montagem, uma linha por ambiente na nota.
 7. **Operação**: backup automático para nuvem, monitoramento de erros (Sentry) e domínio com e-mail transacional.

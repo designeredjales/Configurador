@@ -8,7 +8,9 @@ from sqlalchemy.orm import Session
 from ..db import get_db
 from ..deps import ADMIN, usuario_atual
 from ..models import Empresa, Perfil, RedefinicaoSenha, Usuario
+from ..funcoes import CATALOGO, PADRAO_PERFIL
 from ..schemas import (
+    CatalogoFuncoes,
     EsqueciIn,
     LoginIn,
     RedefinirIn,
@@ -138,6 +140,24 @@ def eu(usuario: Usuario = Depends(usuario_atual)):
 
 # --- Usuários da empresa (somente administrador) --------------------------------
 
+def _validar_funcoes(funcoes: list[str] | None) -> list[str] | None:
+    if funcoes is None:
+        return None
+    desconhecidas = sorted(set(funcoes) - set(CATALOGO))
+    if desconhecidas:
+        raise HTTPException(422, f"Função desconhecida: {', '.join(desconhecidas)}")
+    return sorted(set(funcoes))
+
+
+@router.get("/funcoes", response_model=CatalogoFuncoes)
+def catalogo(_: Usuario = Depends(usuario_atual)):
+    """Catálogo de funções e o padrão de cada perfil (para o configurador)."""
+    return {
+        "funcoes": [{"codigo": c, "modulo": m, "nome": n, "descricao": d} for c, (m, n, d) in CATALOGO.items()],
+        "padrao_por_perfil": {p.value: sorted(f) for p, f in PADRAO_PERFIL.items()},
+    }
+
+
 @router.get("/usuarios", response_model=list[UsuarioOut])
 def listar(admin: Usuario = Depends(ADMIN), db: Session = Depends(get_db)):
     return db.scalars(select(Usuario).where(Usuario.empresa_id == admin.empresa_id).order_by(Usuario.nome))
@@ -148,7 +168,8 @@ def criar(dados: UsuarioIn, admin: Usuario = Depends(ADMIN), db: Session = Depen
     email = _email(dados.email)
     _email_livre(db, email)
     usuario = Usuario(empresa_id=admin.empresa_id, nome=dados.nome.strip(), email=email,
-                      senha_hash=gerar_hash(dados.senha), perfil=dados.perfil)
+                      senha_hash=gerar_hash(dados.senha), perfil=dados.perfil,
+                      funcoes=_validar_funcoes(dados.funcoes))
     db.add(usuario)
     db.commit()
     return usuario
@@ -172,8 +193,13 @@ def atualizar(usuario_id: int, dados: UsuarioAtualizar, admin: Usuario = Depends
     if dados.perfil is not None and dados.perfil != usuario.perfil:
         usuario.perfil = dados.perfil
         usuario.versao_sessao += 1  # perfil novo exige login novo: nenhum token com o perfil antigo circula
+        if "funcoes" not in dados.model_fields_set:
+            usuario.funcoes = None  # perfil novo = modelo novo de funções
     if dados.ativo is not None:
         usuario.ativo = dados.ativo
+    if "funcoes" in dados.model_fields_set:
+        # Vale na próxima requisição: as funções são conferidas no banco a cada chamada
+        usuario.funcoes = _validar_funcoes(dados.funcoes)
     if dados.senha is not None:
         usuario.senha_hash = gerar_hash(dados.senha)
         usuario.versao_sessao += 1

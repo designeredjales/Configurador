@@ -71,6 +71,17 @@ td input.num { width: 90px; text-align: right; }
 .tag.EM_ANDAMENTO { background: var(--warn); color: #fff; }
 .tag.AUTORIZADA { background: var(--ok); color: #fff; } .tag.ERRO { background: var(--err); color: #fff; } .tag.PROCESSANDO { background: var(--warn); color: #fff; }
 .tag.ENTREGUE, .tag.RESOLVIDO { background: var(--ok); color: #fff; }
+.tag.AGUARDANDO { background: var(--line); } .tag.EM_PROCESSO { background: var(--warn); color: #fff; }
+.tag.REFUGADA, .tag.REFUGO { background: var(--err); color: #fff; } .tag.ESTORNO { background: var(--warn); color: #fff; } .tag.REPOSICAO { background: var(--brand); color: var(--brand-ink); }
+.chips { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 10px; }
+.chips button { font: inherit; padding: 5px 12px; border-radius: 99px; border: 1px solid var(--line); background: var(--bg); color: var(--ink); cursor: pointer; }
+.chips button.ativo { border-color: var(--brand); background: var(--brand); color: var(--brand-ink); }
+.funcoes { display: grid; gap: 14px; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); margin: 6px 0 12px; }
+.funcoes fieldset { border: 1px solid var(--line); border-radius: 8px; padding: 8px 12px; margin: 0; }
+.funcoes legend { font-weight: 600; font-size: 13px; padding: 0 4px; }
+.funcoes label { display: flex; gap: 8px; align-items: flex-start; padding: 5px 0; cursor: pointer; }
+.funcoes label input { margin-top: 3px; width: 16px; height: 16px; accent-color: var(--brand); }
+.funcoes label small { display: block; color: var(--muted); font-size: 12px; }
 .check { display: grid; gap: 6px; } .check label { display: flex; gap: 10px; align-items: center; padding: 8px 10px; border: 1px solid var(--line); border-radius: 8px; }
 #ind-kpis { grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); }
 @media (max-width: 640px) {
@@ -157,6 +168,7 @@ td input.num { width: 90px; text-align: right; }
     <button data-aba="projetos">Projetos</button>
     <button data-aba="ops">Ordens de Produção</button>
     <button data-aba="apontamento">Apontamento</button>
+    <button data-aba="producao">Controle de Produção</button>
     <button data-aba="estoque">Estoque</button>
     <button data-aba="compras">Compras</button>
     <button data-aba="montagem">Montagem</button>
@@ -228,6 +240,40 @@ td input.num { width: 90px; text-align: right; }
       <video id="camera" playsinline muted hidden></video>
       <div id="ap-msg"></div>
     </div>
+  </section>
+
+  <section id="producao">
+    <div class="card"><h2>Consulta de peças</h2>
+      <p class="dica">Onde está cada peça: em qual setor ela está parada, quem deu a última baixa e quando.</p>
+      <div class="linha">
+        <input id="pr-busca" placeholder="Etiqueta, peça ou módulo" size="22" aria-label="Buscar peça">
+        <select id="pr-op" aria-label="Ordem de produção"></select>
+        <select id="pr-centro" aria-label="Parada no setor"></select>
+        <button class="btn" onclick="consultarPecas()">Consultar</button>
+      </div>
+      <div class="chips" id="pr-chips"></div>
+      <div class="tabela" id="pr-pecas"></div>
+    </div>
+    <div class="card" id="pr-ocorrencia" hidden><h2>Estorno e refugo</h2>
+      <p class="dica"><b>Estornar</b> desfaz a última baixa (bipou no setor errado). <b>Refugar</b> registra a perda da peça, baixa o material perdido do estoque e gera uma etiqueta de reposição com o mesmo roteiro. Motivo é obrigatório nos dois casos.</p>
+      <div class="linha">
+        <input id="oc-cb" placeholder="Etiqueta" size="16" aria-label="Etiqueta">
+        <select id="oc-centro" aria-label="Setor"></select>
+        <input id="oc-motivo" placeholder="Motivo (ex.: lascou na coladeira)" size="32" aria-label="Motivo">
+        <button class="btn sec" id="btn-estornar" onclick="registrarOcorrencia('estorno')">Estornar baixa</button>
+        <button class="btn" id="btn-refugar" onclick="registrarOcorrencia('refugo')">Refugar e repor</button>
+      </div>
+      <div id="oc-msg"></div>
+    </div>
+    <div class="card"><h2>Baixas por operador e setor</h2>
+      <div class="linha">
+        <input id="bx-de" type="date" aria-label="De"> até <input id="bx-ate" type="date" aria-label="Até">
+        <button class="btn sec" onclick="carregarBaixas()">Atualizar</button>
+      </div>
+      <div class="grid" id="bx-resumo"></div>
+      <div class="tabela" id="bx-lista"></div>
+    </div>
+    <div class="card"><h2>Ocorrências (estornos e refugos)</h2><div class="tabela" id="oc-lista"></div></div>
   </section>
 
   <section id="estoque">
@@ -364,7 +410,11 @@ td input.num { width: 90px; text-align: right; }
       </div>
       <div id="u-msg"></div>
     </div>
-    <div class="card"><h2>Equipe</h2><div class="tabela" id="lista-usuarios"></div></div>
+    <div class="card"><h2>Equipe</h2>
+      <p class="dica">O perfil é o ponto de partida. Em <b>Funções</b> você libera ou retira exatamente o que cada login opera: um operador líder que também estorna baixas, um PCP que não vê o financeiro. Vale na hora, sem novo login.</p>
+      <div class="tabela" id="lista-usuarios"></div>
+    </div>
+    <div class="card" id="cfg-funcoes" hidden></div>
     <div class="card"><h2>Configurações da empresa</h2>
       <div class="cfg" id="cfg-empresa"></div>
       <div class="linha" style="margin-top:10px"><button class="btn" onclick="salvarEmpresa()">Salvar configurações</button></div>
@@ -433,7 +483,7 @@ function tabela(colunas, linhas) {
 const carregadores = {painel: carregarPainel, projetos: carregarProjetos, ops: carregarOps, usuarios: carregarUsuarios,
                       estoque: carregarEstoque, compras: carregarCompras, financeiro: carregarFinanceiro,
                       montagem: carregarMontagem, assistencia: carregarAssistencia, indicadores: carregarIndicadores,
-                      apontamento: carregarApontamento, materiais: carregarMateriais};
+                      apontamento: carregarApontamento, materiais: carregarMateriais, producao: carregarProducao};
 function abrir(aba) {
   document.querySelectorAll("section").forEach((s) => s.classList.toggle("ativo", s.id === aba));
   document.querySelectorAll("#abas button").forEach((b) => b.classList.toggle("ativo", b.dataset.aba === aba));
@@ -541,6 +591,7 @@ async function mostrarComercial(p) {
       ${linha(`(−) Impostos sobre a venda (${d.imposto_pct}%)`, -d.impostos)}
       ${linha("Receita líquida", d.receita_liquida, "total")}
       ${linha(`(−) Material ${d.material_base === "REALIZADO" ? "consumido (custo médio)" : "previsto pela engenharia"}`, -d.material)}
+      ${d.material_refugo ? linha("(−) Refugo de produção (material perdido)", -d.material_refugo) : ""}
       ${diretos}
       ${linha(`Margem de contribuição · ${d.margem_pct}%`, d.margem_contribuicao, "total")}
     </tbody></table></div>
@@ -636,9 +687,10 @@ async function verOp(id) {
       <button class="btn" onclick="imprimirEtiquetas(${op.id})">Imprimir etiquetas</button>
       <button class="btn sec" onclick="baixarZpl(${op.id}, ${op.numero})">Baixar ZPL (Zebra)</button>
       <button class="btn sec" onclick="verPlanoCorte(${op.id})">Plano de corte</button>
+      ${op.unidades.some((u) => u.reposicao && u.status === "ATIVA") ? `<button class="btn sec" onclick="imprimirEtiquetas(${op.id}, true)">Etiquetas só das reposições</button>` : ""}
     </div>
     <div id="op-extra"></div>
-    ${tabela([["Etiqueta", (u) => `<code>${u.codigo_barras}</code>`], ["Ambiente", (u) => esc(u.ambiente)],
+    ${tabela([["Etiqueta", (u) => `<code>${u.codigo_barras}</code>${u.status === "REFUGADA" ? ` <span class="tag REFUGADA">Refugada</span>` : u.reposicao ? ` <span class="tag REPOSICAO">Reposição</span>` : ""}`], ["Ambiente", (u) => esc(u.ambiente)],
       ["Peça", (u) => `${esc(u.modulo)}/<b>${esc(u.peca_codigo)}</b> ${esc(u.peca_descricao)}`],
       ["Material", (u) => esc(u.material_codigo)], ["Medida", (u) => `${num(u.comprimento_mm, 1)} × ${num(u.largura_mm, 1)}`, 1],
       ["Roteiro", (u) => u.etapas.map((e) => `<span class="${e.concluida_em ? "feito" : "pend"}">${e.concluida_em ? "✔" : "○"} ${e.centro_codigo}</span>`).join(" › ")]],
@@ -651,8 +703,8 @@ async function arquivo(caminho) {
   return r.blob();
 }
 
-async function imprimirEtiquetas(id) {
-  try { const url = URL.createObjectURL(await arquivo(`/api/ops/${id}/etiquetas.html`)); window.open(url, "_blank"); }
+async function imprimirEtiquetas(id, reposicoes = false) {
+  try { const url = URL.createObjectURL(await arquivo(`/api/ops/${id}/etiquetas.html${reposicoes ? "?apenas_reposicoes=true" : ""}`)); window.open(url, "_blank"); }
   catch (e) { alert(e.message); }
 }
 
@@ -904,6 +956,7 @@ async function carregarIndicadores() {
     tile(pct(p.pontualidade_pct), "Entregas no prazo", `${p.entregas} entrega(s)`, p.pontualidade_pct != null && p.pontualidade_pct < 80),
     tile(dias(p.lead_time_venda_dias), "Do contrato à entrega", `fábrica: ${dias(p.lead_time_fabrica_dias)}`),
     tile(pct(q.taxa_retrabalho_pct), "Retrabalho por entrega", `${q.retrabalhos} retrabalho(s) · ${brl(q.custo_assistencia)}`, q.taxa_retrabalho_pct != null && q.taxa_retrabalho_pct > 10),
+    tile(String(q.refugos || 0), "Peças refugadas na fábrica", `material perdido: ${brl(q.custo_refugo || 0)}`, (q.refugos || 0) > 0),
     tile(brl(cx.vencido_receber), "A receber vencido", `a pagar vencido: ${brl(cx.vencido_pagar)}`, cx.vencido_receber > 0),
   ].join("");
   const maxV = Math.max(...c.por_mes.map((x) => x.valor), 1e-9);
@@ -1136,18 +1189,24 @@ async function salvarEmpresa() {
 }
 
 // --- Acesso -----------------------------------------------------------------
-const ABAS = {
-  ADMIN: ["indicadores", "painel", "projetos", "ops", "apontamento", "montagem", "assistencia", "estoque", "compras", "financeiro", "materiais", "usuarios"],
-  GESTOR: ["indicadores", "painel", "projetos", "ops", "apontamento", "montagem", "assistencia", "estoque", "compras", "financeiro", "materiais"],
-  MONTAGEM: ["montagem", "assistencia", "ops", "painel"],
-  FINANCEIRO: ["financeiro", "projetos", "painel"],
-  ENGENHARIA: ["painel", "projetos", "ops", "estoque", "materiais"],
-  PCP: ["painel", "projetos", "ops", "apontamento", "montagem", "assistencia", "estoque", "materiais"],
-  COMPRAS: ["compras", "estoque", "materiais", "painel"],
-  OPERADOR: ["apontamento", "ops", "painel"],
+// Cada aba aparece se o login opera ao menos uma das funções listadas (null = aberta a todos)
+const ABA_FUNCOES = {
+  indicadores: ["indicadores"], painel: null, projetos: ["projetos", "pcp", "financeiro", "fiscal"], ops: null,
+  apontamento: ["apontamento"], producao: ["pcp", "apontamento", "estorno", "refugo", "indicadores"],
+  estoque: ["estoque", "compras", "projetos", "pcp"], compras: ["compras"], montagem: ["montagem"], assistencia: ["assistencia"],
+  financeiro: ["financeiro", "fiscal", "conciliacao"], materiais: ["materiais", "projetos", "compras", "pcp"], usuarios: ["usuarios"],
 };
+const opera = (f) => !!sessao?.usuario.funcoes_efetivas?.includes(f);
+function abasDoLogin() {
+  return Object.keys(ABA_FUNCOES).filter((a) => !ABA_FUNCOES[a] || ABA_FUNCOES[a].some(opera));
+}
+function abaInicial(abas) {
+  if (abas.includes("indicadores")) return "indicadores";
+  if (opera("pcp") || opera("projetos")) return "painel";
+  return ["apontamento", "montagem", "assistencia", "financeiro", "compras"].find((a) => abas.includes(a)) || "painel";
+}
 const NOME_PERFIL = {ADMIN: "Administrador", GESTOR: "Gestor", ENGENHARIA: "Engenharia", PCP: "PCP", COMPRAS: "Compras", FINANCEIRO: "Financeiro", MONTAGEM: "Montagem", OPERADOR: "Operador"};
-const VE_FINANCEIRO = () => ["ADMIN", "GESTOR", "FINANCEIRO"].includes(sessao?.usuario.perfil);
+const VE_FINANCEIRO = () => opera("financeiro");
 
 function mostrarAcesso(msg) {
   sessao = null; $("app").hidden = true; $("tela-acesso").hidden = false;
@@ -1161,9 +1220,9 @@ function entrar(s) {
   $("empresa").textContent = s.empresa.nome;
   $("quem").innerHTML = `<b>${esc(s.usuario.nome)}</b> <span class="tag perfil">${NOME_PERFIL[s.usuario.perfil]}</span>`;
   $("ap-quem").textContent = `Baixas registradas em nome de ${s.usuario.nome}.`;
-  const abas = ABAS[s.usuario.perfil] || [];
+  const abas = abasDoLogin();
   document.querySelectorAll("#abas button").forEach((b) => b.hidden = !abas.includes(b.dataset.aba));
-  abrir(abas[0]);
+  abrir(abaInicial(abas));
 }
 
 async function enviarAcesso(rota, corpo) {
@@ -1214,9 +1273,12 @@ $("sair").onclick = () => { guardarToken(null); mostrarAcesso(); };
 async function carregarUsuarios() {
   carregarEmpresa().catch(() => {});
   const lista = await api("/api/usuarios");
+  equipe = lista;
   $("lista-usuarios").innerHTML = tabela([["Nome", (u) => `<span class="${u.ativo ? "" : "inativo"}">${esc(u.nome)}</span>`],
     ["E-mail", (u) => esc(u.email)],
     ["Perfil", (u) => `<select onchange="alterarUsuario(${u.id}, {perfil: this.value})">${Object.keys(NOME_PERFIL).map((p) => `<option value="${p}" ${p === u.perfil ? "selected" : ""}>${NOME_PERFIL[p]}</option>`).join("")}</select>`],
+    ["Funções", (u) => u.perfil === "ADMIN" ? `<span class="dica">Todas</span>`
+      : `<button class="btn sec" onclick="configurarFuncoes(${u.id})">${u.funcoes_efetivas.length} função(ões)${u.funcoes_personalizadas ? " · personalizado" : ""}</button>`],
     ["Último acesso", (u) => u.ultimo_acesso ? new Date(u.ultimo_acesso).toLocaleString("pt-BR") : "—"],
     ["Situação", (u) => u.id === sessao.usuario.id ? "Você" : `<button class="btn sec" onclick="alterarUsuario(${u.id}, {ativo: ${!u.ativo}})">${u.ativo ? "Desativar" : "Reativar"}</button>`]], lista);
 }
@@ -1235,6 +1297,106 @@ async function criarUsuario() {
     $("u-msg").innerHTML = `<div class="msg ok">Usuário criado. Passe o e-mail e a senha inicial para a pessoa entrar.</div>`;
     carregarUsuarios();
   } catch (e) { $("u-msg").innerHTML = `<div class="msg err">${esc(e.message.replace(/Value error, /g, ""))}</div>`; }
+}
+
+// --- Configurador de funções ----------------------------------------------
+let equipe = [], catalogoFuncoes = null;
+async function configurarFuncoes(id) {
+  catalogoFuncoes ||= await api("/api/funcoes");
+  const u = equipe.find((x) => x.id === id), padrao = catalogoFuncoes.padrao_por_perfil[u.perfil] || [];
+  const modulos = [...new Set(catalogoFuncoes.funcoes.map((f) => f.modulo))];
+  const card = $("cfg-funcoes"); card.hidden = false;
+  card.innerHTML = `<h2>Funções de ${esc(u.nome)} <span class="tag perfil">${NOME_PERFIL[u.perfil]}</span></h2>
+    <p class="dica">${u.funcoes_personalizadas ? "Personalizado: diferente do modelo do perfil." : "Seguindo o modelo do perfil."} Itens com ● fazem parte do modelo do perfil ${NOME_PERFIL[u.perfil]}.</p>
+    <div class="funcoes">${modulos.map((m) => `<fieldset><legend>${esc(m)}</legend>${catalogoFuncoes.funcoes.filter((f) => f.modulo === m).map((f) =>
+      `<label><input type="checkbox" value="${f.codigo}" ${u.funcoes_efetivas.includes(f.codigo) ? "checked" : ""}>
+        <span>${esc(f.nome)}${padrao.includes(f.codigo) ? " ●" : ""}<small>${esc(f.descricao)}</small></span></label>`).join("")}</fieldset>`).join("")}</div>
+    <div class="linha">
+      <button class="btn" onclick="salvarFuncoes(${u.id})">Salvar funções</button>
+      <button class="btn sec" onclick="salvarFuncoes(${u.id}, true)">Voltar ao modelo do perfil</button>
+      <button class="btn sec" onclick="$('cfg-funcoes').hidden = true">Fechar</button>
+    </div><div id="fn-msg"></div>`;
+  card.scrollIntoView({behavior: "smooth", block: "start"});
+}
+async function salvarFuncoes(id, padrao = false) {
+  const marcadas = [...document.querySelectorAll("#cfg-funcoes input:checked")].map((c) => c.value);
+  try {
+    await api(`/api/usuarios/${id}`, {method: "PATCH", json: {funcoes: padrao ? null : marcadas}});
+    await carregarUsuarios(); await configurarFuncoes(id);
+    $("fn-msg").innerHTML = `<div class="msg ok">Funções salvas. Valem a partir da próxima ação da pessoa.</div>`;
+  } catch (e) { $("fn-msg").innerHTML = `<div class="msg err">${esc(e.message)}</div>`; }
+}
+
+// --- Controle de produção --------------------------------------------------
+const SITUACOES = [["", "Todas"], ["AGUARDANDO", "Aguardando"], ["EM_PROCESSO", "Em processo"], ["CONCLUIDA", "Concluídas"], ["REFUGADA", "Refugadas"]];
+let situacaoPr = "", verTodasPr = false;
+const ROTULO_SITUACAO = {AGUARDANDO: "Aguardando", EM_PROCESSO: "Em processo", CONCLUIDA: "Concluída", REFUGADA: "Refugada"};
+async function carregarProducao() {
+  const [painel, ops] = await Promise.all([api("/api/painel"), api("/api/ops")]);
+  const centros = painel.centros.map((c) => `<option value="${c.centro_codigo}">${esc(c.centro_codigo)} · ${esc(c.centro_nome)}</option>`).join("");
+  $("pr-centro").innerHTML = `<option value="">Parada em qualquer setor</option>` + centros;
+  $("oc-centro").innerHTML = centros;
+  $("pr-op").innerHTML = `<option value="">Todas as OPs</option>` + ops.filter((o) => o.status !== "CANCELADA")
+    .map((o) => `<option value="${o.id}">OP #${o.numero} · ${esc(o.projeto_nome)}</option>`).join("");
+  $("pr-ocorrencia").hidden = !(opera("estorno") || opera("refugo"));
+  $("btn-estornar").hidden = !opera("estorno"); $("btn-refugar").hidden = !opera("refugo");
+  const hoje = new Date().toISOString().slice(0, 10);
+  if (!$("bx-de").value) $("bx-de").value = $("bx-ate").value = hoje;
+  await Promise.all([consultarPecas(), carregarBaixas(), carregarOcorrencias()]);
+}
+async function consultarPecas() {
+  const q = new URLSearchParams();
+  if ($("pr-busca").value.trim()) q.set("busca", $("pr-busca").value.trim());
+  if ($("pr-op").value) q.set("op_id", $("pr-op").value);
+  if ($("pr-centro").value) q.set("centro", $("pr-centro").value);
+  if (situacaoPr) q.set("situacao", situacaoPr);
+  const r = await api(`/api/producao/pecas?${q}`);
+  $("pr-chips").innerHTML = SITUACOES.map(([k, t]) => `<button class="${k === situacaoPr ? "ativo" : ""}" onclick="situacaoPr='${k}'; verTodasPr = false; consultarPecas()">${t} · ${k ? r.por_situacao[k] : r.total}</button>`).join("");
+  const acoes = opera("estorno") || opera("refugo");
+  $("pr-pecas").innerHTML = tabela([
+    ["Etiqueta", (p) => `<code>${p.codigo_barras}</code>${p.reposicao ? ` <span class="tag REPOSICAO">Reposição</span>` : ""}`],
+    ["OP", (p) => `<a onclick="verOp(${p.op_id})">#${p.op_numero}</a>`], ["Ambiente", (p) => esc(p.ambiente)],
+    ["Peça", (p) => `${esc(p.modulo)} <b>${esc(p.peca)}</b>`], ["Material", (p) => esc(p.material_codigo)], ["Medida", (p) => esc(p.medidas), 1],
+    ["Situação", (p) => `<span class="tag ${p.situacao}">${ROTULO_SITUACAO[p.situacao]}</span>`], ["Próximo setor", (p) => p.proxima_etapa ? `<b>${p.proxima_etapa}</b>` : "—"],
+    ["Última baixa", (p) => p.ultima_etapa ? `${p.ultima_etapa} · ${esc(p.ultimo_operador || "—")} · ${new Date(p.ultima_baixa_em).toLocaleString("pt-BR", {dateStyle: "short", timeStyle: "short"})}` : "—"],
+    ...(acoes ? [["", (p) => p.situacao === "REFUGADA" || p.op_status === "CONCLUIDA" ? "" : `<button class="btn sec" onclick="prepararOcorrencia('${p.codigo_barras}', '${p.ultima_etapa || p.proxima_etapa || ""}')">Ocorrência</button>`]] : []),
+  ], r.pecas.slice(0, verTodasPr ? undefined : 25)) + (!verTodasPr && r.pecas.length > 25
+    ? `<div class="linha" style="margin-top:8px"><button class="btn sec" onclick="verTodasPr = true; consultarPecas()">Mostrar todas (${r.pecas.length})</button></div>`
+    : r.pecas.length < (situacaoPr ? r.por_situacao[situacaoPr] : r.total) ? `<p class="dica">Mostrando as primeiras ${r.pecas.length}. Refine a busca.</p>` : "");
+}
+$("pr-busca").addEventListener("keydown", (ev) => { if (ev.key === "Enter") consultarPecas().catch((e) => alert(e.message)); });
+function prepararOcorrencia(cb, centro) {
+  $("oc-cb").value = cb; if (centro) $("oc-centro").value = centro;
+  $("oc-msg").innerHTML = ""; $("pr-ocorrencia").scrollIntoView({behavior: "smooth", block: "center"}); $("oc-motivo").focus();
+}
+async function registrarOcorrencia(tipo) {
+  try {
+    const o = await api(`/api/apontamentos/${tipo}`, {method: "POST", json: {codigo_barras: $("oc-cb").value.trim(),
+      centro_codigo: $("oc-centro").value, motivo: $("oc-motivo").value.trim()}});
+    $("oc-motivo").value = "";
+    $("oc-msg").innerHTML = tipo === "estorno"
+      ? `<div class="msg ok">Baixa em ${esc(o.centro_codigo)} estornada. A peça ${esc(o.peca)} pode ser bipada de novo.</div>`
+      : `<div class="msg ok">Peça ${esc(o.peca)} refugada (material perdido ${brl(o.custo_material)}). Etiqueta de reposição: <code>${o.nova_etiqueta}</code>
+         <button class="btn sec" onclick="imprimirEtiquetas(${o.op_id}, true)">Imprimir reposições da OP #${o.op_numero}</button></div>`;
+    await Promise.all([consultarPecas(), carregarBaixas(), carregarOcorrencias()]);
+  } catch (e) { $("oc-msg").innerHTML = `<div class="msg err">${esc(e.message.replace(/Value error, /g, ""))}</div>`; }
+}
+async function carregarBaixas() {
+  const h = await api(`/api/producao/baixas?de=${$("bx-de").value}&ate=${$("bx-ate").value}`);
+  const bloco = (titulo, mapa) => `<div class="card"><h2>${titulo}</h2>${Object.keys(mapa).length ? barrasH(Object.entries(mapa).sort((a, b) => b[1] - a[1]),
+    (x) => x[0], (x) => x[1], (v) => `${v} baixa(s)`) : `<p class="pend">Nenhuma baixa no período.</p>`}</div>`;
+  $("bx-resumo").innerHTML = bloco("Por operador", h.por_operador) + bloco("Por setor", h.por_centro);
+  $("bx-lista").innerHTML = !h.baixas.length ? "" : `<details><summary>Ver as baixas uma a uma (${h.total})</summary>` + tabela([["Quando", (b) => new Date(b.quando).toLocaleString("pt-BR", {dateStyle: "short", timeStyle: "short"})],
+    ["Setor", (b) => esc(b.centro_codigo)], ["Operador", (b) => esc(b.operador || "—")], ["Etiqueta", (b) => `<code>${b.codigo_barras}</code>`],
+    ["Peça", (b) => esc(b.peca)], ["OP", (b) => `#${b.op_numero}`]], h.baixas.slice(0, 100)) + "</details>";
+}
+async function carregarOcorrencias() {
+  const lista = await api("/api/producao/ocorrencias");
+  $("oc-lista").innerHTML = tabela([["Quando", (o) => new Date(o.criado_em).toLocaleString("pt-BR", {dateStyle: "short", timeStyle: "short"})],
+    ["Tipo", (o) => tag(o.tipo)], ["OP", (o) => `<a onclick="verOp(${o.op_id})">#${o.op_numero}</a> ${esc(o.projeto_codigo)}`],
+    ["Peça", (o) => `<code>${o.codigo_barras}</code> ${esc(o.peca)}`], ["Setor", (o) => esc(o.centro_codigo)], ["Motivo", (o) => esc(o.motivo)],
+    ["Material perdido", (o) => o.custo_material ? brl(o.custo_material) : "—", 1],
+    ["Reposição", (o) => o.nova_etiqueta ? `<code>${o.nova_etiqueta}</code>` : "—"], ["Por", (o) => esc(o.usuario || "—")]], lista);
 }
 
 // Link de redefinição: vale tanto abrindo a página nova quanto com o ERP já aberto

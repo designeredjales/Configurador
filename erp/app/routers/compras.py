@@ -3,7 +3,7 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from ..db import get_db
-from ..deps import COMPRAS, empresa_atual
+from ..deps import COMPRAS, ESTOQUE, empresa_atual
 from ..models import (
     Empresa,
     Fornecedor,
@@ -67,7 +67,7 @@ def movimentos(material_id: int | None = None, limite: int = 100,
 
 
 @router.post("/estoque/inventario", response_model=PosicaoEstoque)
-def inventario(dados: InventarioIn, usuario: Usuario = Depends(COMPRAS), db: Session = Depends(get_db)):
+def inventario(dados: InventarioIn, usuario: Usuario = Depends(ESTOQUE), db: Session = Depends(get_db)):
     material = db.get(Material, dados.material_id)
     if material is None or material.empresa_id != usuario.empresa_id:
         raise HTTPException(404, "Material não encontrado")

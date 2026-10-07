@@ -96,20 +96,23 @@ def dre_obra(db: Session, projeto: Projeto) -> dict:
         material = round(sum(q * custos.get(c, 0.0) for c, q in estoque.necessidade_projeto(db, projeto).items()), 2)
         material_base = "PREVISTO"
 
+    refugo = round(sum(-m.quantidade * m.custo_unitario for m in db.scalars(select(MovimentoEstoque).where(
+        MovimentoEstoque.projeto_id == projeto.id, MovimentoEstoque.origem == OrigemMovimento.REFUGO))), 2)
+
     lancs = list(db.scalars(select(Lancamento).where(Lancamento.projeto_id == projeto.id)))
     custos_diretos: dict[str, float] = defaultdict(float)
     for l in lancs:
         if l.tipo == TipoLancamento.PAGAR:
             custos_diretos[l.categoria] += l.valor_pago if l.pago_em else l.valor
     total_diretos = round(sum(custos_diretos.values()), 2)
-    margem = round(receita - impostos - material - total_diretos, 2)
+    margem = round(receita - impostos - material - refugo - total_diretos, 2)
     receber = [l for l in lancs if l.tipo == TipoLancamento.RECEBER]
     recebido = round(sum(l.valor_pago or 0 for l in receber if l.pago_em), 2)
     return {
         "projeto_id": projeto.id, "codigo": projeto.codigo, "status": projeto.status,
         "receita": round(receita, 2), "impostos": impostos, "imposto_pct": empresa.imposto_venda_pct,
         "receita_liquida": round(receita - impostos, 2),
-        "material": material, "material_base": material_base,
+        "material": material, "material_base": material_base, "material_refugo": refugo,
         "custos_diretos": {k: round(v, 2) for k, v in sorted(custos_diretos.items())},
         "total_custos_diretos": total_diretos,
         "margem_contribuicao": margem,

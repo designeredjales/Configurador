@@ -4,7 +4,8 @@ from jwt import InvalidTokenError
 from sqlalchemy.orm import Session
 
 from .db import get_db
-from .models import Empresa, Perfil, Usuario
+from .funcoes import CATALOGO, efetivas
+from .models import Empresa, Usuario
 from .security import ler_token
 
 bearer = HTTPBearer(auto_error=False)
@@ -35,23 +36,31 @@ def empresa_atual(usuario: Usuario = Depends(usuario_atual)) -> Empresa:
     return usuario.empresa
 
 
-def exigir(*perfis: Perfil):
-    permitidos = {Perfil.ADMIN, *perfis}
+def funcao(codigo: str):
+    """Exige que o usuário opere a função (catálogo em app/funcoes.py), conferida no banco a cada requisição."""
+    nome = CATALOGO[codigo][1]
 
     def checar(usuario: Usuario = Depends(usuario_atual)) -> Usuario:
-        if usuario.perfil not in permitidos:
-            raise HTTPException(403, f"Seu perfil ({usuario.perfil}) não tem permissão para esta ação.")
+        if codigo not in efetivas(usuario):
+            raise HTTPException(403, f"Você não opera a função \"{nome}\". Peça ao administrador para liberá-la.")
         return usuario
     return checar
 
 
-# Grupos de permissão usados nas rotas
-ENGENHARIA = exigir(Perfil.GESTOR, Perfil.ENGENHARIA)
-PCP = exigir(Perfil.GESTOR, Perfil.PCP)
-APONTAR = exigir(Perfil.GESTOR, Perfil.PCP, Perfil.OPERADOR)
-CADASTROS = exigir(Perfil.GESTOR, Perfil.ENGENHARIA, Perfil.COMPRAS)
-COMPRAS = exigir(Perfil.GESTOR, Perfil.COMPRAS)
-FINANCEIRO = exigir(Perfil.GESTOR, Perfil.FINANCEIRO)
-CADASTRO_CLIENTE = exigir(Perfil.GESTOR, Perfil.ENGENHARIA, Perfil.FINANCEIRO)
-POS_OBRA = exigir(Perfil.GESTOR, Perfil.MONTAGEM, Perfil.PCP)
-ADMIN = exigir()
+# Grupos usados nas rotas: cada um confere uma função
+INDICADORES = funcao("indicadores")
+ENGENHARIA = funcao("projetos")
+CADASTROS = funcao("materiais")
+CADASTRO_CLIENTE = funcao("clientes")
+PCP = funcao("pcp")
+APONTAR = funcao("apontamento")
+ESTORNO = funcao("estorno")
+REFUGO = funcao("refugo")
+MONTAGEM = funcao("montagem")
+ASSISTENCIA = funcao("assistencia")
+ESTOQUE = funcao("estoque")
+COMPRAS = funcao("compras")
+FINANCEIRO = funcao("financeiro")
+FISCAL = funcao("fiscal")
+CONCILIACAO = funcao("conciliacao")
+ADMIN = funcao("usuarios")

@@ -5,8 +5,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from ..db import get_db
-from ..deps import FINANCEIRO, exigir
-from ..models import Perfil
+from ..deps import CONCILIACAO, FINANCEIRO, FISCAL, INDICADORES
 from ..models import Fornecedor, Lancamento, MovimentoBancario, NotaFiscal, Projeto, TipoLancamento, Usuario
 from ..schemas import (
     BaixaIn,
@@ -128,7 +127,7 @@ def fluxo(meses: int = 6, usuario: Usuario = Depends(FINANCEIRO), db: Session = 
 
 
 @router.get("/indicadores")
-def painel_do_dono(dias: int = 90, usuario: Usuario = Depends(exigir(Perfil.GESTOR)),
+def painel_do_dono(dias: int = 90, usuario: Usuario = Depends(INDICADORES),
                    db: Session = Depends(get_db)):
     """Indicadores consolidados (administrador e gestor)."""
     return indicadores.calcular(db, usuario.empresa_id, max(7, min(dias, 730)))
@@ -154,7 +153,7 @@ def _mov(db: Session, empresa_id: int, mov_id: int) -> MovimentoBancario:
 
 
 @router.post("/conciliacao/importar")
-async def importar_extrato(arquivo: UploadFile = File(...), usuario: Usuario = Depends(FINANCEIRO),
+async def importar_extrato(arquivo: UploadFile = File(...), usuario: Usuario = Depends(CONCILIACAO),
                            db: Session = Depends(get_db)):
     try:
         resultado = conciliacao.importar(db, usuario.empresa_id, await arquivo.read(), usuario.id)
@@ -166,7 +165,7 @@ async def importar_extrato(arquivo: UploadFile = File(...), usuario: Usuario = D
 
 
 @router.get("/conciliacao", response_model=list[MovimentoBancarioOut])
-def movimentos_bancarios(pendentes: bool = False, usuario: Usuario = Depends(FINANCEIRO), db: Session = Depends(get_db)):
+def movimentos_bancarios(pendentes: bool = False, usuario: Usuario = Depends(CONCILIACAO), db: Session = Depends(get_db)):
     consulta = select(MovimentoBancario).where(MovimentoBancario.empresa_id == usuario.empresa_id)
     if pendentes:
         consulta = consulta.where(MovimentoBancario.lancamento_id.is_(None), MovimentoBancario.ignorado.is_(False))
@@ -174,7 +173,7 @@ def movimentos_bancarios(pendentes: bool = False, usuario: Usuario = Depends(FIN
 
 
 @router.post("/conciliacao/{mov_id}/conciliar", response_model=MovimentoBancarioOut)
-def conciliar(mov_id: int, dados: ConciliarIn, usuario: Usuario = Depends(FINANCEIRO), db: Session = Depends(get_db)):
+def conciliar(mov_id: int, dados: ConciliarIn, usuario: Usuario = Depends(CONCILIACAO), db: Session = Depends(get_db)):
     m = _mov(db, usuario.empresa_id, mov_id)
     lanc = _carregar(db, usuario.empresa_id, dados.lancamento_id)
     try:
@@ -186,7 +185,7 @@ def conciliar(mov_id: int, dados: ConciliarIn, usuario: Usuario = Depends(FINANC
 
 
 @router.post("/conciliacao/{mov_id}/lancar", response_model=MovimentoBancarioOut)
-def lancar(mov_id: int, dados: LancarMovimentoIn, usuario: Usuario = Depends(FINANCEIRO), db: Session = Depends(get_db)):
+def lancar(mov_id: int, dados: LancarMovimentoIn, usuario: Usuario = Depends(CONCILIACAO), db: Session = Depends(get_db)):
     """Movimento sem conta correspondente (tarifa, despesa sem lançamento): cria a conta já baixada."""
     m = _mov(db, usuario.empresa_id, mov_id)
     if m.lancamento_id or m.ignorado:
@@ -207,7 +206,7 @@ def lancar(mov_id: int, dados: LancarMovimentoIn, usuario: Usuario = Depends(FIN
 
 
 @router.post("/conciliacao/{mov_id}/ignorar", response_model=MovimentoBancarioOut)
-def ignorar(mov_id: int, usuario: Usuario = Depends(FINANCEIRO), db: Session = Depends(get_db)):
+def ignorar(mov_id: int, usuario: Usuario = Depends(CONCILIACAO), db: Session = Depends(get_db)):
     m = _mov(db, usuario.empresa_id, mov_id)
     if m.lancamento_id:
         raise HTTPException(409, "Movimento já conciliado.")
@@ -226,7 +225,7 @@ def _nota(db: Session, empresa_id: int, nota_id: int) -> NotaFiscal:
 
 
 @router.post("/projetos/{projeto_id}/nfe", response_model=NotaOut, status_code=201)
-def emitir_nfe(projeto_id: int, dados: EmitirNotaIn, usuario: Usuario = Depends(FINANCEIRO),
+def emitir_nfe(projeto_id: int, dados: EmitirNotaIn, usuario: Usuario = Depends(FISCAL),
                db: Session = Depends(get_db)):
     projeto = _projeto(db, usuario.empresa_id, projeto_id)
     try:
@@ -240,7 +239,7 @@ def emitir_nfe(projeto_id: int, dados: EmitirNotaIn, usuario: Usuario = Depends(
 
 
 @router.get("/notas", response_model=list[NotaOut])
-def notas(projeto_id: int | None = None, usuario: Usuario = Depends(FINANCEIRO), db: Session = Depends(get_db)):
+def notas(projeto_id: int | None = None, usuario: Usuario = Depends(FISCAL), db: Session = Depends(get_db)):
     consulta = select(NotaFiscal).where(NotaFiscal.empresa_id == usuario.empresa_id)
     if projeto_id:
         consulta = consulta.where(NotaFiscal.projeto_id == projeto_id)
@@ -248,7 +247,7 @@ def notas(projeto_id: int | None = None, usuario: Usuario = Depends(FINANCEIRO),
 
 
 @router.post("/notas/{nota_id}/consultar", response_model=NotaOut)
-def consultar_nfe(nota_id: int, usuario: Usuario = Depends(FINANCEIRO), db: Session = Depends(get_db)):
+def consultar_nfe(nota_id: int, usuario: Usuario = Depends(FISCAL), db: Session = Depends(get_db)):
     nota = _nota(db, usuario.empresa_id, nota_id)
     try:
         fiscal.consultar(usuario.empresa, nota)
