@@ -51,6 +51,16 @@ Teste a restauração uma vez por mês num banco à parte: backup que nunca foi 
 - **Logs:** cada requisição gera uma linha JSON (método, rota, status, tempo em ms) no log do contêiner: `docker compose logs -f erp`.
 - **Disponibilidade:** `GET /api/saude` responde só quando a aplicação e o banco estão de pé. Aponte para ela um monitor externo gratuito (UptimeRobot, Better Stack) para receber alerta se o ERP cair.
 
+## Integração com o Promob Prices
+
+O módulo Comercial puxa a tabela de preços ativa da conta Promob para conferir margens.
+
+- O **token da conta** é informado pelo administrador em **Comercial → Configurações do comercial**. Ele fica só no banco, nunca volta para a tela nem aparece na auditoria. Não coloque o token em `.env`, código ou chamados.
+- O servidor precisa de saída HTTPS para `prices-api.promob.com` e para o armazenamento de onde a Promob serve o `.zip` da tabela. Num VPS comum isso já é liberado; em rede corporativa com firewall, libere esses domínios.
+- Token recusado (401/403) aparece como mensagem na tela; gere um novo na conta Promob e grave de novo.
+
+Os renders enviados nas negociações ficam no volume `arquivos`. O backup do banco **não** inclui esse volume: inclua `arquivos` na sua cópia para a nuvem se quiser preservá-los.
+
 ## Opção B: plataforma gerenciada (Render, Railway, Fly.io)
 
 1. Crie um PostgreSQL gerenciado e anote a URL de conexão.
@@ -72,6 +82,7 @@ Teste a restauração uma vez por mês num banco à parte: backup que nunca foi 
 | `SMTP_HOST`, `SMTP_PORTA`, `SMTP_USUARIO`, `SMTP_SENHA`, `SMTP_REMETENTE` | não | E-mail de redefinição de senha |
 | `SENTRY_DSN` | não | Envia os erros para o Sentry |
 | `APP_VERSAO` | não | Versão exibida no painel (ex.: commit) |
+| `ERP_PASTA_ARQUIVOS` | já vem no compose (`/app/arquivos`) | Renders e imagens das propostas. Em plataforma gerenciada, use um disco persistente |
 | `ERP_PASTA_BACKUP` | já vem no compose | Pasta lida pelo painel para mostrar o último backup |
 | `BACKUP_HORA`, `BACKUP_DIAS`, `TZ` | não (03, 14, America/Sao_Paulo) | Agenda e retenção do backup |
 | `RCLONE_DESTINO`, `RCLONE_CONFIG_*` | não | Cópia do backup na nuvem |

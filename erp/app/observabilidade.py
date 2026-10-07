@@ -97,6 +97,21 @@ ACOES = {
     ("PATCH", "/api/separacoes/{classe_id}"): "Alterou separação de peças",
     ("POST", "/api/separacoes/reaplicar"): "Reaplicou regras de separação",
     ("PUT", "/api/pecas/{peca_id}/separacao"): "Marcou separação da peça",
+    ("PUT", "/api/comercial/config"): "Alterou a política comercial",
+    ("POST", "/api/comercial/prices/sincronizar"): "Sincronizou a tabela do Promob Prices",
+    ("POST", "/api/parceiros"): "Cadastrou parceiro",
+    ("PUT", "/api/parceiros/{parceiro_id}"): "Alterou parceiro (RT)",
+    ("POST", "/api/oportunidades"): "Criou oportunidade",
+    ("PATCH", "/api/oportunidades/{op_id}"): "Alterou oportunidade",
+    ("POST", "/api/oportunidades/{op_id}/perder"): "Marcou oportunidade como perdida",
+    ("POST", "/api/oportunidades/{op_id}/versoes"): "Enviou versão do projeto (XML)",
+    ("POST", "/api/versoes/{versao_id}/negociar"): "Negociou desconto e condição",
+    ("POST", "/api/versoes/{versao_id}/decidir"): "Decidiu aprovação de desconto",
+    ("POST", "/api/versoes/{versao_id}/proposta"): "Gerou proposta para o cliente",
+    ("POST", "/api/oportunidades/{op_id}/fechar"): "Fechou a venda",
+    ("POST", "/api/oportunidades/{op_id}/imagens"): "Enviou imagem da proposta",
+    ("DELETE", "/api/imagens/{imagem_id}"): "Apagou imagem da proposta",
+    ("POST", "/api/projetos/{projeto_id}/auditoria-venda/ciencia"): "Deu ciência da diferença vendido × produção",
 }
 
 

@@ -17,6 +17,8 @@ CATALOGO: dict[str, tuple[str, str, str]] = {
     "estorno": ("Produção", "Estornar apontamento", "Desfazer a última baixa de uma peça, com motivo"),
     "refugo": ("Produção", "Refugo e reposição", "Registrar peça perdida e gerar a peça de reposição"),
     "expedicao": ("Expedição", "Caixa master e expedição", "Embalar peças em caixas master, fechar, etiquetar e carregar"),
+    "comercial": ("Comercial", "Funil e negociação", "Oportunidades, versões do Promob, negociação, proposta e fechamento"),
+    "aprovar_venda": ("Comercial", "Aprovar descontos e auditoria", "Libera desconto acima do limite do vendedor, margem abaixo do mínimo e diferença vendido × produção"),
     "montagem": ("Obra", "Montagem", "Agendar montagem, conferir checklist, entregar a obra"),
     "assistencia": ("Obra", "Assistência técnica", "Abrir, agendar e resolver chamados de pós-obra"),
     "estoque": ("Suprimentos", "Estoque e inventário", "Ajustar saldo por contagem física"),
@@ -37,6 +39,7 @@ PADRAO_PERFIL: dict[Perfil, frozenset[str]] = {
     Perfil.COMPRAS: frozenset({"compras", "estoque", "materiais"}),
     Perfil.FINANCEIRO: frozenset({"financeiro", "fiscal", "conciliacao", "clientes"}),
     Perfil.MONTAGEM: frozenset({"montagem", "assistencia"}),
+    Perfil.VENDEDOR: frozenset({"comercial", "clientes"}),
     Perfil.OPERADOR: frozenset({"apontamento"}),
 }
 

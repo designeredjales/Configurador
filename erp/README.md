@@ -57,7 +57,7 @@ Cada tela e cada ação do sistema é uma **função**. O perfil define o modelo
 |---|---|---|
 | Gestão | Indicadores do dono | Administrador, Gestor |
 | Engenharia | Projetos e engenharia · Cadastro de materiais | Engenharia (+ Compras: materiais) |
-| Comercial | Cadastro de clientes | Engenharia, Financeiro |
+| Comercial | Cadastro de clientes · Funil e negociação · Aprovar descontos e auditoria | Engenharia, Financeiro (clientes) · Vendedor (funil e clientes) |
 | Produção | Ordens de produção (inclui lotes) · Apontamento · Estornar apontamento · Refugo e reposição | PCP (todas) · Operador (só apontamento) |
 | Expedição | Caixa master e expedição | PCP |
 | Obra | Montagem · Assistência técnica | Montagem, PCP |
@@ -187,6 +187,19 @@ O estoque é a soma das movimentações de cada material, na unidade do cadastro
 5. **Inventário** (`POST /api/estoque/inventario`): informa a quantidade contada e o ERP lança o ajuste pela diferença, com usuário e observação.
 
 Saldo negativo é permitido e aparece em vermelho: indica consumo sem entrada registrada, ou seja, recebimento que não foi lançado.
+
+## Comercial: funil, negociação e auditoria da venda
+
+O orçamento continua no Promob. O ERP recebe o resultado e conduz a negociação dentro da política definida pelo administrador.
+
+- **Funil (CRM):** oportunidades em colunas por etapa (configuráveis), com cliente, parceiro, vendedor, valor, próxima ação e data. O vendedor (perfil **VENDEDOR**) vê só as suas e as sem dono; quem tem a função *Aprovar descontos e auditoria* vê todas.
+- **Versões da proposta:** cada XML do Promob enviado vira uma versão (ambientes, módulos, m² de chapa, tabela, pedido à fábrica, frete e montagem). Renders (JPG/PNG/WebP) e os links do 3D/VR (`galeria3d.promob.com`) e do 2020 Manager ficam na oportunidade.
+- **Negociação com alçadas:** desconto e condição de pagamento (à vista, entrada + parcelas, com ajuste de preço). O ERP calcula preço final, impostos, RT do parceiro, comissão do vendedor, custo e margem. Acima do limite do vendedor ou abaixo da margem mínima vai para o gerente; acima do limite do gerente, para o administrador. A aprovação pendente bloqueia a proposta.
+- **Proposta ao cliente:** link público (`/p/{token}`) com renders, ambientes, valor e condição, sem custos nem margens, com validade e aceite eletrônico (nome, data e IP).
+- **Fechar a venda exige o XML:** o fechamento cria o projeto a partir do XML da versão aceita, registra o contrato e as parcelas e lança RT e comissão a pagar junto com cada parcela.
+- **Auditoria vendido × produção:** quando a engenharia importa o XML executivo, o ERP compara com o que foi vendido: valor negociado, módulos (incluindo repetidos), peças, m² de chapa e pedido à fábrica. Divergência acima do limite da política trava a liberação até alguém com a função de aprovação dar ciência.
+- **Promob Prices:** com o token da conta (gravado só pela tela, nunca exibido), o ERP baixa a tabela ativa (`prices-api.promob.com`) e confere os itens do orçamento.
+- **Configurações do comercial** (administrador): limites de desconto, margem mínima, comissão, limite de divergência, validade da proposta, etapas do funil, condições de pagamento, parceiros com % de RT e o token do Prices.
 
 ## Comercial e financeiro
 

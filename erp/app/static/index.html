@@ -32,7 +32,8 @@ section { display: none; } section.ativo { display: block; }
 table { width: 100%; border-collapse: collapse; } th, td { text-align: left; padding: 7px 8px; border-bottom: 1px solid var(--line); }
 th { color: var(--muted); font-weight: 600; font-size: 12px; text-transform: uppercase; }
 td.n, th.n { text-align: right; font-variant-numeric: tabular-nums; }
-.tabela { overflow-x: auto; }
+.tabela { overflow-x: auto; max-width: 100%; }
+.card, .funil { min-width: 0; max-width: 100%; }
 input, select { font: inherit; padding: 7px 9px; border: 1px solid var(--line); border-radius: 6px; background: var(--bg); color: var(--ink); }
 button.btn { font: inherit; padding: 7px 14px; border-radius: 6px; border: 1px solid var(--brand); background: var(--brand); color: var(--brand-ink); cursor: pointer; }
 button.sec { background: none; color: var(--brand); }
@@ -86,6 +87,15 @@ td input.num { width: 90px; text-align: right; }
 .lista-check label { display: flex; gap: 10px; align-items: center; padding: 6px 10px; border: 1px solid var(--line); border-radius: 8px; cursor: pointer; }
 .lista-check label input { width: 18px; height: 18px; accent-color: var(--brand); }
 .lista-check small { color: var(--muted); margin-left: auto; }
+.funil { display: grid; grid-auto-flow: column; grid-auto-columns: minmax(220px, 1fr); gap: 10px; overflow-x: auto; padding-bottom: 6px; }
+.funil .col { background: var(--bg); border-radius: 10px; padding: 8px; min-height: 120px; }
+.funil .col h3 { font-size: 13px; margin: 2px 4px 8px; color: var(--muted); display: flex; justify-content: space-between; }
+.funil .op { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; margin-bottom: 8px; cursor: pointer; font-size: 13px; }
+.funil .op:hover { border-color: var(--brand); } .funil .op b { display: block; font-size: 14px; } .funil .op .v { font-weight: 700; margin-top: 4px; }
+.tag.LIVRE { background: var(--line); } .tag.PENDENTE { background: var(--warn); color: #fff; } .tag.APROVADA, .tag.GANHA { background: var(--ok); color: #fff; } .tag.RECUSADA, .tag.PERDIDA { background: var(--err); color: #fff; }
+.calc td:first-child { color: var(--muted); } .calc tr.total td { font-weight: 700; border-top: 2px solid var(--line); }
+.renders { display: grid; gap: 10px; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); }
+.renders figure { margin: 0; } .renders img { width: 100%; border-radius: 8px; display: block; } .renders figcaption { font-size: 12px; color: var(--muted); }
 .chips { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 10px; }
 .chips button { font: inherit; padding: 5px 12px; border-radius: 99px; border: 1px solid var(--line); background: var(--bg); color: var(--ink); cursor: pointer; }
 .chips button.ativo { border-color: var(--brand); background: var(--brand); color: var(--brand-ink); }
@@ -178,6 +188,7 @@ td input.num { width: 90px; text-align: right; }
   <nav id="abas">
     <button data-aba="indicadores">Indicadores</button>
     <button data-aba="painel">Painel PCP</button>
+    <button data-aba="comercial">Comercial</button>
     <button data-aba="projetos">Projetos</button>
     <button data-aba="ops">Ordens de Produção</button>
     <button data-aba="apontamento">Apontamento</button>
@@ -222,6 +233,47 @@ td input.num { width: 90px; text-align: right; }
     <div class="grid" id="kpis"></div>
     <div class="card"><h2>Fila por centro de trabalho</h2><div class="tabela" id="filas"></div></div>
     <div class="card"><h2>OPs em andamento</h2><div class="tabela" id="painel-ops"></div></div>
+  </section>
+
+  <section id="comercial">
+    <div class="grid" id="co-kpis"></div>
+    <div class="card"><h2>Funil de vendas</h2>
+      <p class="dica">O orçamento nasce no Promob. Aqui a negociação acontece dentro da política comercial: cada XML enviado vira uma versão com a margem real, a proposta vai para o cliente por link (com renders e 3D) e o fechamento cria o projeto com o vendido congelado para a auditoria.</p>
+      <div class="linha">
+        <input id="no-titulo" placeholder="Título (ex.: Cozinha e área gourmet)" size="26" aria-label="Título">
+        <input id="no-cliente" placeholder="Cliente" size="18" aria-label="Cliente">
+        <input id="no-tel" placeholder="Telefone" size="13" aria-label="Telefone">
+        <select id="no-parceiro" aria-label="Parceiro"></select>
+        <button class="btn" onclick="novaOportunidade()">Nova oportunidade</button>
+      </div>
+      <div id="no-msg"></div>
+      <div class="funil" id="co-funil"></div>
+      <details style="margin-top:10px"><summary id="co-fechadas-t">Ganhas e perdidas</summary><div class="tabela" id="co-fechadas"></div></details>
+    </div>
+    <div class="card" id="det-oportunidade" hidden></div>
+    <div class="card" id="co-config" hidden><h2>Configurações do comercial</h2>
+      <p class="dica">Política comercial, condições de pagamento, etapas do funil, parceiros (RT) e integração com o Promob Prices. Só o administrador altera.</p>
+      <div class="cfg" id="cc-politica"></div>
+      <div class="linha" style="margin-top:10px">
+        <label class="dica" style="flex:1 1 220px;min-width:0">Etapas do funil (uma por linha)<textarea id="cc-etapas" rows="5" style="width:100%;font:inherit"></textarea></label>
+        <div style="flex:2 1 300px;min-width:0"><span class="dica">Condições de pagamento (ajuste negativo = desconto, positivo = acréscimo)</span><div class="tabela" id="cc-condicoes"></div>
+          <button class="btn sec" onclick="addCondicao()">Adicionar condição</button></div>
+      </div>
+      <h2>Promob Prices</h2>
+      <div class="linha"><input id="cc-token" type="password" placeholder="Token da conta (só gravação)" size="34" style="max-width:100%" autocomplete="off" aria-label="Token do Promob Prices">
+        <button class="btn sec" onclick="sincronizarPrices()">Sincronizar tabela vigente</button><span class="dica" id="cc-prices"></span></div>
+      <div class="linha"><button class="btn" onclick="salvarConfigComercial()">Salvar configurações do comercial</button></div>
+      <div id="cc-msg"></div>
+      <h2>Parceiros (arquitetos, designers, lojas)</h2>
+      <div class="linha">
+        <input id="pa-nome" placeholder="Nome" size="22" aria-label="Nome do parceiro">
+        <select id="pa-tipo" aria-label="Tipo"><option>ARQUITETO</option><option>DESIGNER</option><option>LOJA</option><option>OUTRO</option></select>
+        <input id="pa-tel" placeholder="Telefone" size="13" aria-label="Telefone">
+        <input id="pa-rt" type="number" step="0.5" placeholder="RT %" style="width:90px" aria-label="RT %">
+        <button class="btn sec" onclick="novoParceiro()">Cadastrar parceiro</button>
+      </div>
+      <div class="tabela" id="cc-parceiros"></div>
+    </div>
   </section>
 
   <section id="projetos">
@@ -520,6 +572,7 @@ td input.num { width: 90px; text-align: right; }
         <input id="u-senha" type="password" placeholder="Senha inicial (8+)" autocomplete="new-password">
         <select id="u-perfil">
           <option value="OPERADOR">Operador: apontamento</option>
+          <option value="VENDEDOR">Vendedor: funil, negociação e proposta</option>
           <option value="PCP">PCP: ordens e apontamento</option>
           <option value="COMPRAS">Compras: pedidos e estoque</option>
           <option value="FINANCEIRO">Financeiro: contratos, contas e DRE</option>
@@ -601,7 +654,7 @@ function tabela(colunas, linhas) {
 const carregadores = {painel: carregarPainel, projetos: carregarProjetos, ops: carregarOps, usuarios: carregarUsuarios,
                       estoque: carregarEstoque, compras: carregarCompras, financeiro: carregarFinanceiro,
                       montagem: carregarMontagem, assistencia: carregarAssistencia, indicadores: carregarIndicadores,
-                      apontamento: carregarApontamento, materiais: carregarMateriais, producao: carregarProducao, expedicao: carregarExpedicao, configuracoes: carregarConfiguracoes};
+                      apontamento: carregarApontamento, materiais: carregarMateriais, producao: carregarProducao, expedicao: carregarExpedicao, configuracoes: carregarConfiguracoes, comercial: carregarComercial};
 function abrir(aba) {
   document.querySelectorAll("section").forEach((s) => s.classList.toggle("ativo", s.id === aba));
   document.querySelectorAll("#abas button").forEach((b) => b.classList.toggle("ativo", b.dataset.aba === aba));
@@ -682,7 +735,9 @@ async function verProjeto(id) {
     <h2>Módulos</h2>${tabela([["Ambiente", (m) => esc(m.ambiente)], ["Módulo", (m) => `<b>${esc(m.codigo)}</b> ${esc(m.descricao)}`],
       ["Qtd", (m) => m.quantidade, 1], ["Peças", (m) => m.pecas.length, 1], ["Itens", (m) => m.itens.length, 1]], modulos)}
     ${linhasConsumo("Chapas", c.chapas)}${linhasConsumo("Fitas de borda", c.fitas)}${linhasConsumo("Ferragens e acessórios", c.itens)}
+    <div id="proj-auditoria"></div>
     <div id="proj-comercial"></div>`;
+  mostrarAuditoriaVenda(p.id);
   if (VE_FINANCEIRO()) mostrarComercial(p);
 }
 
@@ -1394,7 +1449,7 @@ async function salvarEmpresa() {
 // --- Acesso -----------------------------------------------------------------
 // Cada aba aparece se o login opera ao menos uma das funções listadas (null = aberta a todos)
 const ABA_FUNCOES = {
-  indicadores: ["indicadores"], painel: null, projetos: ["projetos", "pcp", "financeiro", "fiscal"], ops: null,
+  indicadores: ["indicadores"], comercial: ["comercial", "aprovar_venda"], painel: null, projetos: ["projetos", "pcp", "financeiro", "fiscal"], ops: null,
   apontamento: ["apontamento"], producao: ["pcp", "apontamento", "estorno", "refugo", "indicadores"], expedicao: ["expedicao"],
   estoque: ["estoque", "compras", "projetos", "pcp"], compras: ["compras"], montagem: ["montagem"], assistencia: ["assistencia"],
   financeiro: ["financeiro", "fiscal", "conciliacao"], materiais: ["materiais", "projetos", "compras", "pcp"], usuarios: ["usuarios"], configuracoes: ["usuarios"],
@@ -1406,9 +1461,10 @@ function abasDoLogin() {
 function abaInicial(abas) {
   if (abas.includes("indicadores")) return "indicadores";
   if (opera("pcp") || opera("projetos")) return "painel";
+  if (abas.includes("comercial")) return "comercial";
   return ["apontamento", "expedicao", "montagem", "assistencia", "financeiro", "compras"].find((a) => abas.includes(a)) || "painel";
 }
-const NOME_PERFIL = {ADMIN: "Administrador", GESTOR: "Gestor", ENGENHARIA: "Engenharia", PCP: "PCP", COMPRAS: "Compras", FINANCEIRO: "Financeiro", MONTAGEM: "Montagem", OPERADOR: "Operador"};
+const NOME_PERFIL = {ADMIN: "Administrador", GESTOR: "Gestor", ENGENHARIA: "Engenharia", PCP: "PCP", COMPRAS: "Compras", FINANCEIRO: "Financeiro", MONTAGEM: "Montagem", VENDEDOR: "Vendedor", OPERADOR: "Operador"};
 const VE_FINANCEIRO = () => opera("financeiro");
 
 function mostrarAcesso(msg) {
@@ -1606,6 +1662,221 @@ async function carregarOcorrencias() {
     ["Material perdido", (o) => o.custo_material ? brl(o.custo_material) : "—", 1],
     ["Reposição", (o) => o.nova_etiqueta ? `<code>${o.nova_etiqueta}</code>` : "—"], ["Por", (o) => esc(o.usuario || "—")]], lista);
 }
+
+// --- Comercial ------------------------------------------------------------------
+let cfgCom = null, parceiros = [], opAtual = null;
+const pctTxt = (v) => v == null ? "—" : `${String(v).replace(".", ",")}%`;
+async function carregarComercial() {
+  const [cfg, ops, pars] = await Promise.all([api("/api/comercial/config"), api("/api/oportunidades"), api("/api/parceiros")]);
+  cfgCom = cfg; parceiros = pars;
+  $("no-parceiro").innerHTML = `<option value="">Sem parceiro</option>` + pars.filter((p) => p.ativo).map((p) => `<option value="${p.id}">${esc(p.nome)} (RT ${pctTxt(p.rt_pct)})</option>`).join("");
+  const abertas = ops.filter((o) => o.status === "ABERTA"), mes = new Date().toISOString().slice(0, 7);
+  const ganhasMes = ops.filter((o) => o.status === "GANHA" && (o.fechado_em || "").slice(0, 7) === mes);
+  const fechadas = ops.filter((o) => o.status !== "ABERTA"), ganhas = fechadas.filter((o) => o.status === "GANHA");
+  $("co-kpis").innerHTML = [[String(abertas.length), "Oportunidades abertas", brl(abertas.reduce((s, o) => s + (o.valor_atual || o.valor_estimado || 0), 0)) + " em negociação"],
+    [String(abertas.filter((o) => o.aprovacao === "PENDENTE").length), "Aguardando aprovação", "descontos fora da alçada"],
+    [brl(ganhasMes.reduce((s, o) => s + (o.valor_atual || 0), 0)), "Vendido no mês", `${ganhasMes.length} contrato(s)`],
+    [fechadas.length ? pctTxt(Math.round(1000 * ganhas.length / fechadas.length) / 10) : "—", "Conversão", `${ganhas.length} ganha(s) de ${fechadas.length} fechada(s)`]]
+    .map(([v, t, sub]) => `<div class="card kpi">${v}<small>${t}</small><span class="sub">${sub}</span></div>`).join("");
+  $("co-funil").innerHTML = cfg.etapas.map((et) => { const lista = abertas.filter((o) => o.etapa === et);
+    return `<div class="col"><h3><span>${esc(et)}</span><span>${lista.length}</span></h3>${lista.map((o) => `<div class="op" onclick="verOportunidade(${o.id})">
+      <b>${esc(o.titulo)}</b>${esc(o.cliente_nome)}${o.parceiro ? ` · ${esc(o.parceiro)}` : ""}
+      <div class="v">${o.valor_atual ? brl(o.valor_atual) : o.valor_estimado ? "~" + brl(o.valor_estimado) : "sem XML"}
+      ${o.margem_pct != null ? ` <span class="tag ${o.margem_pct < cfg.margem_minima ? "VENCIDO" : "OK"}">margem ${pctTxt(o.margem_pct)}</span>` : ""}
+      ${o.aprovacao === "PENDENTE" ? ` <span class="tag PENDENTE">aprovação</span>` : ""}</div>
+      ${o.proxima_acao ? `<div class="dica">${esc(o.proxima_acao)}${o.proxima_acao_em ? " · " + dataBR(o.proxima_acao_em) : ""}</div>` : ""}</div>`).join("")}</div>`; }).join("");
+  $("co-fechadas-t").textContent = `Ganhas e perdidas · ${fechadas.length}`;
+  $("co-fechadas").innerHTML = tabela([["Nº", (o) => `<a onclick="verOportunidade(${o.id})">${o.numero}</a>`], ["Oportunidade", (o) => `${esc(o.titulo)} · ${esc(o.cliente_nome)}`],
+    ["Status", (o) => tag(o.status)], ["Valor", (o) => o.valor_atual ? brl(o.valor_atual) : "—", 1], ["Vendedor", (o) => esc(o.vendedor || "—")],
+    ["Motivo / projeto", (o) => o.motivo_perda ? esc(o.motivo_perda) : o.projeto_id ? `<a onclick="abrir('projetos'); verProjeto(${o.projeto_id})">ver projeto</a>` : ""]], fechadas);
+  $("co-config").hidden = !opera("usuarios");
+  if (opera("usuarios")) mostrarConfigComercial();
+}
+async function novaOportunidade() {
+  try { const o = await api("/api/oportunidades", {method: "POST", json: {titulo: $("no-titulo").value.trim(), cliente_nome: $("no-cliente").value.trim(),
+      telefone: $("no-tel").value.trim() || null, parceiro_id: Number($("no-parceiro").value) || null}});
+    ["no-titulo", "no-cliente", "no-tel"].forEach((k) => $(k).value = ""); $("no-msg").innerHTML = "";
+    await carregarComercial(); verOportunidade(o.id); }
+  catch (e) { $("no-msg").innerHTML = `<div class="msg err">${esc(e.status === 422 && Array.isArray(e.detail) ? "Informe o título e o cliente." : e.message)}</div>`; }
+}
+function linhaCalc(c) {
+  const l = (t, v, cls = "") => `<tr class="${cls}"><td>${t}</td><td class="n">${v}</td></tr>`;
+  return `<table class="calc"><tbody>${l("Preço do Promob (orçamento ao cliente)", brl(c.preco_base))}
+    ${l(`Desconto ${pctTxt(c.desconto_pct)} · ${esc(c.condicao)} (${c.ajuste_pct >= 0 ? "+" : ""}${pctTxt(c.ajuste_pct)})`, brl(c.preco_final - c.preco_base))}
+    ${l(`Preço final · ${c.parcelas}x de ${brl(c.parcela_valor)}`, brl(c.preco_final), "total")}
+    ${l("(−) Impostos", brl(-c.impostos))}${l(`(−) RT do parceiro (${pctTxt(c.rt_pct)})`, brl(-c.rt))}${l("(−) Comissão do vendedor", brl(-c.comissao_vendedor))}
+    ${l("(−) Custo de produção (pedido Promob + frete + montagem)", brl(-c.custo_producao))}
+    ${l(`Margem · ${pctTxt(c.margem_pct)}`, brl(c.margem), "total")}
+    ${c.preco_m2 ? l("Preço por m² de chapa · custo por m²", `${brl(c.preco_m2)} · ${brl(c.custo_m2)}`) : ""}</tbody></table>
+    ${c.prices ? `<p class="dica">Promob Prices (tabela vigente): ${c.prices.modulos_encontrados} de ${c.prices.modulos_total} módulo(s) encontrados · ${brl(c.prices.valor_tabela_prices)}${c.prices.diferenca_pct != null ? ` · diferença de ${pctTxt(c.prices.diferenca_pct)} sobre o valor de tabela do XML` : ""}${c.prices.faltando.length ? ` · sem preço: ${c.prices.faltando.slice(0, 5).map(esc).join(", ")}` : ""}</p>` : ""}`;
+}
+async function verOportunidade(id) {
+  const o = opAtual = await api(`/api/oportunidades/${id}`), card = $("det-oportunidade"), aberta = o.status === "ABERTA";
+  const v = o.lista_versoes[0];
+  card.hidden = false;
+  card.innerHTML = `<h2>Nº ${o.numero} · ${esc(o.titulo)} · ${esc(o.cliente_nome)} ${tag(o.status)}</h2>
+    <div class="linha">
+      ${aberta ? `<select id="op-etapa" aria-label="Etapa">${cfgCom.etapas.map((e) => `<option ${e === o.etapa ? "selected" : ""}>${esc(e)}</option>`).join("")}</select>` : ""}
+      <span class="dica">Vendedor: ${esc(o.vendedor || "—")} · Parceiro: ${esc(o.parceiro || "—")}${o.telefone ? " · " + esc(o.telefone) : ""}</span>
+      ${o.link_3d ? `<a class="btn sec" href="${esc(o.link_3d)}" target="_blank" rel="noopener">Projeto em 3D</a>` : ""}
+      ${o.link_2020 ? `<a class="btn sec" href="${esc(o.link_2020)}" target="_blank" rel="noopener">Negociação no 2020 Manager</a>` : ""}
+      ${o.projeto_id ? `<button class="btn sec" onclick="abrir('projetos'); verProjeto(${o.projeto_id})">Ver projeto</button>` : ""}
+    </div>
+    ${aberta ? `<div class="linha">
+      <input id="op-acao" placeholder="Próxima ação (ex.: apresentar no showroom)" size="30" value="${esc(o.proxima_acao || "")}" aria-label="Próxima ação">
+      <input id="op-acao-em" type="date" value="${o.proxima_acao_em || ""}" aria-label="Data da próxima ação">
+      <input id="op-3d" placeholder="Link do 3D (galeria3d.promob.com)" size="28" value="${esc(o.link_3d || "")}" aria-label="Link 3D">
+      <input id="op-2020" placeholder="Link da negociação no 2020 Manager" size="28" value="${esc(o.link_2020 || "")}" aria-label="Link 2020">
+      <input id="op-token" placeholder="${o.token_2020 ? "Token do projeto salvo " + esc(o.token_2020) : "Token do projeto (2020)"}" size="22" aria-label="Token do projeto">
+      <button class="btn sec" onclick="salvarOportunidade(${o.id})">Salvar</button>
+    </div>` : o.motivo_perda ? `<p class="dica">Perdida: ${esc(o.motivo_perda)}</p>` : ""}
+    <div id="op-msg"></div>
+    ${aberta ? `<div class="linha"><label class="btn sec">Enviar XML do Promob (nova versão)<input type="file" accept=".xml" hidden onchange="enviarVersao(${o.id}, this)"></label>
+      <label class="btn sec">Enviar renders<input type="file" accept="image/png,image/jpeg,image/webp" multiple hidden onchange="enviarRenders(${o.id}, this)"></label>
+      <button class="btn sec" onclick="pedirConfirmacao('op-msg', 'Marcar a oportunidade como perdida?', () => perderOportunidade(${o.id}))">Perdida</button></div>` : ""}
+    <div class="renders" id="op-renders"></div>
+    ${v ? `<h2>Negociação · versão ${v.numero} (${esc(v.arquivo)})</h2>
+      <p class="dica">${v.resumo.ambientes.map((a) => `${esc(a.nome)}: ${a.modulos} módulo(s), ${a.m2} m²`).join(" · ")} · total ${v.resumo.total_pecas} peças · ${v.resumo.m2_chapa} m² de chapa</p>
+      ${aberta && !v.aceite_em ? `<div class="linha">
+        <label class="dica">Desconto % <input id="ng-desc" type="number" min="0" max="100" step="0.5" value="${v.desconto_pct}" style="width:90px"></label>
+        <select id="ng-cond" aria-label="Condição">${cfgCom.condicoes.map((c) => `<option ${c.nome === v.condicao ? "selected" : ""}>${esc(c.nome)}</option>`).join("")}</select>
+        <button class="btn" onclick="negociarVersao(${v.id})">Calcular</button>
+      </div>` : ""}
+      ${v.calculo ? linhaCalc(v.calculo) : ""}
+      <div class="linha" style="margin-top:8px"><span class="tag ${v.aprovacao}">${v.aprovacao}</span>
+        ${v.aprovacao_motivo ? `<span class="dica">${esc(v.aprovacao_motivo)}${v.aprovado_por ? " · " + esc(v.aprovado_por) : ""}</span>` : ""}
+        ${v.aprovacao === "PENDENTE" && opera("aprovar_venda") ? `<button class="btn" onclick="decidirVersao(${v.id}, true)">Aprovar</button><button class="btn sec" onclick="decidirVersao(${v.id}, false)">Recusar</button>` : ""}
+      </div>
+      ${aberta ? `<div class="linha">
+        ${["LIVRE", "APROVADA"].includes(v.aprovacao) && !v.aceite_em ? `<button class="btn sec" onclick="gerarProposta(${v.id})">${v.proposta_link ? "Renovar validade da proposta" : "Gerar proposta para o cliente"}</button>` : ""}
+        ${v.proposta_link ? `<a class="btn sec" href="${v.proposta_link}" target="_blank" rel="noopener">Abrir proposta</a><button class="btn sec" onclick="copiarLink('${v.proposta_link}')">Copiar link</button>` : ""}
+        ${v.aceite_em ? `<span class="tag OK">Aceita por ${esc(v.aceite_nome)} em ${quando(v.aceite_em)}</span>` : v.proposta_validade ? `<span class="dica">válida até ${dataBR(v.proposta_validade)}</span>` : ""}
+      </div>
+      ${["LIVRE", "APROVADA"].includes(v.aprovacao) ? `<div class="linha"><span class="dica">Fechar a venda com esta versão:</span>
+        <label class="dica">1º vencimento <input id="fv-venc" type="date" value="${new Date().toISOString().slice(0, 10)}"></label>
+        <label class="dica">Entrega <input id="fv-entrega" type="date"></label>
+        <button class="btn" onclick="pedirConfirmacao('op-msg', 'Fechar a venda com a versão ${v.numero} por ${brl(v.calculo.preco_final)}? O projeto é criado com o XML desta versão, o contrato gera as parcelas e as comissões entram no contas a pagar.', () => fecharVenda(${o.id}, ${v.id}))">Fechar venda</button></div>` : ""}` : ""}` : `<p class="pend">Envie o XML do Promob para abrir a negociação.</p>`}
+    ${o.lista_versoes.length > 1 ? `<h2>Versões anteriores</h2><div class="tabela">${tabela([["Versão", (x) => `v${x.numero}`], ["Enviada", (x) => `${quando(x.criado_em)} · ${esc(x.criado_por || "")}`],
+      ["m²", (x) => x.resumo.m2_chapa, 1], ["Preço final", (x) => x.calculo ? brl(x.calculo.preco_final) : "—", 1], ["Margem", (x) => x.calculo ? pctTxt(x.calculo.margem_pct) : "—", 1],
+      ["Aprovação", (x) => tag(x.aprovacao)]], o.lista_versoes.slice(1))}</div>` : ""}`;
+  card.scrollIntoView({behavior: "smooth", block: "start"});
+  carregarRenders(o);
+  if ($("op-etapa")) $("op-etapa").onchange = () => salvarOportunidade(o.id, {etapa: $("op-etapa").value});
+}
+async function carregarRenders(o) {
+  const fotos = await Promise.all(o.imagens.map(async (i) => { try { return [i, URL.createObjectURL(await arquivo(`/api/imagens/${i.id}`))]; } catch (e) { return null; } }));
+  $("op-renders").innerHTML = fotos.filter(Boolean).map(([i, url]) => `<figure><img src="${url}" alt="${esc(i.legenda || i.nome)}">
+    <figcaption>${esc(i.legenda || i.nome)} ${o.status === "ABERTA" ? `<a onclick="apagarRender(${i.id})">remover</a>` : ""}</figcaption></figure>`).join("");
+}
+const msgOp = (ok, t) => $("op-msg").innerHTML = `<div class="msg ${ok ? "ok" : "err"}">${esc(t)}</div>`;
+async function salvarOportunidade(id, dados) {
+  dados ||= {proxima_acao: $("op-acao").value.trim() || null, proxima_acao_em: $("op-acao-em").value || null,
+    link_3d: $("op-3d").value.trim() || null, link_2020: $("op-2020").value.trim() || null, ...($("op-token").value.trim() ? {token_2020: $("op-token").value.trim()} : {})};
+  try { await api(`/api/oportunidades/${id}`, {method: "PATCH", json: dados}); await carregarComercial(); await verOportunidade(id); msgOp(true, "Oportunidade salva."); }
+  catch (e) { msgOp(false, e.message); }
+}
+async function enviarVersao(id, input) {
+  const f = input.files[0]; if (!f) return; const fd = new FormData(); fd.append("arquivo", f);
+  try { const v = await api(`/api/oportunidades/${id}/versoes`, {method: "POST", body: fd}); await carregarComercial(); await verOportunidade(id);
+    msgOp(true, `Versão ${v.numero} recebida: ${v.resumo.total_modulos} módulo(s), ${v.resumo.m2_chapa} m² de chapa.`); }
+  catch (e) { msgOp(false, e.message); }
+}
+async function enviarRenders(id, input) {
+  for (const f of input.files) { const fd = new FormData(); fd.append("arquivo", f); fd.append("legenda", f.name.replace(/\.[^.]+$/, ""));
+    try { await api(`/api/oportunidades/${id}/imagens`, {method: "POST", body: fd}); } catch (e) { msgOp(false, `${f.name}: ${e.message}`); } }
+  verOportunidade(id);
+}
+async function apagarRender(imgId) { try { await api(`/api/imagens/${imgId}`, {method: "DELETE"}); verOportunidade(opAtual.id); } catch (e) { msgOp(false, e.message); } }
+async function negociarVersao(vid) {
+  try { const v = await api(`/api/versoes/${vid}/negociar`, {method: "POST", json: {desconto_pct: Number($("ng-desc").value || 0), condicao: $("ng-cond").value}});
+    await carregarComercial(); await verOportunidade(opAtual.id);
+    msgOp(v.aprovacao !== "PENDENTE", v.aprovacao === "PENDENTE" ? `Precisa de aprovação: ${v.aprovacao_motivo}` : `Preço final ${brl(v.calculo.preco_final)} · margem ${pctTxt(v.calculo.margem_pct)}.`); }
+  catch (e) { msgOp(false, e.message); }
+}
+async function decidirVersao(vid, aprovar) {
+  try { await api(`/api/versoes/${vid}/decidir`, {method: "POST", json: {aprovar}}); await carregarComercial(); await verOportunidade(opAtual.id); }
+  catch (e) { msgOp(false, e.message); }
+}
+async function gerarProposta(vid) {
+  try { const v = await api(`/api/versoes/${vid}/proposta`, {method: "POST"}); await verOportunidade(opAtual.id);
+    msgOp(true, `Proposta pronta, válida até ${dataBR(v.proposta_validade)}. Envie o link ao cliente (WhatsApp ou e-mail): ${location.origin}${v.proposta_link}`); }
+  catch (e) { msgOp(false, e.message); }
+}
+function copiarLink(caminho) { const url = location.origin + caminho;
+  (navigator.clipboard ? navigator.clipboard.writeText(url) : Promise.reject()).then(() => msgOp(true, "Link copiado: " + url), () => msgOp(true, "Copie o link: " + url)); }
+async function fecharVenda(id, vid) {
+  try { const r = await api(`/api/oportunidades/${id}/fechar`, {method: "POST", json: {versao_id: vid, primeiro_vencimento: $("fv-venc").value, data_entrega: $("fv-entrega").value || null}});
+    await carregarComercial(); await verOportunidade(id); msgOp(true, `Venda fechada: projeto ${r.projeto_codigo} criado na engenharia, contrato e comissões lançados.`); }
+  catch (e) { msgOp(false, e.message); }
+}
+async function perderOportunidade(id) {
+  const motivo = prompt("Motivo da perda (preço, prazo, concorrente, desistiu...)") || "";
+  try { await api(`/api/oportunidades/${id}/perder`, {method: "POST", json: {motivo}}); await carregarComercial(); verOportunidade(id); }
+  catch (e) { msgOp(false, e.status === 422 ? "Informe o motivo da perda." : e.message); }
+}
+// Configurações do módulo comercial
+const CAMPOS_COM = [["desconto_max_vendedor", "Desconto máx. do vendedor (%)"], ["desconto_max_gerente", "Desconto máx. de quem aprova (%)"],
+  ["margem_minima", "Margem mínima (%)"], ["comissao_vendedor_pct", "Comissão do vendedor (%)"], ["limite_divergencia_pct", "Auditoria: diferença tolerada vendido × produção (%)"],
+  ["validade_proposta_dias", "Validade da proposta (dias)"]];
+let condicoesEd = [];
+function mostrarConfigComercial() {
+  $("cc-politica").innerHTML = CAMPOS_COM.map(([k, t]) => `<label>${t}<input id="cc-${k}" type="number" step="0.5" value="${cfgCom[k]}"></label>`).join("");
+  $("cc-etapas").value = cfgCom.etapas.join("\n");
+  condicoesEd = cfgCom.condicoes.map((c) => ({...c})); desenharCondicoes();
+  $("cc-prices").textContent = cfgCom.prices_token_configurado ? `Token salvo · ${cfgCom.prices_tabela ? `tabela "${cfgCom.prices_tabela}" com ${cfgCom.prices_itens} itens, sincronizada em ${quando(cfgCom.prices_sincronizado_em)}` : "ainda não sincronizado"}` : "Token não configurado";
+  $("cc-parceiros").innerHTML = tabela([["Parceiro", (p) => `<b>${esc(p.nome)}</b>`], ["Tipo", (p) => esc(p.tipo)], ["Telefone", (p) => esc(p.telefone || "—")],
+    ["RT", (p) => `<input type="number" step="0.5" value="${p.rt_pct}" style="width:80px" onchange="alterarParceiro(${p.id}, {rt_pct: Number(this.value)})" aria-label="RT">`],
+    ["Ativo", (p) => `<input type="checkbox" ${p.ativo ? "checked" : ""} onchange="alterarParceiro(${p.id}, {ativo: this.checked})" aria-label="Ativo">`]], parceiros);
+}
+function desenharCondicoes() {
+  $("cc-condicoes").innerHTML = tabela([["Condição", (c, i) => `<input value="${esc(c.nome)}" onchange="condicoesEd[${condicoesEd.indexOf(c)}].nome = this.value" aria-label="Nome">`],
+    ["Parcelas", (c) => `<input type="number" min="1" value="${c.parcelas}" style="width:70px" onchange="condicoesEd[${condicoesEd.indexOf(c)}].parcelas = Number(this.value)" aria-label="Parcelas">`],
+    ["Ajuste %", (c) => `<input type="number" step="0.5" value="${c.ajuste_pct}" style="width:80px" onchange="condicoesEd[${condicoesEd.indexOf(c)}].ajuste_pct = Number(this.value)" aria-label="Ajuste">`],
+    ["", (c) => `<a onclick="condicoesEd.splice(${condicoesEd.indexOf(c)}, 1); desenharCondicoes()">remover</a>`]], condicoesEd);
+}
+function addCondicao() { condicoesEd.push({nome: "Nova condição", parcelas: 1, ajuste_pct: 0}); desenharCondicoes(); }
+const msgCc = (ok, t) => $("cc-msg").innerHTML = `<div class="msg ${ok ? "ok" : "err"}">${esc(t)}</div>`;
+async function salvarConfigComercial() {
+  const dados = Object.fromEntries(CAMPOS_COM.map(([k]) => [k, Number($("cc-" + k).value)]));
+  dados.etapas = $("cc-etapas").value.split("\n").map((x) => x.trim()).filter(Boolean); dados.condicoes = condicoesEd;
+  if ($("cc-token").value.trim()) dados.prices_token = $("cc-token").value.trim();
+  try { cfgCom = await api("/api/comercial/config", {method: "PUT", json: dados}); $("cc-token").value = ""; mostrarConfigComercial(); msgCc(true, "Configurações do comercial salvas."); carregarComercial(); }
+  catch (e) { msgCc(false, e.message); }
+}
+async function sincronizarPrices() {
+  msgCc(true, "Sincronizando com o Promob Prices...");
+  try { const r = await api("/api/comercial/prices/sincronizar", {method: "POST"}); msgCc(true, `Tabela "${r.tabela}" sincronizada: ${r.itens} itens.`); carregarComercial(); }
+  catch (e) { msgCc(false, e.message); }
+}
+async function novoParceiro() {
+  try { await api("/api/parceiros", {method: "POST", json: {nome: $("pa-nome").value.trim(), tipo: $("pa-tipo").value, telefone: $("pa-tel").value.trim() || null, rt_pct: Number($("pa-rt").value || 0)}});
+    ["pa-nome", "pa-tel", "pa-rt"].forEach((k) => $(k).value = ""); carregarComercial(); }
+  catch (e) { msgCc(false, e.status === 422 ? "Informe o nome do parceiro e um RT entre 0% e 30%." : e.message); }
+}
+async function alterarParceiro(id, dados) {
+  const p = parceiros.find((x) => x.id === id);
+  try { await api(`/api/parceiros/${id}`, {method: "PUT", json: {...p, ...dados}}); carregarComercial(); } catch (e) { msgCc(false, e.message); }
+}
+// Auditoria da venda no detalhe do projeto
+async function mostrarAuditoriaVenda(pid) {
+  let a; try { a = await api(`/api/projetos/${pid}/auditoria-venda`); } catch (e) { return; }
+  const v = a.vendido, p = a.producao, d = a.diferencas, sinal = (x) => x > 0 ? "+" + x : String(x);
+  const lista = (t, ms) => ms.length ? `<p class="dica"><b>${t}:</b> ${ms.map((m) => `${esc(m.ambiente)} · ${esc(m.codigo)} ${esc(m.descricao)} (${m.quantidade})`).join("; ")}</p>` : "";
+  $("proj-auditoria").innerHTML = `<h2>Auditoria da venda: vendido × produção</h2>
+    <div class="tabela"><table><thead><tr><th></th><th class="n">Vendido (v${v.versao})</th><th class="n">Produção (executivo)</th><th class="n">Diferença</th></tr></thead><tbody>
+    <tr><td>Módulos</td><td class="n">${v.modulos}</td><td class="n">${p.modulos}</td><td class="n">${sinal(d.modulos)}</td></tr>
+    <tr><td>Peças</td><td class="n">${v.pecas}</td><td class="n">${p.pecas}</td><td class="n">${sinal(d.pecas)}</td></tr>
+    <tr><td>m² de chapa</td><td class="n">${v.m2}</td><td class="n">${p.m2}</td><td class="n">${sinal(d.m2)} (${pctTxt(d.m2_pct)})</td></tr>
+    <tr><td>Valor de produção (pedido Promob)</td><td class="n">${brl(v.valor_pedido)}</td><td class="n">${brl(p.valor_pedido)}</td><td class="n">${brl(d.valor_pedido)} (${pctTxt(d.valor_pedido_pct)})</td></tr>
+    <tr><td>Venda por m²</td><td class="n">${v.preco_m2 ? brl(v.preco_m2) : "—"}</td><td class="n">${p.venda_por_m2_produzido ? brl(p.venda_por_m2_produzido) : "—"}</td><td class="n">custo/m² ${p.custo_m2 ? brl(p.custo_m2) : "—"}</td></tr>
+    </tbody></table></div>
+    <p class="dica">Venda de ${brl(v.preco_final)} em ${esc(v.fechado_em)} · desconto ${pctTxt(v.desconto_pct)} · ${esc(v.condicao)} · margem prevista ${pctTxt(v.margem_pct)}.</p>
+    ${lista("Módulos acrescentados no executivo", a.modulos_acrescentados)}${lista("Módulos retirados", a.modulos_retirados)}
+    ${a.exige_ciencia ? `<div class="msg err">Diferença de ${pctTxt(a.divergencia_pct)} acima da tolerância de ${pctTxt(a.limite_pct)}: a liberação para a fábrica exige ciência de quem aprova vendas.
+      ${opera("aprovar_venda") ? `<button class="btn" onclick="cienciaAuditoria(${pid})">Registrar ciência</button>` : ""}</div>`
+      : a.ciente_por ? `<p class="dica">Ciência registrada por ${esc(a.ciente_por)} em ${quando(a.ciente_em)}.</p>` : `<p class="dica">Dentro da tolerância de ${pctTxt(a.limite_pct)}.</p>`}`;
+}
+async function cienciaAuditoria(pid) { try { await api(`/api/projetos/${pid}/auditoria-venda/ciencia`, {method: "POST"}); mostrarAuditoriaVenda(pid); } catch (e) { alert(e.message); } }
 
 // --- Configurações gerais ---------------------------------------------------
 const REGRAS = {TODAS: "Todas as peças", COM_FITA: "Peças com fita", COM_USINAGEM: "Peças com furação", SOB_DEMANDA: "Só peças separadas"};

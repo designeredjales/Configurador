@@ -10,7 +10,8 @@ RUN pip install --no-cache-dir -r requirements.txt
 COPY app ./app
 COPY migrations ./migrations
 COPY alembic.ini docker-entrypoint.sh ./
-RUN chmod +x docker-entrypoint.sh && useradd --create-home --uid 10001 erp
+RUN chmod +x docker-entrypoint.sh && useradd --create-home --uid 10001 erp \
+    && mkdir -p /app/arquivos && chown erp /app/arquivos
 USER erp
 
 EXPOSE 8000

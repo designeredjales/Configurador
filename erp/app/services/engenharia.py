@@ -129,6 +129,10 @@ def liberar(db: Session, projeto: Projeto) -> list[str]:
     if projeto.status not in (StatusProjeto.ENGENHARIA, StatusProjeto.APROVADO):
         return [f"Projeto em status {projeto.status}: só libera a partir de ENGENHARIA/APROVADO"]
     erros = pendencias(db, projeto)
+    from .comercial import pendencia_auditoria  # vendido × executivo: diferença grande exige ciência
+    aviso = pendencia_auditoria(db, projeto)
+    if aviso:
+        erros = [*erros, aviso]
     if erros:
         return erros
     # Amarra o cadastro definitivo às peças/itens antes de produzir

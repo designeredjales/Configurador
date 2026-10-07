@@ -64,6 +64,23 @@ with TestClient(app) as c:
     for u in c.get(f"/api/ops/{op['id']}", headers=h).json()["unidades"][:8]:
         c.post("/api/apontamentos", json={"codigo_barras": u["codigo_barras"], "centro_codigo": "CORTE"},
                headers=h)
+    # Comercial: vendedora, arquiteta com RT e uma negociação aberta com a versão do Promob
+    c.post("/api/usuarios", json={"nome": "Ana (vendas)", "email": "vendas@demo.com", "senha": "demo12345",
+                                  "perfil": "VENDEDOR"}, headers=h)
+    hv = {"Authorization": "Bearer " + c.post("/api/auth/login", json={"email": "vendas@demo.com", "senha": "demo12345"}).json()["token"]}
+    c.put("/api/comercial/config", json={"margem_minima": 8}, headers=h)  # obra de exemplo tem valores pequenos
+    arq = c.post("/api/parceiros", json={"nome": "Arq. Paula Lima", "tipo": "ARQUITETO", "rt_pct": 5}, headers=h).json()
+    neg = c.post("/api/oportunidades", json={"titulo": "Cozinha e área gourmet", "cliente_nome": "Família Rocha",
+                                             "telefone": "(19) 99999-0000", "parceiro_id": arq["id"],
+                                             "link_3d": "https://galeria3d.promob.com/EVOLXmoY",
+                                             "proxima_acao": "Apresentar no showroom",
+                                             "proxima_acao_em": str(hoje + timedelta(days=2))}, headers=hv).json()
+    c.patch(f"/api/oportunidades/{neg['id']}", json={"etapa": "Negociação"}, headers=hv)
+    with open(XML, "rb") as f:
+        v = c.post(f"/api/oportunidades/{neg['id']}/versoes", files={"arquivo": ("Cozinha.xml", f)}, headers=hv).json()
+    c.post(f"/api/versoes/{v['id']}/negociar", json={"desconto_pct": 8, "condicao": "6x sem juros"}, headers=hv)
+    c.post("/api/oportunidades", json={"titulo": "Dormitório casal", "cliente_nome": "Carlos Mendes",
+                                       "proxima_acao": "Visita técnica para medição"}, headers=hv)
     print(f"Demonstração criada: {r['pecas']} peças importadas do XML.\n"
           "Abra http://localhost:8000 e entre com admin@demo.com / demo12345 "
-          "(operador: operador@demo.com, expedição: expedicao@demo.com, senha demo12345)")
+          "(operador: operador@demo.com, expedição: expedicao@demo.com, vendas: vendas@demo.com, senha demo12345)")

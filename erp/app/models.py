@@ -6,7 +6,7 @@ desde o primeiro dia.
 from datetime import date, datetime
 from enum import Enum
 
-from sqlalchemy import JSON, Date, DateTime, Float, ForeignKey, Integer, String, UniqueConstraint
+from sqlalchemy import JSON, Date, DateTime, Float, ForeignKey, Integer, String, Text, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from .db import Base
@@ -53,6 +53,7 @@ class Perfil(str, Enum):
     COMPRAS = "COMPRAS"        # fornecedores, pedidos, recebimento, estoque
     FINANCEIRO = "FINANCEIRO"  # contratos, contas a pagar e receber, DRE
     MONTAGEM = "MONTAGEM"      # agenda de montagem, checklist de entrega, assistência
+    VENDEDOR = "VENDEDOR"      # funil, negociação e proposta
     OPERADOR = "OPERADOR"      # apontamento e consulta
 
 
@@ -281,6 +282,11 @@ class Projeto(Base):
     liberado_em: Mapped[datetime | None] = mapped_column(DateTime)
     producao_concluida_em: Mapped[datetime | None] = mapped_column(DateTime)
     entregue_em: Mapped[datetime | None] = mapped_column(DateTime)
+    # Venda: o que foi vendido fica congelado para a auditoria contra o executivo de produção
+    oportunidade_id: Mapped[int | None] = mapped_column(Integer)
+    venda_resumo: Mapped[dict | None] = mapped_column(JSON)
+    auditoria_ciente_por: Mapped[str | None] = mapped_column(String(120))
+    auditoria_ciente_em: Mapped[datetime | None] = mapped_column(DateTime)
 
     cliente: Mapped[Cliente | None] = relationship()
     ambientes: Mapped[list["Ambiente"]] = relationship(
@@ -834,3 +840,128 @@ class RegistroErro(Base):
     tipo: Mapped[str] = mapped_column(String(120))
     mensagem: Mapped[str] = mapped_column(String(500))
     rastreio: Mapped[str] = mapped_column(String(8000))
+
+
+# --- Comercial: funil, negociação e proposta -----------------------------------------
+
+class ConfigComercial(Base):
+    """Política comercial da empresa (uma linha por empresa), editada pelo administrador."""
+    __tablename__ = "config_comercial"
+
+    empresa_id: Mapped[int] = mapped_column(ForeignKey("empresas.id"), primary_key=True)
+    desconto_max_vendedor: Mapped[float] = mapped_column(Float, default=5.0)
+    desconto_max_gerente: Mapped[float] = mapped_column(Float, default=12.0)
+    margem_minima: Mapped[float] = mapped_column(Float, default=20.0)
+    comissao_vendedor_pct: Mapped[float] = mapped_column(Float, default=3.0)
+    limite_divergencia_pct: Mapped[float] = mapped_column(Float, default=3.0)
+    validade_proposta_dias: Mapped[int] = mapped_column(Integer, default=15)
+    etapas: Mapped[list | None] = mapped_column(JSON)
+    condicoes: Mapped[list | None] = mapped_column(JSON)  # [{"nome", "parcelas", "ajuste_pct"}]
+    # Promob Prices: o token nunca sai pela API
+    prices_token: Mapped[str | None] = mapped_column(String(2000))
+    prices_tabela: Mapped[str | None] = mapped_column(String(200))
+    prices_sincronizado_em: Mapped[datetime | None] = mapped_column(DateTime)
+
+
+class Parceiro(Base):
+    """Arquiteto, designer ou loja que indica obras e recebe RT."""
+    __tablename__ = "parceiros"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    empresa_id: Mapped[int] = mapped_column(ForeignKey("empresas.id"), index=True)
+    nome: Mapped[str] = mapped_column(String(160))
+    tipo: Mapped[str] = mapped_column(String(20), default="ARQUITETO")
+    documento: Mapped[str | None] = mapped_column(String(20))
+    telefone: Mapped[str | None] = mapped_column(String(30))
+    email: Mapped[str | None] = mapped_column(String(160))
+    rt_pct: Mapped[float] = mapped_column(Float, default=0.0)
+    ativo: Mapped[bool] = mapped_column(default=True)
+
+
+class Oportunidade(Base):
+    """Uma negociação no funil: do primeiro contato ao contrato (ou à perda)."""
+    __tablename__ = "oportunidades"
+    __table_args__ = (UniqueConstraint("empresa_id", "numero"),)
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    empresa_id: Mapped[int] = mapped_column(ForeignKey("empresas.id"), index=True)
+    numero: Mapped[int] = mapped_column(Integer)
+    titulo: Mapped[str] = mapped_column(String(160))
+    cliente_nome: Mapped[str] = mapped_column(String(160))
+    telefone: Mapped[str | None] = mapped_column(String(30))
+    email: Mapped[str | None] = mapped_column(String(160))
+    etapa: Mapped[str] = mapped_column(String(40))
+    status: Mapped[str] = mapped_column(String(10), default="ABERTA")  # ABERTA, GANHA, PERDIDA
+    origem: Mapped[str | None] = mapped_column(String(60))
+    parceiro_id: Mapped[int | None] = mapped_column(ForeignKey("parceiros.id"))
+    vendedor_id: Mapped[int | None] = mapped_column(ForeignKey("usuarios.id"))
+    valor_estimado: Mapped[float | None] = mapped_column(Float)
+    link_3d: Mapped[str | None] = mapped_column(String(400))
+    link_2020: Mapped[str | None] = mapped_column(String(400))
+    token_2020: Mapped[str | None] = mapped_column(String(400))
+    proxima_acao: Mapped[str | None] = mapped_column(String(200))
+    proxima_acao_em: Mapped[date | None] = mapped_column(Date)
+    motivo_perda: Mapped[str | None] = mapped_column(String(200))
+    projeto_id: Mapped[int | None] = mapped_column(ForeignKey("projetos.id"))
+    criado_em: Mapped[datetime] = mapped_column(DateTime, default=agora)
+    fechado_em: Mapped[datetime | None] = mapped_column(DateTime)
+
+    parceiro: Mapped[Parceiro | None] = relationship()
+    vendedor: Mapped["Usuario | None"] = relationship()
+    versoes: Mapped[list["VersaoProposta"]] = relationship(
+        back_populates="oportunidade", cascade="all, delete-orphan", order_by="VersaoProposta.numero"
+    )
+    imagens: Mapped[list["ImagemProposta"]] = relationship(
+        back_populates="oportunidade", cascade="all, delete-orphan", order_by="ImagemProposta.id"
+    )
+
+
+class VersaoProposta(Base):
+    """Cada XML enviado vira uma versão: resumo do projeto, negociação, aprovação e proposta ao cliente."""
+    __tablename__ = "versoes_proposta"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    oportunidade_id: Mapped[int] = mapped_column(ForeignKey("oportunidades.id"), index=True)
+    numero: Mapped[int] = mapped_column(Integer)
+    arquivo: Mapped[str] = mapped_column(String(200))
+    xml: Mapped[str] = mapped_column(Text)
+    resumo: Mapped[dict] = mapped_column(JSON)
+    desconto_pct: Mapped[float] = mapped_column(Float, default=0.0)
+    condicao: Mapped[str | None] = mapped_column(String(60))
+    calculo: Mapped[dict | None] = mapped_column(JSON)
+    aprovacao: Mapped[str] = mapped_column(String(12), default="LIVRE")  # LIVRE, PENDENTE, APROVADA, RECUSADA
+    aprovacao_motivo: Mapped[str | None] = mapped_column(String(300))
+    aprovado_por: Mapped[str | None] = mapped_column(String(120))
+    token_publico: Mapped[str | None] = mapped_column(String(64), unique=True, index=True)
+    proposta_validade: Mapped[date | None] = mapped_column(Date)
+    aceite_em: Mapped[datetime | None] = mapped_column(DateTime)
+    aceite_nome: Mapped[str | None] = mapped_column(String(160))
+    aceite_ip: Mapped[str | None] = mapped_column(String(64))
+    criado_por: Mapped[str | None] = mapped_column(String(120))
+    criado_em: Mapped[datetime] = mapped_column(DateTime, default=agora)
+
+    oportunidade: Mapped[Oportunidade] = relationship(back_populates="versoes")
+
+
+class ImagemProposta(Base):
+    __tablename__ = "imagens_proposta"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    oportunidade_id: Mapped[int] = mapped_column(ForeignKey("oportunidades.id"), index=True)
+    nome: Mapped[str] = mapped_column(String(200))
+    tipo: Mapped[str] = mapped_column(String(40))
+    caminho: Mapped[str] = mapped_column(String(300))
+    legenda: Mapped[str | None] = mapped_column(String(160))
+
+    oportunidade: Mapped[Oportunidade] = relationship(back_populates="imagens")
+
+
+class PrecoPromob(Base):
+    """Tabela de preços vigente, sincronizada do Promob Prices."""
+    __tablename__ = "precos_promob"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    empresa_id: Mapped[int] = mapped_column(ForeignKey("empresas.id"), index=True)
+    sku: Mapped[str] = mapped_column(String(80), index=True)
+    descricao: Mapped[str] = mapped_column(String(300), default="")
+    preco: Mapped[float] = mapped_column(Float)

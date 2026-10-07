@@ -34,8 +34,10 @@ services:
       SENTRY_DSN: ${SENTRY_DSN:-}
       APP_VERSAO: ${APP_VERSAO:-}
       ERP_PASTA_BACKUP: /backups
+      ERP_PASTA_ARQUIVOS: /app/arquivos
       TZ: ${TZ:-America/Sao_Paulo}
     volumes:
+      - arquivos:/app/arquivos   # renders e imagens das propostas comerciais
       - backups:/backups:ro   # só para o painel "Saúde do sistema" mostrar o último backup
     ports:
       - "8000:8000"
@@ -63,4 +65,5 @@ services:
 
 volumes:
   dados:
+  arquivos:
   backups:

@@ -10,7 +10,8 @@ from sqlalchemy import text
 from . import models, observabilidade  # noqa: F401  (registra as tabelas)
 from .db import Base, engine
 from .routers import (
-    auth, cadastros, carrinhos, compras, configuracoes, expedicao, financeiro, lotes, pos_obra, producao, projetos, sistema,
+    auth, cadastros, carrinhos, comercial, compras, configuracoes, expedicao, financeiro, lotes, pos_obra, producao,
+    projetos, sistema,
 )
 
 STATIC = Path(__file__).parent / "static"
@@ -62,6 +63,7 @@ app.include_router(expedicao.router)
 app.include_router(carrinhos.router)
 app.include_router(configuracoes.router)
 app.include_router(sistema.router)
+app.include_router(comercial.router)
 app.mount("/static", StaticFiles(directory=STATIC), name="static")
 
 
