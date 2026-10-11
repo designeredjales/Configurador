@@ -1,0 +1,388 @@
+import html
+from datetime import date, datetime
+
+from fastapi import APIRouter, Depends, HTTPException
+from fastapi.responses import HTMLResponse, PlainTextResponse
+from sqlalchemy import func, select
+from sqlalchemy.orm import Session
+
+from ..db import get_db
+from ..deps import APONTAR, ESTORNO, PCP, REFUGO, empresa_atual
+from ..models import Empresa, Ocorrencia, OrdemProducao, StatusOP, Usuario
+from ..schemas import (
+    ApontamentoIn,
+    ApontamentoOut,
+    ConsultaPecas,
+    GerarOPIn,
+    HistoricoBaixas,
+    OcorrenciaIn,
+    OcorrenciaOut,
+    OPDetalhe,
+    OPResumo,
+    Painel,
+    PlanoCorte,
+)
+from ..services import code128, corte, pcp, producao
+from .projetos import carregar
+
+router = APIRouter(prefix="/api", tags=["pcp"])
+
+
+def resumo(op: OrdemProducao) -> dict:
+    total, feitas = pcp.progresso(op)
+    return {
+        "id": op.id,
+        "numero": op.numero,
+        "projeto_id": op.projeto_id,
+        "projeto_nome": op.projeto.nome,
+        "lote_id": op.lote_id,
+        "lote_numero": op.lote.numero if op.lote else None,
+        "status": op.status,
+        "motivo_cancelamento": op.motivo_cancelamento,
+        "prioridade": op.prioridade,
+        "data_entrega": op.data_entrega,
+        "criada_em": op.criada_em,
+        "total_unidades": len(op.unidades),
+        "etapas_total": total,
+        "etapas_concluidas": feitas,
+        "progresso_pct": round(100 * feitas / total, 1) if total else 0.0,
+    }
+
+
+def _ativas(op: OrdemProducao, apenas_reposicoes: bool = False) -> list:
+    """Peças que ainda vão para a fábrica (refugadas saem), opcionalmente só as reposições."""
+    return [u for u in op.unidades if u.ativa and (not apenas_reposicoes or u.reposicao_de_id)]
+
+
+def carregar_op(db: Session, emp: Empresa, op_id: int) -> OrdemProducao:
+    op = db.get(OrdemProducao, op_id)
+    if op is None or op.empresa_id != emp.id:
+        raise HTTPException(404, "OP não encontrada")
+    return op
+
+
+@router.post("/projetos/{projeto_id}/ops", response_model=OPResumo, status_code=201, dependencies=[Depends(PCP)])
+def gerar_op(projeto_id: int, dados: GerarOPIn, emp: Empresa = Depends(empresa_atual),
+             db: Session = Depends(get_db)):
+    projeto = carregar(db, emp, projeto_id)
+    try:
+        op = pcp.gerar_op(db, projeto, dados.prioridade, dados.data_entrega)
+    except pcp.ErroPCP as e:
+        db.rollback()
+        raise HTTPException(e.status, str(e))
+    db.commit()
+    return resumo(op)
+
+
+@router.get("/ops", response_model=list[OPResumo])
+def listar_ops(emp: Empresa = Depends(empresa_atual), db: Session = Depends(get_db)):
+    ops = db.scalars(
+        select(OrdemProducao).where(OrdemProducao.empresa_id == emp.id)
+        .order_by(OrdemProducao.prioridade, OrdemProducao.numero)
+    )
+    return [resumo(op) for op in ops]
+
+
+@router.get("/ops/{op_id}", response_model=OPDetalhe)
+def detalhe_op(op_id: int, emp: Empresa = Depends(empresa_atual), db: Session = Depends(get_db)):
+    op = carregar_op(db, emp, op_id)
+    unidades = []
+    for u in op.unidades:
+        peca = u.peca
+        unidades.append({
+            "status": u.status, "reposicao": u.reposicao_de_id is not None,
+            "codigo_barras": u.codigo_barras,
+            "sequencial": u.sequencial,
+            "peca_id": peca.id, "separacao": peca.separacao,
+            "peca_codigo": peca.codigo,
+            "peca_descricao": peca.descricao,
+            "modulo": peca.modulo.codigo,
+            "ambiente": peca.modulo.ambiente.nome,
+            "material_codigo": peca.material_codigo,
+            "comprimento_mm": peca.comprimento_mm,
+            "largura_mm": peca.largura_mm,
+            "etapas": [
+                {"centro_codigo": e.centro.codigo, "sequencia": e.sequencia,
+                 "concluida_em": e.concluida_em, "operador": e.operador}
+                for e in u.etapas
+            ],
+        })
+    return {**resumo(op), "unidades": unidades}
+
+
+@router.post("/ops/{op_id}/cancelar", response_model=OPResumo, dependencies=[Depends(PCP)])
+def cancelar_op(op_id: int, emp: Empresa = Depends(empresa_atual), db: Session = Depends(get_db)):
+    op = carregar_op(db, emp, op_id)
+    if op.status == StatusOP.CONCLUIDA:
+        raise HTTPException(409, "OP concluída não pode ser cancelada")
+    op.status = StatusOP.CANCELADA
+    op.motivo_cancelamento = op.motivo_cancelamento or "Cancelada pelo PCP"
+    db.flush()
+    from ..models import StatusProjeto
+    ativas = db.scalar(select(func.count()).select_from(OrdemProducao).where(
+        OrdemProducao.projeto_id == op.projeto_id, OrdemProducao.status.in_([StatusOP.ABERTA, StatusOP.EM_PRODUCAO])))
+    if not ativas and op.projeto.status == StatusProjeto.PRODUCAO:
+        op.projeto.status = StatusProjeto.LIBERADO  # sem OP ativa, o projeto pode ser programado de novo
+    db.commit()
+    return resumo(op)
+
+
+@router.post("/ops/{op_id}/voltar-programacao", response_model=OPResumo)
+def voltar_programacao(op_id: int, usuario: Usuario = Depends(PCP), db: Session = Depends(get_db)):
+    """Desfaz a programação de uma OP que a fábrica ainda não tocou; o projeto volta a LIBERADO."""
+    from ..services import lotes  # evita import circular com o roteador de lotes
+    op = db.get(OrdemProducao, op_id)
+    if op is None or op.empresa_id != usuario.empresa_id:
+        raise HTTPException(404, "OP não encontrada")
+    try:
+        lotes.voltar_op(db, op, usuario)
+    except pcp.ErroPCP as e:
+        db.rollback()
+        raise HTTPException(e.status, str(e))
+    db.commit()
+    return resumo(op)
+
+
+@router.post("/apontamentos", response_model=ApontamentoOut)
+def apontar(dados: ApontamentoIn, usuario: Usuario = Depends(APONTAR),
+            db: Session = Depends(get_db)):
+    # Quem deu a baixa vem do login, não de um campo digitado
+    try:
+        unidade, proxima = pcp.apontar(db, usuario.empresa_id, dados.codigo_barras,
+                                       dados.centro_codigo, usuario)
+    except pcp.ErroPCP as e:
+        db.rollback()
+        raise HTTPException(e.status, str(e))
+    db.commit()
+    op = unidade.op
+    from ..services import separacao
+    classe = separacao.mapa(db, usuario.empresa_id).get(unidade.peca.separacao)
+    return {
+        "separacao": classe.codigo if classe else None, "separacao_nome": classe.nome if classe else None,
+        "lote_numero": op.lote.numero if op.lote else None, "projeto_codigo": op.projeto.codigo,
+        "cliente": op.projeto.cliente.nome if op.projeto.cliente else None,
+        "codigo_barras": unidade.codigo_barras,
+        "peca": f"{unidade.peca.modulo.codigo}/{unidade.peca.codigo} - {unidade.peca.descricao}",
+        "centro_codigo": dados.centro_codigo.upper(),
+        "proxima_etapa": proxima.centro.codigo if proxima else None,
+        "op_numero": op.numero,
+        "op_status": op.status,
+        "op_progresso_pct": resumo(op)["progresso_pct"],
+    }
+
+
+@router.get("/painel", response_model=Painel)
+def painel(emp: Empresa = Depends(empresa_atual), db: Session = Depends(get_db)):
+    ops = list(db.scalars(
+        select(OrdemProducao).where(
+            OrdemProducao.empresa_id == emp.id,
+            OrdemProducao.status.in_([StatusOP.ABERTA, StatusOP.EM_PRODUCAO]),
+        ).order_by(OrdemProducao.prioridade, OrdemProducao.data_entrega)
+    ))
+    hoje = date.today()
+    return {
+        "ops_abertas": sum(1 for o in ops if o.status == StatusOP.ABERTA),
+        "ops_em_producao": sum(1 for o in ops if o.status == StatusOP.EM_PRODUCAO),
+        "ops_atrasadas": sum(1 for o in ops if o.data_entrega and o.data_entrega < hoje),
+        "centros": pcp.fila_por_centro(db, emp.id),
+        "ops": [resumo(o) for o in ops],
+    }
+
+
+def montar_plano(emp: Empresa, unidades: list) -> dict:
+    """Plano de corte por material para qualquer conjunto de peças (uma OP ou um lote inteiro)."""
+    grupos: dict[str, list] = {}
+    for u in unidades:
+        grupos.setdefault(u.peca.material_codigo, []).append(u)
+    materiais = []
+    for codigo, unidades_mat in sorted(grupos.items()):
+        mat = unidades_mat[0].peca.material
+        medida_padrao = not (mat and mat.comprimento_mm and mat.largura_mm)
+        comp = emp.chapa_comprimento_mm if medida_padrao else mat.comprimento_mm
+        larg = emp.chapa_largura_mm if medida_padrao else mat.largura_mm
+        descricoes = {u.codigo_barras: f"{u.op.projeto.codigo} {u.peca.modulo.codigo}/{u.peca.descricao}"
+                      if len({x.op.projeto_id for x in unidades}) > 1 else f"{u.peca.modulo.codigo}/{u.peca.descricao}"
+                      for u in unidades_mat}
+        chapas, nao_cabem = corte.otimizar(
+            [corte.PecaCorte(u.codigo_barras, u.peca.comprimento_mm, u.peca.largura_mm, u.peca.veio)
+             for u in unidades_mat],
+            comp, larg, emp.serra_mm, emp.refilo_mm,
+        )
+        area_total = sum(c.comprimento * c.largura for c in chapas)
+        materiais.append({
+            "material_codigo": codigo,
+            "descricao": mat.descricao if mat else codigo,
+            "espessura_mm": unidades_mat[0].peca.espessura_mm,
+            "chapa_comprimento_mm": comp, "chapa_largura_mm": larg, "medida_padrao": medida_padrao,
+            "total_pecas": len(unidades_mat), "total_chapas": len(chapas),
+            "aproveitamento_pct": round(100 * sum(c.area_usada for c in chapas) / area_total, 1) if area_total else 0,
+            "chapas": [{
+                "numero": i, "aproveitamento_pct": round(100 * c.aproveitamento, 1),
+                "pecas": [{**vars(pos), "descricao": descricoes[pos.ref]} for pos in c.pecas],
+            } for i, c in enumerate(chapas, start=1)],
+            "nao_cabem": [f"{r} {descricoes[r]}" for r in nao_cabem],
+        })
+    return {"serra_mm": emp.serra_mm, "refilo_mm": emp.refilo_mm,
+            "total_chapas": sum(m["total_chapas"] for m in materiais), "materiais": materiais}
+
+
+@router.get("/ops/{op_id}/plano-corte", response_model=PlanoCorte)
+def plano_corte(op_id: int, apenas_reposicoes: bool = False, emp: Empresa = Depends(empresa_atual),
+                db: Session = Depends(get_db)):
+    op = carregar_op(db, emp, op_id)
+    return {"op_numero": op.numero, "titulo": f"OP {op.numero}", **montar_plano(emp, _ativas(op, apenas_reposicoes))}
+
+
+def _limpo(texto: str, n: int) -> str:
+    # ^ e ~ são comandos ZPL; acentos saem com ^CI28 (UTF-8)
+    return (texto or "").replace("^", " ").replace("~", " ")[:n]
+
+
+def _origem(u) -> str:
+    """Quem é o dono da peça: cliente (projeto), ambiente e lote. É o que separa a expedição."""
+    op = u.op
+    lote = f"L{op.lote.numero} " if op.lote else ""
+    sep = f" · SEPARAR {u.peca.separacao}" if u.peca.separacao else ""
+    return f"{lote}{op.projeto.codigo} · {op.projeto.nome} · {u.peca.modulo.ambiente.nome}{sep}"
+
+
+def montar_zpl(unidades: list) -> str:
+    """Etiquetas 100 x 50 mm (203 dpi) para impressora Zebra, uma por peça."""
+    blocos = []
+    for u in unidades:
+        p, op = u.peca, u.op
+        roteiro = " > ".join(e.centro.codigo for e in u.etapas)
+        blocos.append("\n".join([
+            "^XA^CI28^PW800^LL400",
+            f"^FO20,15^A0N,26,26^FD{_limpo(_origem(u), 56)}^FS",
+            f"^FO20,50^A0N,34,34^FD{_limpo(p.descricao, 40)}^FS",
+            f"^FO20,92^A0N,26,26^FD{_limpo(p.modulo.codigo + ' - ' + p.modulo.descricao, 52)}^FS",
+            f"^FO20,126^A0N,30,30^FD{p.comprimento_mm:g} x {p.largura_mm:g} x {(p.espessura_mm or 0):g} mm^FS",
+            f"^FO20,162^A0N,24,24^FD{_limpo(p.material_codigo, 40)}  OP {op.numero}  {u.sequencial}/{len(op.unidades)}^FS",
+            f"^FO20,192^A0N,22,22^FD{_limpo(roteiro, 60)}^FS",
+            f"^FO20,225^BY3^BCN,120,Y,N,N^FD{u.codigo_barras}^FS",
+            "^XZ",
+        ]))
+    return "\n".join(blocos) + "\n"
+
+
+ESTILO_ETIQUETA = """@page {{ size: 100mm 50mm; margin: 0; }}
+* {{ box-sizing: border-box; }}
+body {{ margin: 0; font: 9pt/1.2 system-ui, Arial, sans-serif; color: #000; background: #fff; }}
+.barra {{ padding: 10px; background: #eee; font-size: 12pt; display: flex; gap: 12px; align-items: center; }}
+.etq {{ width: 100mm; height: 50mm; padding: 2.5mm 3mm; page-break-after: always; overflow: hidden;
+        display: grid; grid-template-rows: auto auto auto auto auto 1fr; gap: .6mm; border-bottom: 1px dashed #bbb; }}
+.topo {{ display: flex; justify-content: space-between; gap: 2mm; font-size: 7pt; }}
+.topo span:first-child {{ font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }}
+.peca {{ font-size: 12pt; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }}
+.mod, .rot {{ font-size: 7.5pt; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }}
+.med {{ font-size: 11pt; font-weight: 700; }} .med small {{ font-size: 7.5pt; font-weight: 400; }}
+.cb {{ display: flex; align-items: center; gap: 2mm; }} .cb svg {{ height: 12mm; width: auto; }}
+.cb span {{ font: 8pt monospace; }}
+.lista {{ font-size: 7pt; columns: 2; column-gap: 3mm; overflow: hidden; }}
+@media print {{ .barra {{ display: none; }} .etq {{ border: 0; }} }}"""
+
+
+def pagina_etiquetas(titulo: str, blocos: list[str], rotulo: str) -> str:
+    estilo = ESTILO_ETIQUETA.replace("{{", "{").replace("}}", "}")
+    return f"""<!doctype html><html lang="pt-BR"><head><meta charset="utf-8">
+<title>{html.escape(titulo)}</title><style>{estilo}</style></head><body>
+<div class="barra"><b>{html.escape(titulo)}</b> · {len(blocos)} {rotulo} de 100 × 50 mm
+<button onclick="print()">Imprimir</button></div>
+{''.join(blocos)}
+</body></html>"""
+
+
+def montar_html(titulo: str, unidades: list) -> str:
+    e = html.escape
+    etiquetas = []
+    for u in unidades:
+        p, op = u.peca, u.op
+        roteiro = " › ".join(et.centro.codigo for et in u.etapas)
+        etiquetas.append(f"""<section class="etq">
+  <div class="topo"><span>{e(_origem(u))}</span><span>OP {op.numero} · {u.sequencial}/{len(op.unidades)}</span></div>
+  <div class="peca">{e(p.descricao)}</div>
+  <div class="mod">{e(p.modulo.codigo)} · {e(p.modulo.descricao)}</div>
+  <div class="med">{p.comprimento_mm:g} × {p.largura_mm:g} × {(p.espessura_mm or 0):g} mm <small>{e(p.material_codigo)}</small></div>
+  <div class="rot">{e(roteiro)}</div>
+  <div class="cb">{code128.svg(u.codigo_barras)}<span>{u.codigo_barras}</span></div>
+</section>""")
+    return pagina_etiquetas(titulo, etiquetas, "etiquetas")
+
+
+@router.get("/ops/{op_id}/etiquetas.zpl", response_class=PlainTextResponse)
+def etiquetas_zpl(op_id: int, apenas_reposicoes: bool = False, emp: Empresa = Depends(empresa_atual),
+                  db: Session = Depends(get_db)):
+    op = carregar_op(db, emp, op_id)
+    return PlainTextResponse(montar_zpl(_ativas(op, apenas_reposicoes)), headers={
+        "Content-Disposition": f'attachment; filename="op{op.numero}_etiquetas.zpl"'})
+
+
+@router.get("/ops/{op_id}/etiquetas.html", response_class=HTMLResponse)
+def etiquetas_html(op_id: int, apenas_reposicoes: bool = False, emp: Empresa = Depends(empresa_atual),
+                   db: Session = Depends(get_db)):
+    """Etiquetas 100 x 50 mm para imprimir pelo navegador (térmica ou A4 de etiquetas)."""
+    op = carregar_op(db, emp, op_id)
+    return HTMLResponse(montar_html(f"OP {op.numero}", _ativas(op, apenas_reposicoes)))
+
+
+# --- Controle de produção: estorno, refugo, consulta ------------------------------
+
+@router.post("/apontamentos/estorno", response_model=OcorrenciaOut)
+def estornar(dados: OcorrenciaIn, usuario: Usuario = Depends(ESTORNO), db: Session = Depends(get_db)):
+    try:
+        producao.estornar(db, usuario.empresa_id, dados.codigo_barras, dados.centro_codigo, dados.motivo, usuario)
+    except pcp.ErroPCP as e:
+        db.rollback()
+        raise HTTPException(e.status, str(e))
+    db.commit()
+    return _ocorrencia_out(db.scalars(select(Ocorrencia).where(Ocorrencia.empresa_id == usuario.empresa_id)
+                                      .order_by(Ocorrencia.id.desc())).first())
+
+
+@router.post("/apontamentos/refugo", response_model=OcorrenciaOut)
+def refugar(dados: OcorrenciaIn, usuario: Usuario = Depends(REFUGO), db: Session = Depends(get_db)):
+    try:
+        producao.refugar(db, usuario.empresa_id, dados.codigo_barras, dados.centro_codigo, dados.motivo, usuario)
+    except pcp.ErroPCP as e:
+        db.rollback()
+        raise HTTPException(e.status, str(e))
+    db.commit()
+    return _ocorrencia_out(db.scalars(select(Ocorrencia).where(Ocorrencia.empresa_id == usuario.empresa_id)
+                                      .order_by(Ocorrencia.id.desc())).first())
+
+
+def _ocorrencia_out(o: Ocorrencia) -> dict:
+    return {"id": o.id, "tipo": o.tipo, "op_id": o.op_id, "op_numero": o.op.numero, "projeto_codigo": o.op.projeto.codigo,
+            "codigo_barras": o.unidade.codigo_barras, "peca": o.unidade.peca.descricao, "centro_codigo": o.centro_codigo,
+            "motivo": o.motivo, "custo_material": o.custo_material,
+            "nova_etiqueta": o.nova_unidade.codigo_barras if o.nova_unidade else None,
+            "usuario": o.usuario_nome, "criado_em": o.criado_em}
+
+
+@router.get("/producao/pecas", response_model=ConsultaPecas)
+def consulta_pecas(projeto_id: int | None = None, op_id: int | None = None, lote_id: int | None = None,
+                   situacao: str | None = None, centro: str | None = None, material: str | None = None,
+                   busca: str | None = None, emp: Empresa = Depends(empresa_atual), db: Session = Depends(get_db)):
+    return producao.consultar_pecas(db, emp.id, projeto_id, op_id, lote_id, (situacao or "").upper() or None,
+                                    centro, material, busca)
+
+
+@router.get("/producao/baixas", response_model=HistoricoBaixas)
+def baixas(de: date | None = None, ate: date | None = None, centro: str | None = None, operador: str | None = None,
+           emp: Empresa = Depends(empresa_atual), db: Session = Depends(get_db)):
+    ate = ate or date.today()
+    de = de or ate
+    return producao.historico_baixas(db, emp.id, datetime.combine(de, datetime.min.time()),
+                                     datetime.combine(ate, datetime.max.time()), centro, operador)
+
+
+@router.get("/producao/ocorrencias", response_model=list[OcorrenciaOut])
+def ocorrencias(tipo: str | None = None, op_id: int | None = None, emp: Empresa = Depends(empresa_atual),
+                db: Session = Depends(get_db)):
+    consulta = select(Ocorrencia).where(Ocorrencia.empresa_id == emp.id)
+    if tipo:
+        consulta = consulta.where(Ocorrencia.tipo == tipo.upper())
+    if op_id:
+        consulta = consulta.where(Ocorrencia.op_id == op_id)
+    return [_ocorrencia_out(o) for o in db.scalars(consulta.order_by(Ocorrencia.id.desc()).limit(300))]

@@ -1,0 +1,160 @@
+{
+  "formato": "erp-moveleiro-setup",
+  "versao": 1,
+  "nome": "Indústria com tupia e tamburato",
+  "descricao": "Fábrica com setores próprios de tupia e prensa de tamburato no roteiro, metas mensais em m² e alçadas comerciais mais rígidas. Ajuste os números à realidade da base antes de aplicar.",
+  "fabrica": {
+    "perda_chapa_pct": 15,
+    "perda_fita_pct": 10,
+    "chapa_comprimento_mm": 2750,
+    "chapa_largura_mm": 1850,
+    "serra_mm": 4,
+    "refilo_mm": 10,
+    "garantia_meses": 12,
+    "caixa_max_modulos": 3
+  },
+  "fiscal": {
+    "ncm_padrao": "94034000",
+    "cfop_interno": "5101",
+    "cfop_interestadual": "6101",
+    "csosn_padrao": "102"
+  },
+  "setores": [
+    {
+      "codigo": "CORTE",
+      "nome": "Corte / Seccionadora",
+      "sequencia": 10,
+      "regra": "TODAS",
+      "ativo": true,
+      "exige_apontamento": true
+    },
+    {
+      "codigo": "BORDA",
+      "nome": "Coladeira de Borda",
+      "sequencia": 20,
+      "regra": "COM_FITA",
+      "ativo": true,
+      "exige_apontamento": true
+    },
+    {
+      "codigo": "TUPIA",
+      "nome": "Tupia",
+      "sequencia": 25,
+      "regra": "SOB_DEMANDA",
+      "ativo": true,
+      "exige_apontamento": true
+    },
+    {
+      "codigo": "USINAGEM",
+      "nome": "Furação / CNC",
+      "sequencia": 30,
+      "regra": "COM_USINAGEM",
+      "ativo": true,
+      "exige_apontamento": true
+    },
+    {
+      "codigo": "PRENSA",
+      "nome": "Prensa de tamburato",
+      "sequencia": 35,
+      "regra": "SOB_DEMANDA",
+      "ativo": true,
+      "exige_apontamento": true
+    },
+    {
+      "codigo": "EMBALAGEM",
+      "nome": "Conferência e Embalagem",
+      "sequencia": 40,
+      "regra": "TODAS",
+      "ativo": true,
+      "exige_apontamento": true
+    }
+  ],
+  "separacoes": [
+    {
+      "codigo": "TUPIA",
+      "nome": "Tupia",
+      "palavras_chave": "tupia, tupiar, curvo, curva, boleado, arredondado, recorte",
+      "centro_codigo": "TUPIA",
+      "vai_para_caixa": true,
+      "ativo": true
+    },
+    {
+      "codigo": "TAMBURATO",
+      "nome": "Tamburato",
+      "palavras_chave": "tamburato, colmeia, colméia, colmeia de papel",
+      "centro_codigo": "PRENSA",
+      "vai_para_caixa": false,
+      "ativo": true
+    },
+    {
+      "codigo": "TRANSFORMACAO",
+      "nome": "Vira outra peça",
+      "palavras_chave": "engrosso, engrossado, engrossamento, duplado, duplagem, colagem",
+      "centro_codigo": null,
+      "vai_para_caixa": false,
+      "ativo": true
+    }
+  ],
+  "comercial": {
+    "desconto_max_vendedor": 4,
+    "desconto_max_gerente": 10,
+    "margem_minima": 25,
+    "comissao_vendedor_pct": 3,
+    "limite_divergencia_pct": 2,
+    "validade_proposta_dias": 15,
+    "etapas": [
+      "Contato",
+      "Briefing",
+      "Projeto",
+      "Apresentação",
+      "Negociação"
+    ],
+    "condicoes": [
+      {
+        "nome": "À vista",
+        "parcelas": 1,
+        "ajuste_pct": -5.0
+      },
+      {
+        "nome": "Entrada + 3x",
+        "parcelas": 4,
+        "ajuste_pct": 0.0
+      },
+      {
+        "nome": "6x sem juros",
+        "parcelas": 6,
+        "ajuste_pct": 0.0
+      },
+      {
+        "nome": "10x",
+        "parcelas": 10,
+        "ajuste_pct": 4.0
+      }
+    ],
+    "prices_url": "https://prices-api.promob.com/api",
+    "prices_tabela_preferida": null,
+    "prices_colunas": {}
+  },
+  "gestao": {
+    "metas": {
+      "faturamento_mes": 450000,
+      "m2_vendido_mes": 900,
+      "m2_produzido_mes": 900,
+      "preco_m2": 500,
+      "custo_m2": 260,
+      "margem_pct": 25,
+      "pontualidade_pct": 95,
+      "refugo_pct": 1.5,
+      "conversao_pct": 30
+    },
+    "limites_wip": {
+      "NEGOCIACAO": 25,
+      "ENGENHARIA": 8,
+      "LIBERADO": 5,
+      "PRODUCAO": 8,
+      "EXPEDICAO": 5
+    },
+    "dias_uteis_mes": 21,
+    "horas_turno": 8.8
+  }
+}

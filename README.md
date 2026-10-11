@@ -1,5 +1,7 @@
 # Configurador Externo: Gerenciador de Setups Promob
 
+> Este repositório também abriga o **ERP Moveleiro** (Engenharia + PCP), na pasta [`erp/`](erp/README.md).
+
 Código-fonte do `ConfiguradorExterno.exe` ("Gerenciador de Setups Promob - ProTech (Filtro Avançado)").
 Ele foi reconstruído a partir do executável original, um app Python 3.14 + Tkinter empacotado com PyInstaller.
 Compilado com Python 3.14, este `editor_promob.py` gera um bytecode **idêntico** ao do executável, instrução por instrução, nos 83 blocos de código.

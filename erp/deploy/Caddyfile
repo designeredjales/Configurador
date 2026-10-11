@@ -1,0 +1,27 @@
+# Proxy HTTPS do ERP Moveleiro. Certificado automático (Let's Encrypt) para ERP_DOMINIO.
+{
+	email {$ACME_EMAIL}
+}
+
+{$ERP_DOMINIO} {
+	encode zstd gzip
+	header {
+		Strict-Transport-Security "max-age=31536000; includeSubDomains"
+		-Server
+	}
+	request_body {
+		max_size 25MB
+	}
+	# Durante a subida ou uma atualização, a requisição espera o ERP voltar (até 60 s) em vez de dar erro
+	reverse_proxy erp:8000 {
+		health_uri /api/saude
+		health_interval 5s
+		health_passes 1
+		lb_try_duration 60s
+		lb_try_interval 1s
+	}
+	log {
+		output stdout
+		format json
+	}
+}

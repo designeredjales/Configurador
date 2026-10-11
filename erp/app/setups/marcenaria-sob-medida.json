@@ -1,0 +1,136 @@
+{
+  "formato": "erp-moveleiro-setup",
+  "versao": 1,
+  "nome": "Marcenaria sob medida (padrão)",
+  "descricao": "Ponto de partida para marcenarias de móveis planejados: quatro setores, separação por palavra-chave, política comercial conservadora e kanban com limite de WIP.",
+  "fabrica": {
+    "perda_chapa_pct": 15,
+    "perda_fita_pct": 10,
+    "chapa_comprimento_mm": 2750,
+    "chapa_largura_mm": 1850,
+    "serra_mm": 4,
+    "refilo_mm": 10,
+    "garantia_meses": 12,
+    "caixa_max_modulos": 3
+  },
+  "fiscal": {
+    "ncm_padrao": "94034000",
+    "cfop_interno": "5101",
+    "cfop_interestadual": "6101",
+    "csosn_padrao": "102"
+  },
+  "setores": [
+    {
+      "codigo": "CORTE",
+      "nome": "Corte / Seccionadora",
+      "sequencia": 10,
+      "regra": "TODAS",
+      "ativo": true,
+      "exige_apontamento": true
+    },
+    {
+      "codigo": "BORDA",
+      "nome": "Coladeira de Borda",
+      "sequencia": 20,
+      "regra": "COM_FITA",
+      "ativo": true,
+      "exige_apontamento": true
+    },
+    {
+      "codigo": "USINAGEM",
+      "nome": "Furação / CNC",
+      "sequencia": 30,
+      "regra": "COM_USINAGEM",
+      "ativo": true,
+      "exige_apontamento": true
+    },
+    {
+      "codigo": "EMBALAGEM",
+      "nome": "Conferência e Embalagem",
+      "sequencia": 40,
+      "regra": "TODAS",
+      "ativo": true,
+      "exige_apontamento": true
+    }
+  ],
+  "separacoes": [
+    {
+      "codigo": "TUPIA",
+      "nome": "Tupia",
+      "palavras_chave": "tupia, tupiar, curvo, curva, boleado, arredondado, recorte",
+      "centro_codigo": null,
+      "vai_para_caixa": true,
+      "ativo": true
+    },
+    {
+      "codigo": "TAMBURATO",
+      "nome": "Tamburato",
+      "palavras_chave": "tamburato, colmeia, colméia, colmeia de papel",
+      "centro_codigo": null,
+      "vai_para_caixa": false,
+      "ativo": true
+    },
+    {
+      "codigo": "TRANSFORMACAO",
+      "nome": "Vira outra peça",
+      "palavras_chave": "engrosso, engrossado, engrossamento, duplado, duplagem, colagem",
+      "centro_codigo": null,
+      "vai_para_caixa": false,
+      "ativo": true
+    }
+  ],
+  "comercial": {
+    "desconto_max_vendedor": 5,
+    "desconto_max_gerente": 12,
+    "margem_minima": 20,
+    "comissao_vendedor_pct": 3,
+    "limite_divergencia_pct": 3,
+    "validade_proposta_dias": 15,
+    "etapas": [
+      "Contato",
+      "Briefing",
+      "Projeto",
+      "Apresentação",
+      "Negociação"
+    ],
+    "condicoes": [
+      {
+        "nome": "À vista",
+        "parcelas": 1,
+        "ajuste_pct": -5.0
+      },
+      {
+        "nome": "Entrada + 3x",
+        "parcelas": 4,
+        "ajuste_pct": 0.0
+      },
+      {
+        "nome": "6x sem juros",
+        "parcelas": 6,
+        "ajuste_pct": 0.0
+      },
+      {
+        "nome": "10x",
+        "parcelas": 10,
+        "ajuste_pct": 4.0
+      }
+    ],
+    "prices_url": "https://prices-api.promob.com/api",
+    "prices_tabela_preferida": null,
+    "prices_colunas": {}
+  },
+  "gestao": {
+    "metas": {
+      "pontualidade_pct": 90,
+      "refugo_pct": 2
+    },
+    "limites_wip": {
+      "ENGENHARIA": 6,
+      "LIBERADO": 4,
+      "PRODUCAO": 6,
+      "EXPEDICAO": 4
+    },
+    "dias_uteis_mes": 22,
+    "horas_turno": 8.8
+  }
+}

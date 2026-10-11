@@ -1,0 +1,82 @@
+# Ambiente completo: ERP + PostgreSQL + backup. Uso: copie .env.exemplo para .env, ajuste e rode
+#   docker compose up -d
+# Na VPS, com HTTPS (Caddy), o .env define COMPOSE_FILE=docker-compose.yml:docker-compose.vps.yml
+# e ERP_BIND=127.0.0.1: o ERP só responde pelo proxy. O script scripts/provisionar.sh faz tudo isso.
+x-logs: &logs
+  logging:
+    driver: json-file
+    options: {max-size: "10m", max-file: "5"}   # logs não enchem o disco
+
+services:
+  banco:
+    image: postgres:16
+    restart: unless-stopped
+    <<: *logs
+    environment:
+      POSTGRES_DB: erp
+      POSTGRES_USER: erp
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?defina POSTGRES_PASSWORD no .env}
+    volumes:
+      - dados:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U erp -d erp"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  erp:
+    build: .
+    image: erp-moveleiro:${APP_VERSAO:-local}
+    restart: unless-stopped
+    <<: *logs
+    depends_on:
+      banco:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgresql+psycopg://erp:${POSTGRES_PASSWORD}@banco:5432/erp
+      ERP_SECRET: ${ERP_SECRET:?defina ERP_SECRET no .env (48+ caracteres aleatórios)}
+      ERP_URL_PUBLICA: ${ERP_URL_PUBLICA:-http://localhost:8000}
+      SMTP_HOST: ${SMTP_HOST:-}
+      SMTP_PORTA: ${SMTP_PORTA:-587}
+      SMTP_USUARIO: ${SMTP_USUARIO:-}
+      SMTP_SENHA: ${SMTP_SENHA:-}
+      SMTP_REMETENTE: ${SMTP_REMETENTE:-}
+      SENTRY_DSN: ${SENTRY_DSN:-}
+      APP_VERSAO: ${APP_VERSAO:-}
+      ERP_PASTA_BACKUP: /backups
+      ERP_PASTA_ARQUIVOS: /app/arquivos
+      ERP_AGENDADOR: ${ERP_AGENDADOR:-1}
+      TZ: ${TZ:-America/Sao_Paulo}
+    volumes:
+      - arquivos:/app/arquivos   # renders e imagens das propostas comerciais
+      - backups:/backups:ro   # só para o painel "Saúde do sistema" mostrar o último backup
+    ports:
+      - "${ERP_BIND:-0.0.0.0}:${ERP_PORTA:-8000}:8000"
+
+  # Backup diário do banco (pg_dump), com retenção e cópia opcional para a nuvem (rclone)
+  backup:
+    image: postgres:16
+    restart: unless-stopped
+    <<: *logs
+    depends_on:
+      banco:
+        condition: service_healthy
+    env_file: .env            # RCLONE_DESTINO e RCLONE_CONFIG_* (cópia na nuvem) vêm daqui
+    environment:
+      PGHOST: banco
+      PGUSER: erp
+      PGDATABASE: erp
+      PGPASSWORD: ${POSTGRES_PASSWORD}
+      BACKUP_HORA: ${BACKUP_HORA:-03}
+      BACKUP_DIAS: ${BACKUP_DIAS:-14}
+      TZ: ${TZ:-America/Sao_Paulo}
+    volumes:
+      - backups:/backups
+      - arquivos:/arquivos:ro   # renders das propostas entram no backup
+      - ./scripts:/scripts:ro
+    entrypoint: ["bash", "/scripts/backup.sh"]
+
+volumes:
+  dados:
+  arquivos:
+  backups:
