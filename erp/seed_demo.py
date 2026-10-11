@@ -91,6 +91,21 @@ with TestClient(app) as c:
     c.post(f"/api/versoes/{v['id']}/negociar", json={"desconto_pct": 8, "condicao": "6x sem juros"}, headers=hv)
     c.post("/api/oportunidades", json={"titulo": "Dormitório casal", "cliente_nome": "Carlos Mendes",
                                        "proxima_acao": "Visita técnica para medição"}, headers=hv)
+    # Configurador: biblioteca de exemplo (balcão BL101 e aéreo de alumínio), engenharia de produto e vendas configuradas
+    c.post("/api/setup/aplicar", json={"modelo": "produtos-exemplo", "secoes": ["produtos"], "simular": False}, headers=h)
+    c.post("/api/usuarios", json={"nome": "Bruno (engenharia de produto)", "email": "engenharia@demo.com", "senha": "demo12345",
+                                  "perfil": "ENGENHARIA"}, headers=h)
+    modelos = {m["codigo"]: m["id"] for m in c.get("/api/configurador/modelos", headers=hv).json()}
+    c.post(f"/api/oportunidades/{neg['id']}/versoes/configurada", json={"incluir_xml_da_versao": v["id"], "itens": [
+        {"modelo_id": modelos["AEREO_ALU"], "respostas": {"LARGURA": 1000, "ALTURA": 700, "ALUMINIO": "PRETO", "VIDRO": "FUME"},
+         "quantidade": 2, "ambiente": "Área gourmet"}]}, headers=hv)
+    lav = c.post("/api/oportunidades", json={"titulo": "Lavanderia e copa", "cliente_nome": "Marina Alves",
+                                             "proxima_acao": "Enviar proposta", "proxima_acao_em": str(hoje + timedelta(days=1))}, headers=hv).json()
+    c.post(f"/api/oportunidades/{lav['id']}/versoes/configurada", json={"itens": [
+        {"modelo_id": modelos["BL101"], "respostas": {"LARGURA": 600, "PROFUNDIDADE": 610, "CORPO": "BR", "FRENTE": "CV"}, "quantidade": 2,
+         "ambiente": "Lavanderia"},
+        {"modelo_id": modelos["BL101"], "respostas": {"LARGURA": 450, "OPCAO_FRENTE": "SEM_FRENTE"}, "ambiente": "Lavanderia"},
+        {"modelo_id": modelos["AEREO_ALU"], "respostas": {"LARGURA": 800, "ALTURA": 900}, "ambiente": "Copa"}]}, headers=hv)
     # Controladoria: centros de custo, verbas, alçada, histórico de antes do ERP, cenário de planejamento
     c.post("/api/usuarios", json={"nome": "Rafael (financeiro)", "email": "financeiro@demo.com", "senha": "demo12345",
                                   "perfil": "FINANCEIRO"}, headers=h)
@@ -132,4 +147,4 @@ with TestClient(app) as c:
     c.post("/api/controladoria/consolidar", json={"meses": 2}, headers=h)
     print(f"Demonstração criada: {r['pecas']} peças importadas do XML.\n"
           "Abra http://localhost:8000 e entre com admin@demo.com / demo12345 "
-          "(operador: operador@demo.com, expedição: expedicao@demo.com, vendas: vendas@demo.com, financeiro: financeiro@demo.com, senha demo12345)")
+          "(operador: operador@demo.com, expedição: expedicao@demo.com, vendas: vendas@demo.com, financeiro: financeiro@demo.com, engenharia: engenharia@demo.com, senha demo12345)")

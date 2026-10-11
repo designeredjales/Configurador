@@ -28,6 +28,7 @@ Projeto (Promob) → Engenharia (BOM + consumo + gate) → Ordem de Produção �
 | **Fiscal e banco** | NF-e de venda por emissor integrado (Focus NFe) com validação prévia e CFOP automático; conciliação bancária por extrato OFX com sugestão de pareamento |
 | **Indicadores do dono** | Painel único: vendas contratadas, margem de contribuição ponderada, pontualidade, prazo contrato→entrega, gargalo da fábrica, retrabalho, caixa vencido e alertas |
 | **Montagem e pós-obra** | Agenda de montagem (só inicia com a produção concluída), checklist de entrega com quem conferiu, entrega com nome de quem recebeu; assistência técnica com garantia, causa raiz e custo lançado no DRE da obra |
+| **Configurador de produtos** | Produtos que nascem no ERP (ex.: alumínio, linha "menos sob medida"): a engenharia programa linha → grupos → modelos com herança (lógica do Promob Catalog), perguntas com regras (lógica da Focco), componentes e acabamentos; o vendedor escolhe na venda dentro do que foi liberado. O consumo de matéria-prima sai da geometria; a configuração vira módulo do projeto no mesmo formato do XML do Promob |
 | **Compras (MRP)** | Sugestão de compra = reservado + mínimo − saldo − em pedido; pedido ao fornecedor, envio, recebimento parcial ou total, cancelamento |
 
 ## Pronto para produção
@@ -57,7 +58,7 @@ Cada tela e cada ação do sistema é uma **função**. O perfil define o modelo
 | Módulo | Função | Modelo por perfil |
 |---|---|---|
 | Gestão | Indicadores do dono | Administrador, Gestor |
-| Engenharia | Projetos e engenharia · Cadastro de materiais | Engenharia (+ Compras: materiais) |
+| Engenharia | Projetos e engenharia · Engenharia de produto (configurador) · Cadastro de materiais | Engenharia (+ Compras: materiais) |
 | Comercial | Cadastro de clientes · Funil e negociação · Aprovar descontos e auditoria | Engenharia, Financeiro (clientes) · Vendedor (funil e clientes) |
 | Produção | Ordens de produção (inclui lotes) · Apontamento · Estornar apontamento · Refugo e reposição | PCP (todas) · Operador (só apontamento) |
 | Expedição | Caixa master e expedição | PCP |
@@ -202,6 +203,22 @@ O orçamento continua no Promob. O ERP recebe o resultado e conduz a negociaçã
 - **Promob Prices:** com o token da conta (gravado só pela tela, nunca exibido), o ERP baixa a tabela ativa (`prices-api.promob.com`) e confere os itens do orçamento.
 - **Configurações do comercial** (administrador): limites de desconto, margem mínima, comissão, limite de divergência, validade da proposta, etapas do funil, condições de pagamento, parceiros com % de RT e o token do Prices.
 
+## Configurador de produtos
+
+Para os produtos que nascem no ERP e não no Promob (alumínio, linhas padronizadas, "menos sob medida"). **A engenharia programa o que fica disponível; o vendedor escolhe na hora da venda.** Aba **Produtos** (função "Engenharia de produto"):
+
+- **Biblioteca com herança** (Promob Catalog): linha → grupos → modelos. O que está no grupo vale para todos os modelos abaixo; o modelo substitui pelo mesmo código ou retira o herdado. **Subconjuntos** (REF de agregados) são reaproveitados: a porta de alumínio com vidro é cadastrada uma vez e usada em vários modelos, com as medidas passadas por quem a contém.
+- **Perguntas** (Focco: variáveis): número com faixa e medidas de catálogo (valores propostos), escolha, sim/não, texto e **acabamento**; "mostrar só se", validações com mensagem ao vendedor, opções bloqueadas por condição e perguntas **calculadas** (sombra), como a metragem do vão.
+- **Componentes** (Catalog: agregados): peça de chapa, perfil, vidro, item comprado ou subconjunto, cada um com condição de entrada, quantidade e medidas por fórmula. A engenharia **não digita quantidade de matéria-prima**: chapa em m² com perda, fita em metros por lado, perfil em metros + serra (ou fração da barra), vidro em m², itens em unidade.
+- **Acabamentos** (Catalog: modelo definição/tipo): a peça aponta para o componente (`@CORPO.CHAPA15`), a opção escolhida diz o material. Cor nova é uma opção nova no acabamento, sem mexer em nenhum produto; "Sugerir materiais" procura no cadastro pelo tipo, espessura e nome.
+- **Fórmulas** nas duas sintaxes: Catalog (`$PW$ - 32`, `($PH$ <= 700) ? 2 : 3`, `&&`, `Math.round`) e Focco (`[LARGURA] - 32`, `%TAXACOLA%`, `[PROFUNDIDADE] = 610 >> 10;`), mais `faixa(x, 500, 8, 10)`, `se(c; a; b)` e `@CORPO.espessura`. O avaliador não executa código; erro de sintaxe aparece com a posição ao digitar e ao salvar.
+- **Preço**: custo (material + mão de obra pelo custo-hora dos setores) × markup do cenário principal da controladoria (ou do produto), ou fórmula de tabela; adicionais por opção (ex.: porta Carvalho + R$ 35).
+- **Testar configuração** mostra o que o vendedor vai ver e a engenharia gerada: árvore, peças, perfis, consumo, custo e pendências.
+
+Na **oportunidade**, "Configurar produtos" abre o formulário que se ajusta às regras; os itens vão para uma nova versão da proposta, sozinhos ou **somados ao XML do Promob** da última versão. A mesma resposta com a mesma engenharia reaproveita o código (`BL101.0001`); mudou a engenharia, código novo, e o vendido fica congelado. No fechamento, os módulos configurados entram no projeto como peças e itens no formato do Promob (corte, PCP, compras, custo e DRE seguem iguais); reimportar o executivo do Promob não apaga os produtos do configurador. A engenharia também acrescenta um produto configurado direto num projeto em engenharia.
+
+O modelo de setup **"Configurador: biblioteca de exemplo"** traz o balcão BL101 (cenário do treinamento do configurador estruturado) e um aéreo com portas de alumínio e vidro, com acabamentos, constantes e os materiais que faltarem. A biblioteca vai junto no setup exportado (seção `produtos`).
+
 ## Setup da base
 
 Cada fábrica é uma base com a sua parametrização. Em **Configurações → Setup da base** o administrador:
@@ -332,6 +349,8 @@ erp/
       promob_xml.py    # leitor do XML do Promob
       importacao.py    # XML/CSV → árvore do projeto, cadastro automático de materiais
       engenharia.py    # consumo, pendências, liberação
+      formulas.py      # linguagem de regras do configurador (sintaxe Catalog e Focco)
+      configurador.py  # biblioteca com herança, perguntas, componentes, acabamentos, preço
       pcp.py           # OP, roteiro, apontamento, filas
       producao.py      # estorno, refugo/reposição, consulta de peças e baixas
       lotes.py         # formação e controle de lotes de produção

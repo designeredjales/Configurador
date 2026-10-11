@@ -63,7 +63,9 @@ def importar_csv(db: Session, projeto: Projeto, conteudo: str, origem: str = "CS
         for m in db.scalars(select(Material).where(Material.empresa_id == projeto.empresa_id))
     }
 
-    # Reimportar substitui a engenharia anterior do projeto
+    # Reimportar substitui a engenharia anterior do projeto (os produtos do configurador ficam)
+    from .configurador import gerar_modulos, preservar
+    configurados = preservar(projeto)
     projeto.ambientes.clear()
     db.flush()
 
@@ -140,6 +142,9 @@ def importar_csv(db: Session, projeto: Projeto, conteudo: str, origem: str = "CS
             raise ErroImportacao(f"Linha {n}: {e}") from e
 
     projeto.origem = origem
+    if configurados:
+        gerar_modulos(db, projeto, configurados)
+        avisos.append(f"{len(configurados)} produto(s) do configurador mantido(s) no projeto")
     db.flush()
     return {
         "projeto_id": projeto.id,
@@ -217,6 +222,8 @@ def importar_promob_xml(db: Session, projeto: Projeto, conteudo: bytes) -> dict:
                 db.add(cliente)
             projeto.cliente = cliente
 
+    from .configurador import gerar_modulos, preservar
+    configurados = preservar(projeto)  # produtos do configurador não vêm do XML: ficam no projeto
     projeto.ambientes.clear()
     db.flush()
 
@@ -264,6 +271,13 @@ def importar_promob_xml(db: Session, projeto: Projeto, conteudo: bytes) -> dict:
     projeto.frete_orcado, projeto.montagem_orcada = c.frete, c.montagem
     projeto.condicao_pagamento, projeto.parcelas_sugeridas, projeto.entrada_sugerida = c.condicao, c.parcelas, c.entrada
     projeto.origem = "PROMOB_XML"
+    if configurados:
+        from .configurador import valores
+        gerar_modulos(db, projeto, configurados)
+        preco, custo = valores(db, configurados)
+        projeto.valor_tabela = round((projeto.valor_tabela or 0) + preco, 2)
+        projeto.valor_pedido = round((projeto.valor_pedido or 0) + custo, 2)
+        avisos.append(f"{len(configurados)} produto(s) do configurador mantido(s) no projeto")
     db.flush()
     return {
         "projeto_id": projeto.id,

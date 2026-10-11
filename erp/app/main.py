@@ -11,7 +11,7 @@ from . import models, observabilidade  # noqa: F401  (registra as tabelas)
 from .db import Base, engine
 from .routers import (
     auth, cadastros, carrinhos, comercial, compras, configuracoes, controladoria, expedicao, financeiro, gestao, lotes, planejamento,
-    pos_obra, producao, projetos, sistema,
+    pos_obra, producao, produtos, projetos, sistema,
 )
 
 STATIC = Path(__file__).parent / "static"
@@ -70,6 +70,7 @@ app.include_router(comercial.router)
 app.include_router(gestao.router)
 app.include_router(planejamento.router)
 app.include_router(controladoria.router)
+app.include_router(produtos.router)
 app.mount("/static", StaticFiles(directory=STATIC), name="static")
 
 

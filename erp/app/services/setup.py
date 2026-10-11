@@ -25,7 +25,7 @@ from ..models import (
     Parceiro,
     RegraCentro,
 )
-from . import comercial, controladoria, depara, gestao, markup, promob_prices, separacao
+from . import comercial, configurador, controladoria, depara, gestao, markup, promob_prices, separacao
 
 FORMATO = "erp-moveleiro-setup"
 VERSAO = 1
@@ -40,6 +40,7 @@ SECOES = {
     "gestao": "Metas, WIP do kanban, calendário, tambor e pulmão",
     "depara": "De-para Promob → estoque (casado pelo código do material nesta base)",
     "controladoria": "Centros de custo, regras de aprovação, agenda de consolidação e cenário de planejamento",
+    "produtos": "Configurador de produtos: linhas, grupos, modelos, subconjuntos, acabamentos, constantes (e os materiais que faltarem)",
 }
 CAMPOS_SETOR = ["pessoas", "horas_dia", "eficiencia_pct", "custo_mensal", "minutos_peca", "minutos_m2"]
 CAMPOS_FABRICA = ["perda_chapa_pct", "perda_fita_pct", "chapa_comprimento_mm", "chapa_largura_mm", "serra_mm",
@@ -168,6 +169,13 @@ class Controladoria(_M):
     cenario: dict | None = None  # {"nome", "premissas"} vira o cenário principal
 
 
+class Produtos(_M):
+    config: dict | None = None
+    acabamentos: list[dict] | None = None
+    biblioteca: list[dict] | None = None
+    materiais: list[dict] | None = None
+
+
 class Setup(_M):
     formato: str = FORMATO
     versao: int = VERSAO
@@ -182,6 +190,7 @@ class Setup(_M):
     gestao: Gestao | None = None
     depara: list[DeParaSetup] | None = None
     controladoria: Controladoria | None = None
+    produtos: Produtos | None = None
 
 
 def validar(dados: dict) -> Setup:
@@ -220,6 +229,7 @@ def exportar(db: Session, emp: Empresa, nome: str | None = None) -> dict:
         "gestao": {"metas": cg.metas or {}, "limites_wip": cg.limites_wip or {}, "dias_uteis_mes": cg.dias_uteis_mes,
                    "horas_turno": cg.horas_turno, "pulmao_dias": cg.pulmao_dias, "tambor_codigo": cg.tambor_codigo},
         "controladoria": _exportar_controladoria(db, emp.id),
+        "produtos": configurador.exportar(db, emp.id),
         "depara": [{"codigo_promob": d.codigo_promob, "material_codigo": d.material.codigo, "fator": d.fator,
                     "observacao": d.observacao} for d in sorted(depara.mapa(db, emp.id).values(), key=lambda d: d.codigo_promob)],
     }
@@ -422,6 +432,12 @@ def aplicar(db: Session, emp: Empresa, s: Setup, secoes: list[str] | None = None
                 except depara.ErroDePara as e:
                     raise ErroSetup(f"De-para {dp.codigo_promob}: {e}")
                 mud.append({"secao": "depara", "texto": f"{dp.codigo_promob}: {antes} → {m.codigo} ×{dp.fator:g}"})
+    if "produtos" in escolhidas:
+        try:
+            textos = configurador.aplicar_setup(db, emp.id, s.produtos.model_dump(exclude_none=True))
+        except configurador.ErroConfigurador as e:
+            raise ErroSetup(f"Configurador: {e}" + (f" — {'; '.join(e.detalhes)}" if e.detalhes else ""))
+        mud.extend({"secao": "produtos", "texto": t} for t in textos)
     db.flush()
     return mud
 

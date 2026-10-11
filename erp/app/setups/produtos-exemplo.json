@@ -1,0 +1,138 @@
+{
+  "formato": "erp-moveleiro-setup",
+  "versao": 1,
+  "nome": "Configurador: biblioteca de exemplo",
+  "descricao": "Balcão BL101 (cenário do treinamento do configurador) e aéreo com portas de alumínio e vidro (subconjunto reutilizável), com acabamentos, constantes e os materiais que faltarem na base.",
+  "produtos": {
+    "config": {
+      "constantes": {"TAXACOLA": 0.012, "ALU_FACE": 20, "ALU_CANAL": 8},
+      "perda_perfil_pct": 3,
+      "serra_perfil_mm": 4,
+      "markup_padrao": 2.1
+    },
+    "materiais": [
+      {"codigo": "MDP15-BR", "descricao": "MDP Branco 15mm", "tipo": "CHAPA", "unidade": "CH", "espessura_mm": 15, "comprimento_mm": 2750, "largura_mm": 1850, "custo_unitario": 189.0},
+      {"codigo": "MDP15-MF", "descricao": "MDP Marfim 15mm", "tipo": "CHAPA", "unidade": "CH", "espessura_mm": 15, "comprimento_mm": 2750, "largura_mm": 1850, "custo_unitario": 205.0},
+      {"codigo": "MDP15-TB", "descricao": "MDP Tabaco 15mm", "tipo": "CHAPA", "unidade": "CH", "espessura_mm": 15, "comprimento_mm": 2750, "largura_mm": 1850, "custo_unitario": 214.0},
+      {"codigo": "MDP18-BR", "descricao": "MDP Branco 18mm", "tipo": "CHAPA", "unidade": "CH", "espessura_mm": 18, "comprimento_mm": 2750, "largura_mm": 1850, "custo_unitario": 219.0},
+      {"codigo": "MDP18-MF", "descricao": "MDP Marfim 18mm", "tipo": "CHAPA", "unidade": "CH", "espessura_mm": 18, "comprimento_mm": 2750, "largura_mm": 1850, "custo_unitario": 236.0},
+      {"codigo": "MDP18-TB", "descricao": "MDP Tabaco 18mm", "tipo": "CHAPA", "unidade": "CH", "espessura_mm": 18, "comprimento_mm": 2750, "largura_mm": 1850, "custo_unitario": 244.0},
+      {"codigo": "MDP18-CV", "descricao": "MDP Carvalho 18mm", "tipo": "CHAPA", "unidade": "CH", "espessura_mm": 18, "comprimento_mm": 2750, "largura_mm": 1850, "custo_unitario": 298.0},
+      {"codigo": "MDP18-ON", "descricao": "MDP Ônix 18mm", "tipo": "CHAPA", "unidade": "CH", "espessura_mm": 18, "comprimento_mm": 2750, "largura_mm": 1850, "custo_unitario": 289.0},
+      {"codigo": "HDF3-BR", "descricao": "HDF Branco 3mm (costas)", "tipo": "CHAPA", "unidade": "CH", "espessura_mm": 3, "comprimento_mm": 2750, "largura_mm": 1850, "custo_unitario": 64.0},
+      {"codigo": "FT22-BR", "descricao": "Fita de borda Branca 22mm", "tipo": "FITA", "unidade": "M", "custo_unitario": 0.85},
+      {"codigo": "FT22-MF", "descricao": "Fita de borda Marfim 22mm", "tipo": "FITA", "unidade": "M", "custo_unitario": 0.95},
+      {"codigo": "FT22-TB", "descricao": "Fita de borda Tabaco 22mm", "tipo": "FITA", "unidade": "M", "custo_unitario": 0.95},
+      {"codigo": "FT22-CV", "descricao": "Fita de borda Carvalho 22mm", "tipo": "FITA", "unidade": "M", "custo_unitario": 1.35},
+      {"codigo": "FT22-ON", "descricao": "Fita de borda Ônix 22mm", "tipo": "FITA", "unidade": "M", "custo_unitario": 1.25},
+      {"codigo": "PE-PLAST", "descricao": "Pé plástico regulável 100mm", "tipo": "FERRAGEM", "unidade": "UN", "custo_unitario": 3.4},
+      {"codigo": "DOBR-35", "descricao": "Dobradiça caneco 35mm reta", "tipo": "FERRAGEM", "unidade": "UN", "custo_unitario": 5.9},
+      {"codigo": "CAVILHA-8", "descricao": "Cavilha 8x30mm", "tipo": "FERRAGEM", "unidade": "UN", "custo_unitario": 0.08},
+      {"codigo": "MINIFIX", "descricao": "Minifix com tambor", "tipo": "FERRAGEM", "unidade": "UN", "custo_unitario": 0.95},
+      {"codigo": "SUP-PRAT", "descricao": "Suporte de prateleira", "tipo": "FERRAGEM", "unidade": "UN", "custo_unitario": 0.3},
+      {"codigo": "COLA-PVA", "descricao": "Cola branca PVA", "tipo": "ACESSORIO", "unidade": "KG", "custo_unitario": 18.0},
+      {"codigo": "PERFIL-AL-NAT", "descricao": "Perfil alumínio porta 20mm natural (barra 6m)", "tipo": "PERFIL", "unidade": "BR", "comprimento_mm": 6000, "custo_unitario": 96.0},
+      {"codigo": "PERFIL-AL-PRT", "descricao": "Perfil alumínio porta 20mm preto (barra 6m)", "tipo": "PERFIL", "unidade": "BR", "comprimento_mm": 6000, "custo_unitario": 118.0},
+      {"codigo": "VD4-INC", "descricao": "Vidro 4mm incolor", "tipo": "VIDRO", "unidade": "M2", "espessura_mm": 4, "custo_unitario": 86.0},
+      {"codigo": "VD4-FUM", "descricao": "Vidro 4mm fumê", "tipo": "VIDRO", "unidade": "M2", "espessura_mm": 4, "custo_unitario": 112.0},
+      {"codigo": "ESP4", "descricao": "Espelho 4mm", "tipo": "VIDRO", "unidade": "M2", "espessura_mm": 4, "custo_unitario": 138.0},
+      {"codigo": "DOBR-ALU", "descricao": "Dobradiça para perfil de alumínio", "tipo": "FERRAGEM", "unidade": "UN", "custo_unitario": 13.5},
+      {"codigo": "ESQ-ALU", "descricao": "Esquadro de canto para perfil", "tipo": "FERRAGEM", "unidade": "UN", "custo_unitario": 1.2}
+    ],
+    "acabamentos": [
+      {"codigo": "COR_CORPO", "nome": "Cor do corpo (caixa)", "componentes": ["CHAPA15", "FITA"], "opcoes": [
+        {"codigo": "BR", "nome": "Branco", "referencia": "BR", "materiais": {"CHAPA15": "MDP15-BR", "FITA": "FT22-BR"}, "info": {"espessura": 15}, "padrao": true},
+        {"codigo": "MF", "nome": "Marfim", "referencia": "MF", "materiais": {"CHAPA15": "MDP15-MF", "FITA": "FT22-MF"}, "info": {"espessura": 15}},
+        {"codigo": "TB", "nome": "Tabaco", "referencia": "TB", "materiais": {"CHAPA15": "MDP15-TB", "FITA": "FT22-TB"}, "info": {"espessura": 15}},
+        {"codigo": "AM", "nome": "Amêndoa", "referencia": "AM", "materiais": {}, "info": {"espessura": 15}, "ativo": false}
+      ]},
+      {"codigo": "COR_FRENTE", "nome": "Cor da frente (porta)", "componentes": ["CHAPA18", "FITA"], "opcoes": [
+        {"codigo": "BR", "nome": "Branco", "referencia": "BR", "materiais": {"CHAPA18": "MDP18-BR", "FITA": "FT22-BR"}, "info": {"espessura": 18}, "padrao": true},
+        {"codigo": "MF", "nome": "Marfim", "referencia": "MF", "materiais": {"CHAPA18": "MDP18-MF", "FITA": "FT22-MF"}, "info": {"espessura": 18}},
+        {"codigo": "TB", "nome": "Tabaco", "referencia": "TB", "materiais": {"CHAPA18": "MDP18-TB", "FITA": "FT22-TB"}, "info": {"espessura": 18}},
+        {"codigo": "CV", "nome": "Carvalho", "referencia": "CV", "materiais": {"CHAPA18": "MDP18-CV", "FITA": "FT22-CV"}, "info": {"espessura": 18}, "adicional": 35},
+        {"codigo": "ON", "nome": "Ônix", "referencia": "ON", "materiais": {"CHAPA18": "MDP18-ON", "FITA": "FT22-ON"}, "info": {"espessura": 18}, "adicional": 35}
+      ]},
+      {"codigo": "ALUMINIO", "nome": "Acabamento do perfil de alumínio", "componentes": ["PERFIL"], "opcoes": [
+        {"codigo": "NATURAL", "nome": "Natural fosco", "referencia": "NT", "materiais": {"PERFIL": "PERFIL-AL-NAT"}, "padrao": true},
+        {"codigo": "PRETO", "nome": "Preto", "referencia": "PT", "materiais": {"PERFIL": "PERFIL-AL-PRT"}, "adicional": 40}
+      ]},
+      {"codigo": "VIDRO", "nome": "Vidro da porta", "componentes": ["VIDRO"], "opcoes": [
+        {"codigo": "INCOLOR", "nome": "Incolor", "materiais": {"VIDRO": "VD4-INC"}, "padrao": true},
+        {"codigo": "FUME", "nome": "Fumê", "materiais": {"VIDRO": "VD4-FUM"}, "adicional": 25},
+        {"codigo": "ESPELHO", "nome": "Espelho", "materiais": {"VIDRO": "ESP4"}, "adicional": 60}
+      ]}
+    ],
+    "biblioteca": [
+      {"codigo": "COZINHA", "tipo": "GRUPO", "nome": "Cozinha", "ordem": 1, "preco": {"modo": "MARKUP"}},
+      {"codigo": "BALCOES", "pai": "COZINHA", "tipo": "GRUPO", "nome": "Balcões", "ordem": 1,
+       "perguntas": [
+         {"codigo": "ALTURA", "rotulo": "Altura do corpo", "tipo": "NUMERO", "unidade": "mm", "sombra": true, "formula": "700"}
+       ],
+       "componentes": [
+         {"codigo": "PES", "descricao": "Pé plástico regulável", "tipo": "ITEM", "material": "PE-PLAST", "quantidade": "4"}
+       ]},
+      {"codigo": "BL101", "pai": "BALCOES", "tipo": "MODELO", "nome": "Balcão simples 1 porta", "ordem": 1,
+       "descricao_formula": "Balcão {[LARGURA]}x{[PROFUNDIDADE]} mm {@CORPO.nome} {se([OPCAO_FRENTE] = \"COM_FRENTE\"; \"porta \" + @FRENTE.nome; \"sem porta\")} · vão {texto([METRAGEM_VAO])} m²",
+       "perguntas": [
+         {"codigo": "LARGURA", "rotulo": "Largura", "tipo": "NUMERO", "unidade": "mm", "propostos": [400, 450, 500, 600], "somente_propostos": true, "padrao": 600},
+         {"codigo": "PROFUNDIDADE", "rotulo": "Profundidade", "tipo": "NUMERO", "unidade": "mm", "propostos": [500, 610], "somente_propostos": true, "padrao": 500},
+         {"codigo": "CORPO", "rotulo": "Cor do corpo", "tipo": "ACABAMENTO", "acabamento": "COR_CORPO", "liberadas": ["BR", "MF", "TB"]},
+         {"codigo": "OPCAO_FRENTE", "rotulo": "Porta", "tipo": "ESCOLHA", "opcoes": [
+           {"codigo": "COM_FRENTE", "nome": "Com porta", "padrao": true}, {"codigo": "SEM_FRENTE", "nome": "Sem porta (porta de parceiro)"}]},
+         {"codigo": "FRENTE", "rotulo": "Cor da porta", "tipo": "ACABAMENTO", "acabamento": "COR_FRENTE", "exibir_se": "[OPCAO_FRENTE] = \"COM_FRENTE\"",
+          "bloqueios": [{"opcoes": ["ON"], "se": "[LARGURA] < 450"}]},
+         {"codigo": "METRAGEM_VAO", "rotulo": "Metragem do vão (tampo de pedra)", "tipo": "NUMERO", "unidade": "m²", "sombra": true, "formula": "[LARGURA] * [PROFUNDIDADE] / 1000000"}
+       ],
+       "componentes": [
+         {"codigo": "LATERAL", "descricao": "Lateral 640 x {[PROFUNDIDADE]} {@CORPO.nome}", "tipo": "PECA", "quantidade": "2", "comprimento": "640", "largura": "[PROFUNDIDADE]", "material": "@CORPO.CHAPA15", "fitas": {"c1": "@CORPO.FITA"}, "operacoes": "CORTE,BORDA,FURAR"},
+         {"codigo": "BASE", "descricao": "Base", "tipo": "PECA", "comprimento": "$PW$ - 32", "largura": "[PROFUNDIDADE]", "material": "@CORPO.CHAPA15", "fitas": {"c1": "@CORPO.FITA"}, "operacoes": "CORTE,BORDA,FURAR"},
+         {"codigo": "TRAVESSA", "descricao": "Travessa de sustentação", "tipo": "PECA", "quantidade": "2", "comprimento": "$PW$ - 32", "largura": "56", "material": "@CORPO.CHAPA15", "fitas": {"c1": "@CORPO.FITA"}, "operacoes": "CORTE,BORDA,FURAR"},
+         {"codigo": "PRATELEIRA", "descricao": "Prateleira", "tipo": "PECA", "comprimento": "$PW$ - 34", "largura": "[PROFUNDIDADE] - 90", "material": "@CORPO.CHAPA15", "fitas": {"c1": "@CORPO.FITA"}, "operacoes": "CORTE,BORDA"},
+         {"codigo": "COSTA", "descricao": "Costa (sempre branca)", "tipo": "PECA", "comprimento": "635", "largura": "$PW$ - 10", "material": "HDF3-BR", "operacoes": "CORTE"},
+         {"codigo": "PORTA", "descricao": "Porta {@FRENTE.nome}", "tipo": "PECA", "se": "[OPCAO_FRENTE] = \"COM_FRENTE\"", "comprimento": "636", "largura": "$PW$ - 4", "espessura": "@FRENTE.espessura", "material": "@FRENTE.CHAPA18", "fitas": {"c1": "@FRENTE.FITA", "c2": "@FRENTE.FITA", "l1": "@FRENTE.FITA", "l2": "@FRENTE.FITA"}, "veio": true, "operacoes": "CORTE,BORDA,FURAR"},
+         {"codigo": "DOBRADICA", "descricao": "Dobradiça", "tipo": "ITEM", "se": "[OPCAO_FRENTE] = \"COM_FRENTE\"", "material": "DOBR-35", "quantidade": "2"},
+         {"codigo": "CAVILHA", "descricao": "Cavilha", "tipo": "ITEM", "material": "CAVILHA-8", "quantidade": "faixa([PROFUNDIDADE], 500, 8, 10)"},
+         {"codigo": "MINIFIX", "descricao": "Minifix", "tipo": "ITEM", "material": "MINIFIX", "quantidade": "8"},
+         {"codigo": "SUPORTE", "descricao": "Suporte de prateleira", "tipo": "ITEM", "material": "SUP-PRAT", "quantidade": "4"},
+         {"codigo": "COLA", "descricao": "Cola da fita de borda", "tipo": "ITEM", "material": "COLA-PVA", "quantidade": "(2 * 640 + 3 * ($PW$ - 32) + ($PW$ - 34) + se([OPCAO_FRENTE] = \"COM_FRENTE\"; 2 * (636 + $PW$ - 4); 0)) / 1000 * %TAXACOLA%"}
+       ]},
+      {"codigo": "AEREOS", "pai": "COZINHA", "tipo": "GRUPO", "nome": "Aéreos", "ordem": 2,
+       "perguntas": [
+         {"codigo": "PROFUNDIDADE", "rotulo": "Profundidade", "tipo": "NUMERO", "unidade": "mm", "sombra": true, "formula": "350"}
+       ]},
+      {"codigo": "AEREO_ALU", "pai": "AEREOS", "tipo": "MODELO", "nome": "Aéreo com portas de alumínio e vidro", "ordem": 1,
+       "descricao_formula": "Aéreo {[LARGURA]}x{[ALTURA]}x{[PROFUNDIDADE]} mm {@CORPO.nome} · {[PORTAS]} porta(s) alumínio {@ALUMINIO.nome} vidro {@VIDRO.nome}",
+       "perguntas": [
+         {"codigo": "LARGURA", "rotulo": "Largura", "tipo": "NUMERO", "unidade": "mm", "minimo": 400, "maximo": 1200, "propostos": [600, 800, 1000], "padrao": 800},
+         {"codigo": "ALTURA", "rotulo": "Altura", "tipo": "NUMERO", "unidade": "mm", "propostos": [700, 900], "somente_propostos": true, "padrao": 700},
+         {"codigo": "CORPO", "rotulo": "Cor do corpo", "tipo": "ACABAMENTO", "acabamento": "COR_CORPO", "liberadas": ["BR", "TB"]},
+         {"codigo": "PORTAS", "rotulo": "Portas", "tipo": "NUMERO", "sombra": true, "formula": "se([LARGURA] > 800; 2; 1)"}
+       ],
+       "componentes": [
+         {"codigo": "LATERAL", "descricao": "Lateral", "tipo": "PECA", "quantidade": "2", "comprimento": "[ALTURA]", "largura": "[PROFUNDIDADE]", "material": "@CORPO.CHAPA15", "fitas": {"c1": "@CORPO.FITA"}, "operacoes": "CORTE,BORDA,FURAR"},
+         {"codigo": "BASE_TAMPO", "descricao": "Base e tampo", "tipo": "PECA", "quantidade": "2", "comprimento": "$PW$ - 30", "largura": "[PROFUNDIDADE]", "material": "@CORPO.CHAPA15", "fitas": {"c1": "@CORPO.FITA"}, "operacoes": "CORTE,BORDA,FURAR"},
+         {"codigo": "PRATELEIRA", "descricao": "Prateleira", "tipo": "PECA", "quantidade": "se([ALTURA] > 700; 2; 1)", "comprimento": "$PW$ - 32", "largura": "[PROFUNDIDADE] - 20", "material": "@CORPO.CHAPA15", "fitas": {"c1": "@CORPO.FITA"}, "operacoes": "CORTE,BORDA"},
+         {"codigo": "FUNDO", "descricao": "Fundo", "tipo": "PECA", "comprimento": "[ALTURA] - 10", "largura": "$PW$ - 10", "material": "HDF3-BR", "operacoes": "CORTE"},
+         {"codigo": "PORTA", "descricao": "Porta de alumínio {@ALUMINIO.nome} com vidro {@VIDRO.nome}", "tipo": "SUBCONJUNTO", "subconjunto": "PORTA_ALU", "quantidade": "[PORTAS]", "largura": "($PW$ - 4) / [PORTAS] - 2", "altura": "[ALTURA] - 4", "profundidade": "20"},
+         {"codigo": "SUPORTE", "descricao": "Suporte de prateleira", "tipo": "ITEM", "material": "SUP-PRAT", "quantidade": "4 * se([ALTURA] > 700; 2; 1)"},
+         {"codigo": "MINIFIX", "descricao": "Minifix", "tipo": "ITEM", "material": "MINIFIX", "quantidade": "8"}
+       ]},
+      {"codigo": "SUBCONJUNTOS", "tipo": "GRUPO", "nome": "Subconjuntos reutilizáveis", "ordem": 9},
+      {"codigo": "PORTA_ALU", "pai": "SUBCONJUNTOS", "tipo": "SUBCONJUNTO", "nome": "Porta de perfil de alumínio com vidro", "ordem": 1,
+       "observacao": "Medidas da porta pelo componente que a usa: $PW$ = largura e $PH$ = altura da porta.",
+       "perguntas": [
+         {"codigo": "ALUMINIO", "rotulo": "Perfil de alumínio", "tipo": "ACABAMENTO", "acabamento": "ALUMINIO"},
+         {"codigo": "VIDRO", "rotulo": "Vidro", "tipo": "ACABAMENTO", "acabamento": "VIDRO",
+          "bloqueios": [{"opcoes": ["ESPELHO"], "se": "[ALTURA] > 900"}]}
+       ],
+       "componentes": [
+         {"codigo": "MONTANTE", "descricao": "Montante (vertical)", "tipo": "PERFIL", "quantidade": "2", "comprimento": "$PH$", "material": "@ALUMINIO.PERFIL"},
+         {"codigo": "TRAVESSA", "descricao": "Travessa (horizontal)", "tipo": "PERFIL", "quantidade": "2", "comprimento": "$PW$ - 2 * %ALU_FACE%", "material": "@ALUMINIO.PERFIL"},
+         {"codigo": "VIDRO", "descricao": "Vidro {@VIDRO.nome}", "tipo": "VIDRO", "comprimento": "$PH$ - 2 * %ALU_FACE% + 2 * %ALU_CANAL%", "largura": "$PW$ - 2 * %ALU_FACE% + 2 * %ALU_CANAL%", "material": "@VIDRO.VIDRO"},
+         {"codigo": "DOBRADICA", "descricao": "Dobradiça para perfil", "tipo": "ITEM", "material": "DOBR-ALU", "quantidade": "faixa($PH$, 900, 2, 1600, 3, 4)"},
+         {"codigo": "ESQUADRO", "descricao": "Esquadro de canto", "tipo": "ITEM", "material": "ESQ-ALU", "quantidade": "4"}
+       ]}
+    ]
+  }
+}

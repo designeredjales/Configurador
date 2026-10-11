@@ -78,3 +78,24 @@ def mao_de_obra_xml(db: Session, empresa_id: int, lido) -> dict:
                 p.separacao = separacao.classificar(p, lista_classes)
                 pecas.append((p, max(1, round(px.quantidade)) * max(1, round(m.quantidade))))
     return _somar(pecas, cts, classes, dias_uteis(db, empresa_id))
+
+
+def mao_de_obra_pecas(db: Session, empresa_id: int, modulo_codigo: str, modulo_descricao: str, pecas: list[dict]) -> dict:
+    """Mesma conta para as peças de um produto do configurador (dicionários no formato da Peca)."""
+    cts = centros(db, empresa_id)
+    if not pecas or not any(c.custo_mensal and (c.minutos_peca or c.minutos_m2) for c in cts):
+        return {"horas": 0.0, "total": 0.0, "por_setor": []}
+    classes = separacao.mapa(db, empresa_id)
+    lista_classes = list(classes.values())
+    modulo = SimpleNamespace(codigo=modulo_codigo, descricao=modulo_descricao)
+    lista = []
+    for pc in pecas:
+        ops = {o for o in (pc.get("operacoes") or "").split(",") if o}
+        fitas = any(pc.get(k) for k in ("fita_c1", "fita_c2", "fita_l1", "fita_l2"))
+        p = SimpleNamespace(codigo=pc["codigo"], descricao=pc["descricao"], comprimento_mm=pc["comprimento_mm"],
+                            largura_mm=pc["largura_mm"], operacoes=pc.get("operacoes"), modulo=modulo,
+                            tem_fita=fitas or "BORDA" in ops,
+                            tem_usinagem=bool(pc.get("programa_usinagem")) or bool(OPERACOES_USINAGEM & ops))
+        p.separacao = separacao.classificar(p, lista_classes)
+        lista.append((p, max(1, int(pc.get("quantidade") or 1))))
+    return _somar(lista, cts, classes, dias_uteis(db, empresa_id))

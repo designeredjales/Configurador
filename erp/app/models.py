@@ -24,6 +24,8 @@ class TipoMaterial(str, Enum):
     FITA = "FITA"
     FERRAGEM = "FERRAGEM"
     ACESSORIO = "ACESSORIO"
+    PERFIL = "PERFIL"  # perfil de alumínio, puxador linear: consumo em metro ou barra
+    VIDRO = "VIDRO"
     OUTRO = "OUTRO"
 
 
@@ -345,6 +347,8 @@ class Modulo(Base):
     altura_mm: Mapped[float | None] = mapped_column(Float)
     profundidade_mm: Mapped[float | None] = mapped_column(Float)
     quantidade: Mapped[int] = mapped_column(Integer, default=1)
+    # Produto do configurador: a configuração gerada (o XML do Promob não apaga este módulo ao reimportar)
+    configuracao_id: Mapped[int | None] = mapped_column(ForeignKey("configuracoes_produto.id"))
 
     ambiente: Mapped[Ambiente] = relationship(back_populates="modulos")
     pecas: Mapped[list["Peca"]] = relationship(
@@ -967,6 +971,8 @@ class VersaoProposta(Base):
     desconto_pct: Mapped[float] = mapped_column(Float, default=0.0)
     condicao: Mapped[str | None] = mapped_column(String(60))
     calculo: Mapped[dict | None] = mapped_column(JSON)
+    # Produtos do configurador vendidos nesta versão (sozinhos ou somados ao XML do Promob)
+    itens_config: Mapped[list | None] = mapped_column(JSON)
     aprovacao: Mapped[str] = mapped_column(String(12), default="LIVRE")  # LIVRE, PENDENTE, APROVADA, RECUSADA
     aprovacao_motivo: Mapped[str | None] = mapped_column(String(300))
     aprovado_por: Mapped[str | None] = mapped_column(String(120))
@@ -1124,3 +1130,77 @@ class ExecucaoConsolidacao(Base):
     status: Mapped[str] = mapped_column(String(10), default="RODANDO")
     usuario: Mapped[str | None] = mapped_column(String(120))
     resumo: Mapped[dict | None] = mapped_column(JSON)
+
+
+# --- Configurador de produtos (engenharia programa, o comercial escolhe na venda) ---------------------
+
+class NoProduto(Base):
+    """Biblioteca de produtos configuráveis, com herança como no Promob Catalog.
+
+    GRUPO (linha de modulação, grupo, subgrupo) guarda o que vale para tudo abaixo dele; MODELO é o produto que
+    o vendedor configura; SUBCONJUNTO é um conjunto reutilizável (REF de agregados), como a porta de alumínio
+    com vidro. Perguntas e componentes do filho com o mesmo código substituem os herdados.
+    """
+    __tablename__ = "produtos_nos"
+    __table_args__ = (UniqueConstraint("empresa_id", "codigo"),)
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    empresa_id: Mapped[int] = mapped_column(ForeignKey("empresas.id"), index=True)
+    pai_id: Mapped[int | None] = mapped_column(ForeignKey("produtos_nos.id"), index=True)
+    tipo: Mapped[str] = mapped_column(String(12))  # GRUPO, MODELO, SUBCONJUNTO
+    codigo: Mapped[str] = mapped_column(String(40))
+    nome: Mapped[str] = mapped_column(String(160))
+    ordem: Mapped[int] = mapped_column(Integer, default=0)
+    ativo: Mapped[bool] = mapped_column(default=True)
+    descricao_formula: Mapped[str | None] = mapped_column(String(400))
+    perguntas: Mapped[list | None] = mapped_column(JSON)
+    componentes: Mapped[list | None] = mapped_column(JSON)
+    preco: Mapped[dict | None] = mapped_column(JSON)  # {"modo": "MARKUP"|"TABELA", "markup": 2.1, "formula": "..."}
+    observacao: Mapped[str | None] = mapped_column(String(400))
+    atualizado_por: Mapped[str | None] = mapped_column(String(120))
+    atualizado_em: Mapped[datetime] = mapped_column(DateTime, default=agora, onupdate=agora)
+
+
+class Acabamento(Base):
+    """Modelo de acabamento (Catalog: modelo definição): componentes e as opções (modelos tipo) com o material de cada um."""
+    __tablename__ = "acabamentos"
+    __table_args__ = (UniqueConstraint("empresa_id", "codigo"),)
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    empresa_id: Mapped[int] = mapped_column(ForeignKey("empresas.id"), index=True)
+    codigo: Mapped[str] = mapped_column(String(40))
+    nome: Mapped[str] = mapped_column(String(160))
+    componentes: Mapped[list] = mapped_column(JSON)  # ["CHAPA", "FITA"]
+    # [{"codigo", "nome", "referencia", "materiais": {"CHAPA": "MDP15-BR"}, "info": {"espessura": 15}, "adicional": 0, "ativo": true}]
+    opcoes: Mapped[list] = mapped_column(JSON)
+    atualizado_em: Mapped[datetime] = mapped_column(DateTime, default=agora, onupdate=agora)
+
+
+class ConfigProduto(Base):
+    """Parâmetros do configurador da base: constantes das regras, perdas de perfil e markup padrão."""
+    __tablename__ = "config_produto"
+
+    empresa_id: Mapped[int] = mapped_column(ForeignKey("empresas.id"), primary_key=True)
+    constantes: Mapped[dict | None] = mapped_column(JSON)  # {"TAXACOLA": 0.012}
+    perda_perfil_pct: Mapped[float] = mapped_column(Float, default=3.0)
+    serra_perfil_mm: Mapped[float] = mapped_column(Float, default=4.0)
+    markup_padrao: Mapped[float] = mapped_column(Float, default=2.0)
+
+
+class ConfiguracaoProduto(Base):
+    """Configuração já gerada (Focco: BL101.0001). A mesma resposta com a mesma engenharia reaproveita o código."""
+    __tablename__ = "configuracoes_produto"
+    __table_args__ = (UniqueConstraint("empresa_id", "codigo"), UniqueConstraint("empresa_id", "modelo_id", "assinatura"))
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    empresa_id: Mapped[int] = mapped_column(ForeignKey("empresas.id"), index=True)
+    modelo_id: Mapped[int] = mapped_column(ForeignKey("produtos_nos.id"), index=True)
+    sequencial: Mapped[int] = mapped_column(Integer)
+    codigo: Mapped[str] = mapped_column(String(60))
+    assinatura: Mapped[str] = mapped_column(String(64))
+    respostas: Mapped[dict] = mapped_column(JSON)
+    descricao: Mapped[str] = mapped_column(String(300))
+    modulo: Mapped[dict] = mapped_column(JSON)  # estrutura congelada: medidas, peças e itens
+    custo: Mapped[dict] = mapped_column(JSON)
+    criado_por: Mapped[str | None] = mapped_column(String(120))
+    criado_em: Mapped[datetime] = mapped_column(DateTime, default=agora)

@@ -317,6 +317,7 @@ class ModuloOut(Schema):
     altura_mm: float | None
     profundidade_mm: float | None
     quantidade: int
+    configuracao_id: int | None = None
     pecas: list[PecaOut]
     itens: list[ItemModuloOut]
 

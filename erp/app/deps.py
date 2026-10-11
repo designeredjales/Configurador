@@ -47,6 +47,17 @@ def funcao(codigo: str):
     return checar
 
 
+def alguma_funcao(*codigos: str):
+    """Exige ao menos uma das funções (ex.: o configurador serve à engenharia e ao comercial)."""
+    nomes = " ou ".join(f'"{CATALOGO[c][1]}"' for c in codigos)
+
+    def checar(usuario: Usuario = Depends(usuario_atual)) -> Usuario:
+        if not set(codigos) & efetivas(usuario):
+            raise HTTPException(403, f"Você não opera {nomes}. Peça ao administrador para liberar.")
+        return usuario
+    return checar
+
+
 # Grupos usados nas rotas: cada um confere uma função
 INDICADORES = funcao("indicadores")
 ENGENHARIA = funcao("projetos")
@@ -69,3 +80,5 @@ CONCILIACAO = funcao("conciliacao")
 CONTROLADORIA = funcao("controladoria")
 APROVAR_DESPESA = funcao("aprovar_despesa")
 ADMIN = funcao("usuarios")
+PRODUTOS = funcao("produtos")
+CONFIGURAR = alguma_funcao("comercial", "produtos", "projetos")

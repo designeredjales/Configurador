@@ -24,7 +24,7 @@ from ..models import (
     Usuario,
     VersaoProposta,
 )
-from ..services import comercial, custos, promob_prices
+from ..services import comercial, configurador, custos, promob_prices
 from ..services.importacao import eh_xml
 from ..services.promob_xml import ErroXMLPromob, ler_xml_promob
 from .projetos import carregar as carregar_projeto
@@ -209,7 +209,8 @@ def versao_out(v: VersaoProposta) -> dict:
             "condicao": v.condicao, "calculo": v.calculo, "aprovacao": v.aprovacao, "aprovacao_motivo": v.aprovacao_motivo,
             "aprovado_por": v.aprovado_por, "proposta_link": f"/p/{v.token_publico}" if v.token_publico else None,
             "proposta_validade": v.proposta_validade, "aceite_em": v.aceite_em, "aceite_nome": v.aceite_nome,
-            "criado_por": v.criado_por, "criado_em": v.criado_em}
+            "criado_por": v.criado_por, "criado_em": v.criado_em, "tem_xml": bool(v.xml),
+            "itens_config": v.itens_config or []}
 
 
 def op_out(op: Oportunidade, detalhe: bool = False) -> dict:
@@ -346,6 +347,54 @@ async def nova_versao(op_id: int, arquivo: UploadFile = File(...), usuario: Usua
     resumo["mao_de_obra"], resumo["mao_de_obra_horas"] = mo["total"], mo["horas"]
     v = VersaoProposta(oportunidade=op, numero=len(op.versoes) + 1, arquivo=(arquivo.filename or "projeto.xml")[:200],
                        xml=texto, resumo=resumo, criado_por=usuario.nome)
+    db.add(v)
+    db.flush()
+    try:
+        comercial.negociar(db, emp, usuario, v, 0.0, None)
+    except comercial.ErroComercial as e:
+        _erro(db, e)
+    if not op.valor_estimado:
+        op.valor_estimado = v.calculo["preco_final"]
+    db.commit()
+    return versao_out(v)
+
+
+class ItemConfiguradoIn(BaseModel):
+    modelo_id: int
+    respostas: dict = {}
+    quantidade: int = Field(1, ge=1, le=999)
+    ambiente: str | None = Field(None, max_length=120)
+
+
+class VersaoConfiguradaIn(BaseModel):
+    itens: list[ItemConfiguradoIn] = Field(min_length=1, max_length=300)
+    incluir_xml_da_versao: int | None = None  # soma ao projeto do Promob desta versão (alumínio + marcenaria)
+
+
+@router.post("/api/oportunidades/{op_id}/versoes/configurada", status_code=201)
+def nova_versao_configurada(op_id: int, dados: VersaoConfiguradaIn, usuario: Usuario = Depends(COMERCIAL),
+                            emp: Empresa = Depends(empresa_atual), db: Session = Depends(get_db)):
+    """Versão com produtos do configurador: o vendedor escolhe dentro do que a engenharia liberou."""
+    op = carregar_op(db, usuario, op_id)
+    if op.status != "ABERTA":
+        raise HTTPException(409, f"Oportunidade {op.status}")
+    base = None
+    if dados.incluir_xml_da_versao is not None:
+        base = carregar_versao(db, usuario, dados.incluir_xml_da_versao)
+        if base.oportunidade_id != op.id or not base.xml:
+            raise HTTPException(422, "A versão escolhida não é desta oportunidade ou não tem XML do Promob")
+    try:
+        itens = configurador.preparar_itens(db, emp.id, [i.model_dump() for i in dados.itens], usuario.nome)
+    except configurador.ErroConfigurador as e:
+        db.rollback()
+        raise HTTPException(e.status, {"mensagem": str(e), "pendencias": e.detalhes} if e.detalhes else str(e))
+    resumo = configurador.resumo_itens(itens, op.cliente_nome)
+    if base is not None:
+        # a versão-base pode já somar produtos configurados: reaproveita só a parte do Promob dela
+        resumo = configurador.somar_resumos(base.resumo.get("promob") or base.resumo, resumo)
+    v = VersaoProposta(oportunidade=op, numero=len(op.versoes) + 1,
+                       arquivo=(f"{base.arquivo} + configurador" if base else "Configurador de produtos")[:200],
+                       xml=base.xml if base else "", resumo=resumo, itens_config=itens, criado_por=usuario.nome)
     db.add(v)
     db.flush()
     try:

@@ -10,6 +10,7 @@ from .models import Perfil
 CATALOGO: dict[str, tuple[str, str, str]] = {
     "indicadores": ("Gestão", "Indicadores do dono", "Painel de vendas, margem, prazos, gargalo e retrabalho"),
     "projetos": ("Engenharia", "Projetos e engenharia", "Importar XML do Promob, editar projeto, liberar para a fábrica"),
+    "produtos": ("Engenharia", "Engenharia de produto", "Programar produtos configuráveis: perguntas, regras, componentes, acabamentos e preço"),
     "materiais": ("Engenharia", "Cadastro de materiais", "Criar e editar materiais, custos e estoque mínimo"),
     "clientes": ("Comercial", "Cadastro de clientes", "Criar e editar clientes e endereço fiscal"),
     "pcp": ("Produção", "Ordens de produção", "Gerar e cancelar OP, cadastrar centros de trabalho"),
@@ -36,7 +37,7 @@ TODAS = frozenset(CATALOGO)
 PADRAO_PERFIL: dict[Perfil, frozenset[str]] = {
     Perfil.ADMIN: TODAS,
     Perfil.GESTOR: TODAS - {"usuarios"},
-    Perfil.ENGENHARIA: frozenset({"projetos", "materiais", "clientes"}),
+    Perfil.ENGENHARIA: frozenset({"projetos", "produtos", "materiais", "clientes"}),
     Perfil.PCP: frozenset({"pcp", "apontamento", "estorno", "refugo", "expedicao", "montagem", "assistencia"}),
     Perfil.COMPRAS: frozenset({"compras", "estoque", "materiais"}),
     Perfil.FINANCEIRO: frozenset({"financeiro", "fiscal", "conciliacao", "clientes", "controladoria"}),

@@ -108,7 +108,13 @@ def _condicao(cfg: ConfigComercial, nome: str | None) -> dict:
 
 
 def conferencia_prices(db: Session, empresa_id: int, resumo: dict) -> dict | None:
-    """Reprecifica os módulos do XML pela tabela vigente do Promob Prices (quando sincronizada)."""
+    """Reprecifica os módulos do XML pela tabela vigente do Promob Prices (quando sincronizada).
+
+    Os produtos do configurador têm preço próprio (custo × markup ou tabela do produto) e ficam fora da conferência.
+    """
+    resumo = {**resumo, "modulos": [m for m in resumo["modulos"] if m.get("origem") != "CONFIGURADOR"]}
+    if not resumo["modulos"]:
+        return None
     skus = {m["codigo"] for m in resumo["modulos"]}
     precos = dict(db.execute(select(PrecoPromob.sku, PrecoPromob.preco).where(
         PrecoPromob.empresa_id == empresa_id, PrecoPromob.sku.in_(skus))).all()) if skus else {}
@@ -157,7 +163,8 @@ def calcular(db: Session, emp: Empresa, cfg: ConfigComercial, op: Oportunidade, 
         nivel = nivel or "GERENTE"
         motivos.append(f"margem de {_g(margem_pct)}% abaixo do mínimo de {_g(cfg.margem_minima)}%")
     m2 = r["m2_chapa"] or 0
-    return {"preco_base": _r(base), "desconto_pct": desconto, "condicao": cond["nome"], "parcelas": cond["parcelas"],
+    origem = ("MISTO" if r.get("promob") else "CONFIGURADOR") if r.get("configurados") else "PROMOB"
+    return {"origem": origem, "preco_base": _r(base), "desconto_pct": desconto, "condicao": cond["nome"], "parcelas": cond["parcelas"],
             "ajuste_pct": cond["ajuste_pct"], "preco_final": preco, "parcela_valor": _r(preco / cond["parcelas"]),
             "impostos": impostos, "rt_pct": rt_pct, "rt": rt, "comissao_vendedor": comissao, "custo_producao": custo, "mao_de_obra": mao_de_obra,
             "margem": margem, "margem_pct": margem_pct, "preco_m2": _r(preco / m2) if m2 else None,
@@ -259,7 +266,18 @@ def fechar(db: Session, emp: Empresa, usuario: Usuario, op: Oportunidade, versao
                       data_entrega=data_entrega, oportunidade_id=op.id)
     db.add(projeto)
     db.flush()
-    importar_promob_xml(db, projeto, versao.xml.encode("utf-8"))
+    if versao.xml:
+        importar_promob_xml(db, projeto, versao.xml.encode("utf-8"))
+    else:
+        projeto.origem = "CONFIGURADOR"
+        projeto.valor_tabela = projeto.valor_pedido = projeto.valor_venda = 0.0
+    if versao.itens_config:  # produtos do configurador: módulos congelados na venda
+        from . import configurador
+        configurador.gerar_modulos(db, projeto, versao.itens_config)
+        conf = (versao.resumo or {}).get("configurados") or {}
+        projeto.valor_tabela = round((projeto.valor_tabela or 0) + conf.get("valor", 0), 2)
+        projeto.valor_pedido = round((projeto.valor_pedido or 0) + conf.get("custo_material", 0), 2)
+        projeto.valor_venda = round((projeto.valor_venda or 0) + conf.get("valor", 0), 2)
     projeto.nome = f"{op.cliente_nome} · {op.titulo}"
     parcelas = registrar_contrato(db, projeto, calc["preco_final"], calc["parcelas"], primeiro_vencimento, usuario.id)
     projeto.venda_resumo = {**versao.resumo, "versao": versao.numero, "preco_final": calc["preco_final"],

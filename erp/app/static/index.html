@@ -148,7 +148,7 @@ body.tv #gv-kpis .kpi { font-size: 30px; } body.tv .andon div { font-size: 17px;
 .check input[type=checkbox] { width: 20px; height: 20px; accent-color: var(--ok); } .check small { color: var(--muted); margin-left: auto; } .tag.PAGO { background: var(--ok); color: #fff; }
 .cfg { display: grid; gap: 10px; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); }
 .cfg label { display: grid; gap: 4px; font-size: 13px; color: var(--muted); min-width: 0; align-content: end; }
-.cfg input { min-width: 0; width: 100%; box-sizing: border-box; }
+.cfg input, .cfg select { min-width: 0; width: 100%; max-width: 100%; box-sizing: border-box; }
 #gv-metas, #gv-wip { grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); }
 .dre td:first-child { color: var(--muted); } .dre tr.total td { font-weight: 700; color: var(--ink); border-top: 2px solid var(--line); }
 .chapas { display: grid; gap: 14px; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); }
@@ -158,6 +158,20 @@ body.tv #gv-kpis .kpi { font-size: 30px; } body.tv .andon div { font-size: 17px;
 .chapa .pc { fill: color-mix(in srgb, var(--brand) 22%, var(--panel)); stroke: var(--brand); stroke-width: 4; }
 .chapa .pt { font: 600 64px system-ui, sans-serif; fill: var(--ink); text-anchor: middle; }
 .chapa .pm { font: 54px system-ui, sans-serif; fill: var(--muted); text-anchor: middle; }
+.pr-no { padding: 7px 8px; border-bottom: 1px solid var(--line); cursor: pointer; } .pr-no:hover { background: var(--bg); }
+.pr-no.sel { background: color-mix(in srgb, var(--brand) 14%, transparent); } .pr-no small { color: var(--muted); margin-left: 8px; }
+.tag.pr-MODELO { background: var(--brand); color: var(--brand-ink); } .tag.pr-SUBCONJUNTO { background: var(--warn); color: #fff; }
+.pr-bloco { border: 1px solid var(--line); border-radius: 8px; margin: 0 0 10px; padding: 8px 12px; min-width: 0; } .pr-bloco legend { font-weight: 600; font-size: 13px; padding: 0 4px; }
+.pr-bloco legend a { font-weight: 400; margin-left: 8px; }
+details.pr-bloco summary { cursor: pointer; color: var(--ink); margin: 0; padding: 4px 0; } details.pr-bloco summary small { color: var(--muted); margin-left: 6px; }
+details.pr-bloco summary a { margin-left: 8px; font-size: 12px; } details.pr-bloco[open] summary { margin-bottom: 8px; border-bottom: 1px solid var(--line); padding-bottom: 8px; } .check-in { display: flex !important; gap: 8px; align-items: center; } .check-in input { width: 18px; height: 18px; accent-color: var(--brand); }
+.cfg textarea { font: inherit; padding: 7px 9px; border: 1px solid var(--line); border-radius: 6px; background: var(--bg); color: var(--ink); width: 100%; box-sizing: border-box; min-width: 0; }
+input.fx-erro { border-color: var(--err); background: color-mix(in srgb, var(--err) 10%, var(--bg)); } input.sugerido { border-color: var(--ok); background: color-mix(in srgb, var(--ok) 12%, var(--bg)); }
+.cfg-perg label.com-erro input, .cfg-perg label.com-erro select { border-color: var(--err); } .cfg-perg small { font-size: 12px; }
+.cfg-res { margin: 12px 0 6px; padding: 12px; border-radius: 8px; background: var(--bg); } .cfg-res > b { font-size: 15px; }
+.kpi-linha { display: flex; gap: 22px; flex-wrap: wrap; margin-top: 8px; } .kpi-linha span { font-size: 20px; font-weight: 700; } .kpi-linha small { display: block; font-size: 12px; font-weight: 400; color: var(--muted); }
+ul.arvore { list-style: none; margin: 0; padding-left: 16px; border-left: 1px dashed var(--line); } ul.arvore li { padding: 3px 0; } ul.arvore li small { color: var(--muted); margin-left: 6px; }
+details summary { cursor: pointer; color: var(--brand); margin: 10px 0; } .pr-venda { border-top: 2px solid var(--brand); margin-top: 14px; padding-top: 6px; }
 #camera { width: 100%; max-width: 420px; border-radius: 8px; background: #000; margin-top: 10px; }
 </style>
 </head>
@@ -209,6 +223,7 @@ body.tv #gv-kpis .kpi { font-size: 30px; } body.tv .andon div { font-size: 17px;
     <button data-aba="painel">Painel PCP</button>
     <button data-aba="comercial">Comercial</button>
     <button data-aba="projetos">Projetos</button>
+    <button data-aba="produtos">Produtos</button>
     <button data-aba="ops">Ordens de Produção</button>
     <button data-aba="apontamento">Apontamento</button>
     <button data-aba="producao">Controle de Produção</button>
@@ -333,6 +348,38 @@ body.tv #gv-kpis .kpi { font-size: 30px; } body.tv .andon div { font-size: 17px;
         <button class="btn sec" onclick="novoParceiro()">Cadastrar parceiro</button>
       </div>
       <div class="tabela" id="cc-parceiros"></div>
+    </div>
+  </section>
+
+  <section id="produtos">
+    <div class="card">
+      <h2>Configurador de produtos</h2>
+      <p class="dica">A engenharia programa o que fica disponível; o vendedor escolhe na hora da venda. Linha → grupos → modelos, com herança:
+        o que está no grupo vale para os modelos abaixo e o modelo substitui pelo mesmo código. Subconjuntos (ex.: porta de alumínio com vidro) são reaproveitados em vários modelos.
+        As medidas usam a sintaxe do Catalog (<code>$PW$ - 32</code>) ou da Focco (<code>[LARGURA] - 32</code>); o material vem do acabamento escolhido (<code>@CORPO.CHAPA15</code>).</p>
+      <div class="linha">
+        <button class="btn" onclick="novoNo('MODELO')">Novo modelo</button>
+        <button class="btn sec" onclick="novoNo('GRUPO')">Novo grupo</button>
+        <button class="btn sec" onclick="novoNo('SUBCONJUNTO')">Novo subconjunto</button>
+        <span class="dica" id="pr-dica-exemplo"></span>
+      </div>
+      <div id="pr-arvore"></div>
+      <div id="pr-msg"></div>
+    </div>
+    <div class="card" id="pr-editor" hidden></div>
+    <div class="card" id="pr-teste" hidden></div>
+    <div class="card">
+      <h2>Acabamentos</h2>
+      <p class="dica">Modelo de acabamento (Catalog: modelo definição): os componentes que recebem material (CHAPA15, FITA, PERFIL, VIDRO...) e as opções (modelos tipo) com o material de cada um.
+        Cor nova é uma opção nova aqui, sem mexer em nenhum produto. “Sugerir materiais” procura no cadastro pelo tipo, espessura e nome.</p>
+      <div class="linha"><button class="btn sec" onclick="editarAcabamento(null)">Novo acabamento</button></div>
+      <div id="pr-acabs"></div>
+      <div id="pr-acab-editor"></div>
+    </div>
+    <div class="card">
+      <h2>Constantes e parâmetros</h2>
+      <p class="dica">Constantes entram nas fórmulas como <code>%TAXACOLA%</code>: mudou o rendimento, muda aqui e nenhuma regra precisa de manutenção (a mesma resposta passa a gerar código novo).</p>
+      <div id="pr-config"></div>
     </div>
   </section>
 
@@ -721,7 +768,7 @@ body.tv #gv-kpis .kpi { font-size: 30px; } body.tv .andon div { font-size: 17px;
       <div class="linha">
         <input id="m-codigo" placeholder="Código">
         <input id="m-desc" placeholder="Descrição">
-        <select id="m-tipo"><option>CHAPA</option><option>FITA</option><option>FERRAGEM</option><option>ACESSORIO</option><option>OUTRO</option></select>
+        <select id="m-tipo"><option>CHAPA</option><option>FITA</option><option>FERRAGEM</option><option>ACESSORIO</option><option>PERFIL</option><option>VIDRO</option><option>OUTRO</option></select>
         <input id="m-un" placeholder="Unid. (CH, M, UN, M2)" size="8">
         <input id="m-esp" placeholder="Esp. mm" size="6">
         <input id="m-comp" placeholder="Comp. chapa" size="8">
@@ -785,7 +832,7 @@ function tabela(colunas, linhas) {
 const carregadores = {painel: carregarPainel, projetos: carregarProjetos, ops: carregarOps, usuarios: carregarUsuarios,
                       estoque: carregarEstoque, compras: carregarCompras, financeiro: carregarFinanceiro,
                       montagem: carregarMontagem, assistencia: carregarAssistencia, indicadores: carregarIndicadores,
-                      apontamento: carregarApontamento, materiais: carregarMateriais, producao: carregarProducao, expedicao: carregarExpedicao, configuracoes: carregarConfiguracoes, comercial: carregarComercial, gestao: carregarGestao, planejamento: carregarPlanejamento};
+                      apontamento: carregarApontamento, materiais: carregarMateriais, producao: carregarProducao, expedicao: carregarExpedicao, configuracoes: carregarConfiguracoes, comercial: carregarComercial, gestao: carregarGestao, planejamento: carregarPlanejamento, produtos: carregarProdutos};
 function abrir(aba) {
   document.querySelectorAll("section").forEach((s) => s.classList.toggle("ativo", s.id === aba));
   document.querySelectorAll("#abas button").forEach((b) => b.classList.toggle("ativo", b.dataset.aba === aba));
@@ -857,7 +904,9 @@ async function verProjeto(id) {
       ${editavel ? `<input type="file" id="arq" accept=".xml,.csv"><button class="btn sec" onclick="importar(${id})">Reimportar XML do Promob</button>
       <button class="btn" onclick="liberar(${id})">Liberar para a fábrica</button>` : ""}
       ${p.status === "LIBERADO" ? `<button class="btn" onclick="gerarOp(${id})">Gerar ordem de produção</button>` : ""}
+      ${editavel && opera("projetos") ? `<button class="btn sec" onclick="abrirConfigProjeto(${id})">Acrescentar produto configurado</button>` : ""}
     </div>
+    <div id="proj-config" class="pr-venda" hidden><h2>Produto do configurador</h2><div id="proj-cfg"></div><div id="proj-cfg-msg"></div></div>
     <div id="proj-msg">${c.pendencias.length ? `<div class="msg err">Pendências de engenharia:\n• ${c.pendencias.map(esc).join("\n• ")}</div>` : ""}</div>
     <div class="grid">
       <div class="card kpi">${c.total_pecas}<small>Peças a fabricar</small></div>
@@ -865,7 +914,8 @@ async function verProjeto(id) {
       <div class="card kpi">${brl(c.custo_material_total)}<small>Custo de material</small></div>
     </div>
     <h2>Módulos</h2>${tabela([["Ambiente", (m) => esc(m.ambiente)], ["Módulo", (m) => `<b>${esc(m.codigo)}</b> ${esc(m.descricao)}`],
-      ["Qtd", (m) => m.quantidade, 1], ["Peças", (m) => m.pecas.length, 1], ["Itens", (m) => m.itens.length, 1]], modulos)}
+      ["Qtd", (m) => m.quantidade, 1], ["Peças", (m) => m.pecas.length, 1], ["Itens", (m) => m.itens.length, 1],
+      ["Origem", (m) => m.configuracao_id ? `configurador${editavel && opera("projetos") ? ` · <a onclick="retirarConfigurado(${id}, ${m.id})">retirar</a>` : ""}` : "Promob"]], modulos)}
     ${linhasConsumo("Chapas", c.chapas)}${linhasConsumo("Fitas de borda", c.fitas)}${linhasConsumo("Ferragens e acessórios", c.itens)}
     <div id="proj-auditoria"></div>
     <div id="proj-comercial"></div>`;
@@ -1588,13 +1638,478 @@ async function salvarEmpresa() {
   catch (e) { $("cfg-msg").innerHTML = `<div class="msg err">${esc(e.message)}</div>`; }
 }
 
+// --- Configurador de produtos ------------------------------------------------
+// Engenharia programa (aba Produtos); vendedor configura dentro da oportunidade; engenharia também acrescenta no projeto.
+let prNos = [], prAcabs = [], prMateriais = [], prAtual = null, prConfig = null, acabAtual = null, acabSugeridos = new Set(), prAbertos = new Set();
+const TIPOS_NO = [["GRUPO", "Grupo (linha, grupo, subgrupo)"], ["MODELO", "Modelo (vendido)"], ["SUBCONJUNTO", "Subconjunto reutilizável"]];
+const TIPOS_PERG = [["NUMERO", "Número"], ["ESCOLHA", "Escolha"], ["ACABAMENTO", "Acabamento"], ["SIM_NAO", "Sim/não"], ["TEXTO", "Texto"]];
+const TIPOS_COMP = [["PECA", "Peça de chapa"], ["PERFIL", "Perfil (metro/barra)"], ["VIDRO", "Vidro (m²)"], ["ITEM", "Item comprado"], ["SUBCONJUNTO", "Subconjunto"]];
+const nomeTipoNo = (t) => ({GRUPO: "grupo", MODELO: "modelo", SUBCONJUNTO: "subconjunto"}[t] || t);
+const nraw = (v) => v == null || v === "" ? "" : String(v).replace(".", ",");
+const lerNum = (x) => { const s = String(x ?? "").trim(); if (!s) return null; const n = Number(s.includes(",") ? s.replace(/\./g, "").replace(",", ".") : s); return Number.isFinite(n) ? n : null; };
+const linhasTxt = (t) => String(t || "").split("\n").map((l) => l.trim()).filter(Boolean);
+const msgPr = (ok, t, alvo = "pr-msg") => { if ($(alvo)) $(alvo).innerHTML = `<div class="msg ${ok ? "ok" : "err"}">${esc(t)}</div>`; };
+
+async function carregarProdutos() {
+  const [nos, acabs, cfg] = await Promise.all([api("/api/produtos"), api("/api/acabamentos"), api("/api/configurador/config")]);
+  prNos = nos; prAcabs = acabs; prConfig = cfg;
+  if (!prMateriais.length) prMateriais = await api("/api/materiais").catch(() => []);
+  desenharArvore(); desenharAcabamentos(); desenharConfigProduto();
+  $("pr-dica-exemplo").innerHTML = nos.length ? "" : `Biblioteca vazia: aplique o modelo “Configurador: biblioteca de exemplo” em Configurações → Setup da base para ver o balcão BL101 e o aéreo de alumínio prontos.`;
+}
+
+function desenharArvore() {
+  const filhos = {};
+  prNos.forEach((n) => (filhos[n.pai_id ?? 0] ||= []).push(n));
+  const rot = {GRUPO: "Grupo", MODELO: "Modelo", SUBCONJUNTO: "Subconjunto"};
+  const linha = (n, nivel) => `<div class="pr-no ${n.ativo ? "" : "inativo"} ${prAtual?.id === n.id ? "sel" : ""}" style="padding-left:${nivel * 20 + 8}px" onclick="editarNo(${n.id})">
+      <span class="tag pr-${n.tipo}">${rot[n.tipo]}</span> <b>${esc(n.codigo)}</b> ${esc(n.nome)}
+      <small>${n.perguntas} pergunta(s) · ${n.componentes} componente(s)${n.configuracoes ? ` · ${n.configuracoes} configuração(ões) vendida(s)` : ""}</small></div>`
+    + (filhos[n.id] || []).map((f) => linha(f, nivel + 1)).join("");
+  $("pr-arvore").innerHTML = (filhos[0] || []).map((n) => linha(n, 0)).join("") || `<p class="pend">Nenhum produto programado ainda.</p>`;
+}
+
+async function editarNo(id) {
+  try { prAtual = await api(`/api/produtos/${id}`); } catch (e) { msgPr(false, e.message); return; }
+  prAtual.perguntas = prAtual.perguntas || []; prAtual.componentes = prAtual.componentes || []; prAbertos = new Set();
+  desenharArvore(); desenharEditor(); $("pr-teste").hidden = true;
+  $("pr-editor").scrollIntoView({behavior: "smooth", block: "start"});
+}
+function novoNo(tipo) {
+  const grupo = prAtual ? (prAtual.tipo === "GRUPO" ? prAtual.id : prAtual.pai_id) : null;
+  prAbertos = new Set();
+  prAtual = {id: null, tipo, codigo: "", nome: "", pai_id: grupo ?? null, ordem: 0, ativo: true, descricao_formula: "", perguntas: [], componentes: [], preco: null, observacao: "", efetivo: null};
+  desenharArvore(); desenharEditor(); $("pr-teste").hidden = true;
+  $("pr-editor").scrollIntoView({behavior: "smooth", block: "start"});
+}
+
+function desenharEditor() {
+  const n = prAtual, p = n.preco || {}, grupos = prNos.filter((g) => g.tipo === "GRUPO" && g.id !== n.id);
+  const herdados = (campo) => (n.efetivo?.[campo] || []).filter((x) => x.origem !== n.codigo && !(n[campo] || []).some((y) => y.codigo === x.codigo));
+  const listaHerdados = (campo) => herdados(campo).length ? `<p class="dica">Herdados: ${herdados(campo).map((q) => `<span class="tag">${esc(q.codigo)} · de ${esc(q.origem)}</span>
+      <a onclick="sobrescrever('${campo}', '${q.codigo}')">sobrescrever</a> · <a onclick="retirarHerdado('${campo}', '${q.codigo}')">retirar</a>`).join(" &nbsp; ")}</p>` : "";
+  $("pr-editor").hidden = false;
+  $("pr-editor").innerHTML = `<h2>${n.id ? `${esc(n.codigo)} · ${esc(n.nome)}` : "Novo " + nomeTipoNo(n.tipo)}</h2>
+    ${n.efetivo ? `<p class="dica">Herança: ${n.efetivo.cadeia.map(esc).join(" › ")}${n.atualizado_por ? ` · alterado por ${esc(n.atualizado_por)} em ${quando(n.atualizado_em)}` : ""}</p>` : ""}
+    <div class="cfg">
+      <label>Tipo <select id="pe-tipo">${TIPOS_NO.map(([v, t]) => `<option value="${v}" ${v === n.tipo ? "selected" : ""}>${t}</option>`).join("")}</select></label>
+      <label>Código <input id="pe-codigo" value="${esc(n.codigo)}" placeholder="BL101"></label>
+      <label>Nome <input id="pe-nome" value="${esc(n.nome)}" placeholder="Balcão simples 1 porta"></label>
+      <label>Dentro de <select id="pe-pai"><option value="">(topo: linha de produtos)</option>${grupos.map((g) => `<option value="${g.id}" ${g.id === n.pai_id ? "selected" : ""}>${esc(g.codigo)} · ${esc(g.nome)}</option>`).join("")}</select></label>
+      <label>Ordem <input id="pe-ordem" type="number" min="0" value="${n.ordem || 0}"></label>
+      <label class="check-in"><input id="pe-ativo" type="checkbox" ${n.ativo ? "checked" : ""}> Ativo (aparece para o vendedor)</label>
+    </div>
+    <div class="cfg" style="margin-top:10px">
+      <label style="grid-column:1/-1">Descrição gerada (texto com {fórmulas}) <input id="pe-desc" class="fx" data-desc="1" value="${esc(n.descricao_formula || "")}" placeholder="Balcão {[LARGURA]}x{[PROFUNDIDADE]} mm {@CORPO.nome}"></label>
+      <label>Preço <select id="pe-pmodo"><option value="">herdar do grupo</option><option value="MARKUP" ${p.modo === "MARKUP" ? "selected" : ""}>custo × markup</option><option value="TABELA" ${p.modo === "TABELA" ? "selected" : ""}>fórmula de preço (tabela)</option></select></label>
+      <label>Markup (vazio = cenário principal) <input id="pe-pmk" value="${nraw(p.markup)}" placeholder="2,1"></label>
+      <label style="grid-column:span 2">Fórmula de preço (use CUSTO e as perguntas) <input id="pe-pfx" class="fx" value="${esc(p.formula || "")}" placeholder="350 + [LARGURA] * 0.4"></label>
+      <label style="grid-column:1/-1">Observação para a engenharia <input id="pe-obs" value="${esc(n.observacao || "")}"></label>
+    </div>
+    <h2>Perguntas ao vendedor</h2>
+    <p class="dica">LARGURA, ALTURA e PROFUNDIDADE viram as medidas do módulo. Pergunta calculada (sombra) não aparece para o vendedor: o valor vem da fórmula.</p>
+    ${listaHerdados("perguntas")}
+    <div id="pe-perguntas">${n.perguntas.map((q, i) => blocoPergunta(q, i)).join("")}</div>
+    <div class="linha"><button class="btn sec" onclick="addItemNo('perguntas')">+ Pergunta</button></div>
+    <h2>Componentes</h2>
+    <p class="dica">Medidas por fórmula sobre quem contém o componente: <code>$PW$</code> <code>$PH$</code> <code>$PD$</code> (largura, altura, profundidade do produto ou do subconjunto). Material: código fixo, <code>@PERGUNTA.COMPONENTE</code> (do acabamento escolhido) ou <code>=fórmula</code>. A quantidade de matéria-prima sai da geometria.</p>
+    ${listaHerdados("componentes")}
+    <div id="pe-componentes">${n.componentes.map((c, i) => blocoComponente(c, i)).join("")}</div>
+    <div class="linha"><button class="btn sec" onclick="addItemNo('componentes')">+ Componente</button></div>
+    <div class="linha" style="margin-top:14px">
+      <button class="btn" onclick="salvarNo()">Salvar</button>
+      ${n.id && n.tipo === "MODELO" ? `<button class="btn sec" onclick="testarNo()">Testar configuração</button><button class="btn sec" onclick="verConfiguracoes(${n.id})">Configurações geradas</button>` : ""}
+      ${n.id && n.tipo !== "GRUPO" ? `<button class="btn sec" onclick="duplicarNo()">Duplicar</button>` : ""}
+      ${n.id ? `<button class="btn sec" onclick="pedirConfirmacao('pe-msg', 'Apagar ${esc(n.codigo)} da biblioteca?', () => apagarNo(${n.id}))">Apagar</button>` : ""}
+    </div>
+    <div id="pe-msg"></div><div id="pe-configs"></div>
+    <datalist id="pr-mats">${prMateriais.map((m) => `<option value="${esc(m.codigo)}">${esc(m.descricao)}</option>`).join("")}</datalist>`;
+  ligarFx($("pr-editor"));
+}
+
+function valorTxt(o, k) {
+  const v = o[k];
+  if (k === "propostos") return (v || []).map(nraw).join("; ");
+  if (k === "liberadas") return (v || []).join(", ");
+  if (k === "opcoes") return (v || []).map((x) => `${x.codigo} = ${x.nome}${x.adicional ? ` ; +${nraw(x.adicional)}` : ""}${x.padrao ? " ; padrão" : ""}`).join("\n");
+  if (k === "validacoes") return (v || []).map((x) => `${x.regra} => ${x.mensagem}`).join("\n");
+  if (k === "bloqueios") return (v || []).map((x) => `${x.opcoes.join(", ")} se ${x.se}`).join("\n");
+  if (k.startsWith("fita_")) return o.fitas?.[k.slice(5)] || "";
+  if (k === "minimo" || k === "maximo") return nraw(v);
+  return v ?? "";
+}
+function campoNo(lista, i, o, k, rotulo, attrs = "") {
+  return `<label ${attrs.includes("largo") ? 'style="grid-column:1/-1"' : ""}>${rotulo}<input data-l="${lista}" data-i="${i}" data-k="${k}" ${attrs.replace("largo", "")} value="${esc(valorTxt(o, k))}" onchange="prCampo(this)"></label>`;
+}
+function areaNo(lista, i, o, k, rotulo, exemplo) {
+  return `<label style="grid-column:1/-1">${rotulo}<textarea rows="2" data-l="${lista}" data-i="${i}" data-k="${k}" placeholder="${esc(exemplo)}" onchange="prCampo(this)">${esc(valorTxt(o, k))}</textarea></label>`;
+}
+function marcaNo(lista, i, o, k, rotulo, padrao = false) {
+  const marcado = o[k] === undefined ? padrao : !!o[k];
+  return `<label class="check-in"><input type="checkbox" data-l="${lista}" data-i="${i}" data-k="${k}" ${marcado ? "checked" : ""} onchange="prCampo(this)"> ${rotulo}</label>`;
+}
+const abertoNo = (lista, i) => prAbertos.has(`${lista}:${i}`);
+function marcarAberto(lista, i, aberto) { if (aberto) prAbertos.add(`${lista}:${i}`); else prAbertos.delete(`${lista}:${i}`); }
+const resumoTxt = (t, max = 40) => { t = String(t ?? ""); return t.length > max ? t.slice(0, max - 1) + "…" : t; };
+function blocoRetirado(lista, i, o) {
+  return `<fieldset class="pr-bloco inativo"><legend>${esc(o.codigo)} retirado deste item (era herdado) <a onclick="tirarItemNo('${lista}', ${i})">desfazer</a></legend></fieldset>`;
+}
+function blocoPergunta(q, i) {
+  if (q.remover) return blocoRetirado("perguntas", i, q);
+  const t = q.tipo || "NUMERO", L = "perguntas", acab = prAcabs.find((a) => a.codigo === q.acabamento);
+  const resumoP = [(TIPOS_PERG.find(([v]) => v === t) || [, t])[1], q.sombra ? `calculada: ${resumoTxt(q.formula)}` : "", q.propostos ? `catálogo ${q.propostos.map(nraw).join("/")}` : "",
+    q.acabamento ? `acabamento ${q.acabamento}` : "", q.opcoes ? `${q.opcoes.length} opções` : "", q.exibir_se ? `só se ${resumoTxt(q.exibir_se, 30)}` : ""].filter(Boolean).join(" · ");
+  return `<details class="pr-bloco" ${abertoNo(L, i) || !q.codigo ? "open" : ""} ontoggle="marcarAberto('${L}', ${i}, this.open)">
+    <summary><b>${esc(q.codigo || "nova pergunta")}</b> ${esc(q.rotulo || "")} <small>${esc(resumoP)}</small> <a onclick="event.preventDefault(); tirarItemNo('${L}', ${i})">remover</a></summary>
+    <div class="cfg">
+      ${campoNo(L, i, q, "codigo", "Código", 'placeholder="LARGURA"')}${campoNo(L, i, q, "rotulo", "Pergunta ao vendedor", 'placeholder="Largura"')}
+      <label>Tipo <select data-l="${L}" data-i="${i}" data-k="tipo" onchange="prCampo(this, true)">${TIPOS_PERG.map(([v, r]) => `<option value="${v}" ${v === t ? "selected" : ""}>${r}</option>`).join("")}</select></label>
+      ${t === "NUMERO" ? campoNo(L, i, q, "unidade", "Unidade", 'placeholder="mm"') + campoNo(L, i, q, "minimo", "Mínimo") + campoNo(L, i, q, "maximo", "Máximo")
+        + campoNo(L, i, q, "propostos", "Medidas de catálogo (;)", 'placeholder="400; 450; 600"') + marcaNo(L, i, q, "somente_propostos", "Só as medidas de catálogo") : ""}
+      ${t === "ACABAMENTO" ? `<label>Acabamento <select data-l="${L}" data-i="${i}" data-k="acabamento" onchange="prCampo(this, true)"><option value="">—</option>${prAcabs.map((a) => `<option value="${a.codigo}" ${a.codigo === q.acabamento ? "selected" : ""}>${esc(a.nome)}</option>`).join("")}</select></label>`
+        + campoNo(L, i, q, "liberadas", `Liberadas neste item${acab ? ` (${acab.opcoes.map((o) => o.codigo).join(", ")})` : ""}`, 'placeholder="vazio = todas"') : ""}
+      ${campoNo(L, i, q, "padrao", "Resposta padrão")}
+      ${campoNo(L, i, q, "exibir_se", "Mostrar só se", 'class="fx" placeholder="[OPCAO_FRENTE] = &quot;COM_FRENTE&quot;"')}
+      ${campoNo(L, i, q, "formula", q.sombra ? "Fórmula (valor calculado)" : "Fórmula do padrão", 'class="fx" placeholder="[LARGURA] * [PROFUNDIDADE] / 1000000"')}
+      ${marcaNo(L, i, q, "sombra", "Calculada (não aparece)")}${marcaNo(L, i, q, "obrigatoria", "Obrigatória", true)}
+      ${t === "ESCOLHA" ? areaNo(L, i, q, "opcoes", "Opções (uma por linha: CÓDIGO = Nome ; +adicional ; padrão)", "COM_FRENTE = Com porta ; padrão\nSEM_FRENTE = Sem porta") : ""}
+      ${t === "ESCOLHA" || t === "ACABAMENTO" ? areaNo(L, i, q, "bloqueios", "Bloquear opções por condição (uma por linha: OPÇÕES se condição)", "ON, CV se [LARGURA] < 450") : ""}
+      ${areaNo(L, i, q, "validacoes", "Validações (uma por linha: regra => mensagem ao vendedor)", "[LARGURA] <= 1200 => largura máxima de 1200 mm")}
+    </div></details>`;
+}
+function blocoComponente(c, i) {
+  if (c.remover) return blocoRetirado("componentes", i, c);
+  const t = c.tipo || "PECA", L = "componentes";
+  const mat = campoNo(L, i, c, "material", "Material", 'list="pr-mats" class="fx-mat" placeholder="@CORPO.CHAPA15 ou código"');
+  const subs = prNos.filter((n) => n.tipo === "SUBCONJUNTO");
+  const medidas = t === "SUBCONJUNTO" ? `${c.subconjunto || "?"} ${[c.largura, c.altura].filter(Boolean).map((x) => resumoTxt(x, 22)).join(" × ")}`
+    : [c.comprimento, t !== "PERFIL" ? c.largura : null].filter(Boolean).map((x) => resumoTxt(x, 22)).join(" × ");
+  const resumoC = [(TIPOS_COMP.find(([v]) => v === t) || [, t])[1], medidas, c.material ? resumoTxt(c.material, 24) : "",
+    c.quantidade && c.quantidade !== "1" ? `× ${resumoTxt(c.quantidade, 24)}` : "", c.se ? `só se ${resumoTxt(c.se, 30)}` : ""].filter(Boolean).join(" · ");
+  return `<details class="pr-bloco" ${abertoNo(L, i) || !c.codigo ? "open" : ""} ontoggle="marcarAberto('${L}', ${i}, this.open)">
+    <summary><b>${esc(c.codigo || "novo componente")}</b> ${esc(resumoTxt(c.descricao || "", 36))} <small>${esc(resumoC)}</small> <a onclick="event.preventDefault(); tirarItemNo('${L}', ${i})">remover</a></summary>
+    <div class="cfg">
+      ${campoNo(L, i, c, "codigo", "Código", 'placeholder="LATERAL"')}
+      <label>Tipo <select data-l="${L}" data-i="${i}" data-k="tipo" onchange="prCampo(this, true)">${TIPOS_COMP.map(([v, r]) => `<option value="${v}" ${v === t ? "selected" : ""}>${r}</option>`).join("")}</select></label>
+      ${campoNo(L, i, c, "descricao", "Descrição ({fórmulas})", 'class="fx" data-desc="1" placeholder="Lateral {@CORPO.nome}"')}
+      ${campoNo(L, i, c, "quantidade", "Quantidade", 'class="fx" placeholder="1"')}
+      ${campoNo(L, i, c, "se", "Entra só se", 'class="fx" placeholder="[OPCAO_FRENTE] = &quot;COM_FRENTE&quot;"')}
+      ${t === "PECA" || t === "VIDRO" || t === "PERFIL" ? campoNo(L, i, c, "comprimento", "Comprimento (mm)", 'class="fx" placeholder="$PH$ - 4"') : ""}
+      ${t === "PECA" || t === "VIDRO" ? campoNo(L, i, c, "largura", "Largura (mm)", 'class="fx" placeholder="$PW$ - 32"') : ""}
+      ${t === "PECA" ? campoNo(L, i, c, "espessura", "Espessura (vazio = do material)", 'class="fx" placeholder="@FRENTE.espessura"') : ""}
+      ${t !== "SUBCONJUNTO" ? mat : ""}
+      ${t === "PECA" ? ["c1", "c2", "l1", "l2"].map((l) => campoNo(L, i, c, "fita_" + l, `Fita ${l} (${l[0] === "c" ? "no comprimento" : "na largura"})`, 'list="pr-mats" placeholder="@CORPO.FITA"')).join("")
+        + campoNo(L, i, c, "operacoes", "Operações (roteiro)", 'placeholder="CORTE,BORDA,FURAR"') + campoNo(L, i, c, "usinagem", "Programa de usinagem") + marcaNo(L, i, c, "veio", "Respeita o veio") : ""}
+      ${t === "SUBCONJUNTO" ? `<label>Subconjunto <select data-l="${L}" data-i="${i}" data-k="subconjunto" onchange="prCampo(this)"><option value="">—</option>${subs.map((s) => `<option value="${s.codigo}" ${s.codigo === c.subconjunto ? "selected" : ""}>${esc(s.codigo)} · ${esc(s.nome)}</option>`).join("")}</select></label>`
+        + campoNo(L, i, c, "largura", "Largura dele ($PW$ lá dentro)", 'class="fx" placeholder="($PW$ - 4) / 2"') + campoNo(L, i, c, "altura", "Altura ($PH$)", 'class="fx" placeholder="[ALTURA] - 4"') + campoNo(L, i, c, "profundidade", "Profundidade ($PD$)", 'class="fx"') : ""}
+    </div></details>`;
+}
+
+function lerOpcao(l) {
+  const partes = l.split(";").map((x) => x.trim()), [cod, ...nome] = partes[0].split("=");
+  const o = {codigo: cod.trim(), nome: (nome.join("=").trim() || cod.trim())};
+  partes.slice(1).forEach((x) => { if (/^[+-]?\s*\d/.test(x)) o.adicional = lerNum(x.replace(/\s|\+/g, "")); else if (/padr/i.test(x)) o.padrao = true; });
+  return o;
+}
+function prCampo(el, redesenhar = false) {
+  lerCabecalhoNo();
+  const obj = prAtual[el.dataset.l][Number(el.dataset.i)], k = el.dataset.k;
+  const v = el.type === "checkbox" ? el.checked : el.value.trim(), vazio = v === "";
+  if (k.startsWith("fita_")) { obj.fitas = {...(obj.fitas || {})}; if (vazio) delete obj.fitas[k.slice(5)]; else obj.fitas[k.slice(5)] = v; }
+  else if (k === "propostos") obj[k] = vazio ? undefined : v.split(/[;\s]+/).map(lerNum).filter((x) => x != null);
+  else if (k === "liberadas") obj[k] = vazio ? undefined : v.split(/[,;\s]+/).filter(Boolean).map((x) => x.toUpperCase());
+  else if (k === "minimo" || k === "maximo") obj[k] = vazio ? undefined : lerNum(v);
+  else if (k === "opcoes") obj[k] = linhasTxt(v).map(lerOpcao);
+  else if (k === "validacoes") obj[k] = linhasTxt(v).map((l) => { const [regra, ...m] = l.split("=>"); return {regra: regra.trim(), mensagem: m.join("=>").trim() || "valor não permitido"}; });
+  else if (k === "bloqueios") obj[k] = linhasTxt(v).map((l) => { const m = l.split(/\s+se\s+/i); return {opcoes: m[0].split(/[,;\s]+/).filter(Boolean), se: m.slice(1).join(" se ").trim()}; });
+  else obj[k] = typeof v === "boolean" ? v : (vazio ? undefined : v);
+  if (redesenhar) desenharEditor();
+}
+function lerCabecalhoNo() {
+  if (!$("pe-codigo")) return;
+  const n = prAtual, modo = $("pe-pmodo").value, mk = lerNum($("pe-pmk").value), fx = $("pe-pfx").value.trim();
+  Object.assign(n, {tipo: $("pe-tipo").value, codigo: $("pe-codigo").value.trim(), nome: $("pe-nome").value.trim(),
+    pai_id: $("pe-pai").value ? Number($("pe-pai").value) : null, ordem: Number($("pe-ordem").value) || 0, ativo: $("pe-ativo").checked,
+    descricao_formula: $("pe-desc").value.trim(), observacao: $("pe-obs").value.trim(),
+    preco: modo || mk || fx ? {modo: modo || null, markup: mk, formula: fx || null} : null});
+}
+function addItemNo(lista) { lerCabecalhoNo(); prAtual[lista].push(lista === "perguntas" ? {codigo: "", tipo: "NUMERO"} : {codigo: "", tipo: "PECA", quantidade: "1"}); prAbertos.add(`${lista}:${prAtual[lista].length - 1}`); desenharEditor(); }
+function tirarItemNo(lista, i) { lerCabecalhoNo(); prAtual[lista].splice(i, 1); prAbertos = new Set(); desenharEditor(); }
+function sobrescrever(lista, codigo) {
+  lerCabecalhoNo();
+  const x = structuredClone(prAtual.efetivo[lista].find((y) => y.codigo === codigo)); delete x.origem;
+  prAtual[lista].push(x); prAbertos.add(`${lista}:${prAtual[lista].length - 1}`); desenharEditor();
+}
+function retirarHerdado(lista, codigo) { lerCabecalhoNo(); prAtual[lista].push({codigo, remover: true}); desenharEditor(); }
+const semVazios = (lista) => JSON.parse(JSON.stringify(lista, (k, v) => (k === "origem" || v === "" || v === null) ? undefined : v));
+
+async function salvarNo() {
+  lerCabecalhoNo();
+  const n = prAtual, corpo = {pai_id: n.pai_id, tipo: n.tipo, codigo: n.codigo, nome: n.nome, ordem: n.ordem, ativo: n.ativo,
+    descricao_formula: n.descricao_formula || null, perguntas: semVazios(n.perguntas), componentes: semVazios(n.componentes),
+    preco: n.preco, observacao: n.observacao || null};
+  try {
+    const r = await api(n.id ? `/api/produtos/${n.id}` : "/api/produtos", {method: n.id ? "PUT" : "POST", json: corpo});
+    prNos = await api("/api/produtos"); await editarNo(r.id);
+    msgPr(true, "Salvo. As próximas configurações já usam esta engenharia (o que já foi vendido continua congelado).", "pe-msg");
+  } catch (e) { msgPr(false, e.message, "pe-msg"); }
+}
+async function duplicarNo() {
+  const codigo = prompt("Código do novo item (ex.: BL102)"); if (!codigo) return;
+  const nome = prompt("Nome do novo item", prAtual.nome + " (cópia)"); if (!nome) return;
+  try { const r = await api(`/api/produtos/${prAtual.id}/duplicar`, {method: "POST", json: {codigo, nome}}); prNos = await api("/api/produtos"); await editarNo(r.id); msgPr(true, "Duplicado: ajuste o que muda.", "pe-msg"); }
+  catch (e) { msgPr(false, e.message, "pe-msg"); }
+}
+async function apagarNo(id) {
+  try { await api(`/api/produtos/${id}`, {method: "DELETE"}); prAtual = null; $("pr-editor").hidden = true; $("pr-teste").hidden = true; await carregarProdutos(); msgPr(true, "Apagado da biblioteca."); }
+  catch (e) { msgPr(false, e.message, "pe-msg"); }
+}
+async function verConfiguracoes(id) {
+  const lista = await api(`/api/produtos/${id}/configuracoes`);
+  $("pe-configs").innerHTML = `<h2>Configurações geradas</h2><div class="tabela">${tabela([["Código", (c) => `<b>${esc(c.codigo)}</b>`], ["Descrição", (c) => esc(c.descricao)],
+    ["Preço un.", (c) => brl(c.custo.preco_unitario || 0), 1], ["Custo material", (c) => brl(c.custo.material || 0), 1], ["Criada", (c) => `${quando(c.criado_em)} · ${esc(c.criado_por || "")}`]], lista)}</div>`;
+}
+function ligarFx(raiz) {
+  raiz.querySelectorAll("input.fx").forEach((el) => el.addEventListener("blur", async () => {
+    const v = el.value.trim();
+    if (!v) { el.classList.remove("fx-erro"); el.title = ""; return; }
+    try { const r = await api("/api/formulas/conferir", {method: "POST", json: {formula: v, descricao: !!el.dataset.desc}});
+      el.classList.toggle("fx-erro", !r.ok); el.title = r.ok ? (r.variaveis.length ? "usa: " + r.variaveis.join(", ") : "fórmula ok") : r.erro; }
+    catch (e) { /* sem rede: o servidor confere ao salvar */ }
+  }));
+}
+async function testarNo() {
+  $("pr-teste").hidden = false;
+  $("pr-teste").innerHTML = `<h2>Testar ${esc(prAtual.codigo)} como o vendedor vai ver</h2><p class="dica">Simula sem gravar nada: mude as respostas e confira peças, perfis, consumo, custo e preço.</p><div id="pr-sim"></div>`;
+  await montarConfigurador("pr-sim", {modo: "teste", modelo_id: prAtual.id});
+  $("pr-teste").scrollIntoView({behavior: "smooth", block: "start"});
+}
+
+// Acabamentos
+function desenharAcabamentos() {
+  $("pr-acabs").innerHTML = `<div class="tabela">${tabela([["Código", (a) => `<a onclick="editarAcabamento(${a.id})"><b>${esc(a.codigo)}</b></a>`], ["Nome", (a) => esc(a.nome)],
+    ["Componentes", (a) => a.componentes.map(esc).join(", ")], ["Opções", (a) => a.opcoes.map((o) => `<span class="tag ${o.ativo === false ? "inativo" : ""}">${esc(o.nome)}</span>`).join(" ")]], prAcabs)}</div>`;
+}
+function editarAcabamento(id) {
+  acabSugeridos = new Set();
+  acabAtual = id ? structuredClone(prAcabs.find((a) => a.id === id))
+    : {id: null, codigo: "", nome: "", componentes: ["CHAPA15", "FITA"], opcoes: [{codigo: "", nome: "", referencia: "", materiais: {}, info: {}, adicional: 0, ativo: true}]};
+  desenharAcabEditor();
+}
+function desenharAcabEditor() {
+  const a = acabAtual;
+  const cel = (o, i, comp) => `<input list="pr-mats-a" size="12" class="${acabSugeridos.has(`${i}:${comp}`) ? "sugerido" : ""}" value="${esc(o.materiais?.[comp] || "")}" onchange="acabCampo(${i}, 'mat:${comp}', this.value)" aria-label="${esc(comp)}">`;
+  $("pr-acab-editor").innerHTML = `<h2>${a.id ? `Acabamento ${esc(a.codigo)}` : "Novo acabamento"}</h2>
+    <div class="cfg">
+      <label>Código <input id="ac-codigo" value="${esc(a.codigo)}" ${a.id ? "disabled" : ""} placeholder="COR_CORPO"></label>
+      <label>Nome <input id="ac-nome" value="${esc(a.nome)}" placeholder="Cor do corpo"></label>
+      <label style="grid-column:span 2">Componentes que recebem material <input id="ac-comps" value="${esc(a.componentes.join(", "))}" onchange="acabComponentes(this.value)" placeholder="CHAPA15, FITA"></label>
+    </div>
+    <div class="tabela"><table><thead><tr><th>Código</th><th>Nome</th><th>Ref.</th><th class="n">Adicional</th>${a.componentes.map((c) => `<th>${esc(c)}</th>`).join("")}<th>Informações</th><th>Padrão</th><th>Ativo</th><th></th></tr></thead><tbody>
+      ${a.opcoes.map((o, i) => `<tr><td><input size="8" value="${esc(o.codigo)}" onchange="acabCampo(${i}, 'codigo', this.value)"></td><td><input size="14" value="${esc(o.nome)}" onchange="acabCampo(${i}, 'nome', this.value)"></td>
+        <td><input size="5" value="${esc(o.referencia || "")}" onchange="acabCampo(${i}, 'referencia', this.value)"></td><td class="n"><input class="num" value="${nraw(o.adicional || "")}" onchange="acabCampo(${i}, 'adicional', this.value)"></td>
+        ${a.componentes.map((c) => `<td>${cel(o, i, c)}</td>`).join("")}
+        <td><input size="14" value="${esc(Object.entries(o.info || {}).map(([k, v]) => `${k}=${nraw(v)}`).join("; "))}" placeholder="espessura=18" onchange="acabCampo(${i}, 'info', this.value)"></td>
+        <td><input type="checkbox" ${o.padrao ? "checked" : ""} onchange="acabCampo(${i}, 'padrao', this.checked)"></td><td><input type="checkbox" ${o.ativo !== false ? "checked" : ""} onchange="acabCampo(${i}, 'ativo', this.checked)"></td>
+        <td><a onclick="acabAtual.opcoes.splice(${i}, 1); desenharAcabEditor()">tirar</a></td></tr>`).join("")}
+    </tbody></table></div>
+    <div class="linha" style="margin-top:10px"><button class="btn sec" onclick="acabAtual.opcoes.push({codigo: '', nome: '', materiais: {}, info: {}, ativo: true}); desenharAcabEditor()">+ Opção</button>
+      ${a.id ? `<button class="btn sec" onclick="sugerirAcabamento()">Sugerir materiais do cadastro</button>` : ""}
+      <button class="btn" onclick="salvarAcabamento()">Salvar acabamento</button>
+      ${a.id ? `<button class="btn sec" onclick="pedirConfirmacao('ac-msg', 'Apagar o acabamento ${esc(a.codigo)}?', () => apagarAcabamento(${a.id}))">Apagar</button>` : ""}</div>
+    <div id="ac-msg"></div>
+    <datalist id="pr-mats-a">${prMateriais.map((m) => `<option value="${esc(m.codigo)}">${esc(m.descricao)}</option>`).join("")}</datalist>`;
+}
+function acabComponentes(v) { acabAtual.componentes = v.split(/[,;\s]+/).filter(Boolean).map((x) => x.toUpperCase()); desenharAcabEditor(); }
+function acabCampo(i, k, v) {
+  const o = acabAtual.opcoes[i];
+  if (k.startsWith("mat:")) { o.materiais = {...(o.materiais || {})}; const c = k.slice(4); if (String(v).trim()) o.materiais[c] = String(v).trim(); else delete o.materiais[c]; acabSugeridos.delete(`${i}:${c}`); }
+  else if (k === "adicional") o.adicional = lerNum(v) || 0;
+  else if (k === "info") o.info = Object.fromEntries(String(v).split(";").map((x) => x.split("=")).filter((p) => p[0].trim()).map(([kk, vv]) => [kk.trim().toLowerCase(), lerNum(vv) ?? String(vv ?? "").trim()]));
+  else o[k] = typeof v === "string" ? v.trim() : v;
+}
+async function salvarAcabamento() {
+  const a = acabAtual, corpo = {codigo: a.id ? a.codigo : $("ac-codigo").value.trim(), nome: $("ac-nome").value.trim(), componentes: a.componentes, opcoes: a.opcoes};
+  try { const r = await api(a.id ? `/api/acabamentos/${a.id}` : "/api/acabamentos", {method: a.id ? "PUT" : "POST", json: corpo});
+    prAcabs = await api("/api/acabamentos"); desenharAcabamentos(); acabAtual = structuredClone(r); acabSugeridos = new Set(); desenharAcabEditor();
+    msgPr(true, "Acabamento salvo: vale para todos os produtos que usam ele.", "ac-msg"); }
+  catch (e) { msgPr(false, e.message, "ac-msg"); }
+}
+async function sugerirAcabamento() {
+  try {
+    const s = await api(`/api/acabamentos/${acabAtual.id}/sugerir`, {method: "POST"});
+    let n = 0;
+    acabAtual.opcoes.forEach((o, i) => Object.entries(s[o.codigo] || {}).forEach(([comp, lista]) => {
+      if (lista.length && !o.materiais?.[comp]) { o.materiais = {...(o.materiais || {}), [comp]: lista[0].codigo}; acabSugeridos.add(`${i}:${comp}`); n++; } }));
+    desenharAcabEditor();
+    msgPr(!!n, n ? `${n} material(is) sugerido(s), destacados na tabela: confira e salve.` : "Nenhuma sugestão: cadastre os materiais com o nome da cor e a espessura (ex.: “MDP Tabaco 15mm”).", "ac-msg");
+  } catch (e) { msgPr(false, e.message, "ac-msg"); }
+}
+async function apagarAcabamento(id) {
+  try { await api(`/api/acabamentos/${id}`, {method: "DELETE"}); prAcabs = await api("/api/acabamentos"); desenharAcabamentos(); $("pr-acab-editor").innerHTML = ""; }
+  catch (e) { msgPr(false, e.message, "ac-msg"); }
+}
+
+// Constantes e parâmetros
+function desenharConfigProduto() {
+  const c = prConfig;
+  $("pr-config").innerHTML = `<div class="cfg">
+      <label style="grid-column:1/-1">Constantes (uma por linha: NOME = valor)<textarea id="pc-const" rows="3">${esc(Object.entries(c.constantes || {}).map(([k, v]) => `${k} = ${nraw(v)}`).join("\n"))}</textarea></label>
+      <label>Perda de perfil (%)<input id="pc-perda" value="${nraw(c.perda_perfil_pct)}"></label>
+      <label>Serra por corte de perfil (mm)<input id="pc-serra" value="${nraw(c.serra_perfil_mm)}"></label>
+      <label>Markup padrão (sem cenário principal)<input id="pc-mk" value="${nraw(c.markup_padrao)}"></label></div>
+    <div class="linha" style="margin-top:10px"><button class="btn" onclick="salvarConfigProduto()">Salvar parâmetros</button></div><div id="pc-msg"></div>`;
+}
+async function salvarConfigProduto() {
+  const constantes = Object.fromEntries(linhasTxt($("pc-const").value).map((l) => l.split("=")).map(([k, v]) => [k.trim(), lerNum(v)]));
+  try { prConfig = await api("/api/configurador/config", {method: "PUT", json: {constantes, perda_perfil_pct: lerNum($("pc-perda").value) ?? 0,
+      serra_perfil_mm: lerNum($("pc-serra").value) ?? 0, markup_padrao: lerNum($("pc-mk").value) || 2}});
+    desenharConfigProduto(); msgPr(true, "Parâmetros salvos.", "pc-msg"); }
+  catch (e) { msgPr(false, e.message, "pc-msg"); }
+}
+
+// Configurador (venda, teste da engenharia e projeto): o mesmo formulário dinâmico
+const cfgs = {};
+async function montarConfigurador(alvo, op) {
+  cfgs[alvo] = {modelo_id: op.modelo_id || null, respostas: {...(op.respostas || {})}, quantidade: op.quantidade || 1, ambiente: op.ambiente || "",
+    modelos: op.modelos || [], modo: op.modo, aoAdicionar: op.aoAdicionar, indice: op.indice ?? null, resultado: null, botao: op.botao};
+  await simularCfg(alvo);
+}
+async function simularCfg(alvo) {
+  const st = cfgs[alvo];
+  if (!st.modelo_id) { st.resultado = null; desenharCfg(alvo); return; }
+  try { st.resultado = await api("/api/configurador/simular", {method: "POST", json: {modelo_id: st.modelo_id, respostas: st.respostas, quantidade: st.quantidade}}); st.erro = null; }
+  catch (e) { st.resultado = null; st.erro = e.message; }
+  desenharCfg(alvo);
+}
+const fmtValor = (v) => typeof v === "number" ? num(v, 4) : typeof v === "boolean" ? (v ? "sim" : "não") : String(v);
+function campoCfg(alvo, p) {
+  const id = `${alvo}-${p.codigo}`, ch = `onchange="respCfg('${alvo}', '${p.codigo}', this)"`, v = p.valor;
+  let input;
+  if (p.tipo === "ESCOLHA" || p.tipo === "ACABAMENTO") input = `<select id="${id}" ${ch}><option value="">—</option>${p.opcoes.map((o) => `<option value="${esc(o.codigo)}" ${o.codigo === v ? "selected" : ""}>${esc(o.nome)}${o.adicional ? ` (+${brl(o.adicional)})` : ""}</option>`).join("")}</select>`;
+  else if (p.tipo === "SIM_NAO") input = `<input id="${id}" type="checkbox" ${v ? "checked" : ""} ${ch}>`;
+  else if (p.tipo === "NUMERO" && p.somente_propostos && p.propostos) input = `<select id="${id}" ${ch}>${v == null ? `<option value="">—</option>` : ""}${p.propostos.map((x) => `<option value="${x}" ${x === v ? "selected" : ""}>${num(x)}</option>`).join("")}${v == null || p.propostos.includes(v) ? "" : `<option selected value="${v}">${num(v)}</option>`}</select>`;
+  else if (p.tipo === "NUMERO") input = `<input id="${id}" type="number" step="any" value="${v ?? ""}" ${p.minimo != null ? `min="${p.minimo}"` : ""} ${p.maximo != null ? `max="${p.maximo}"` : ""} ${p.propostos ? `list="${id}-l"` : ""} ${ch}>${p.propostos ? `<datalist id="${id}-l">${p.propostos.map((x) => `<option value="${x}">`).join("")}</datalist>` : ""}`;
+  else input = `<input id="${id}" value="${esc(v ?? "")}" ${ch}>`;
+  const faixa = p.tipo === "NUMERO" && (p.minimo != null || p.maximo != null) ? ` <small>${p.minimo != null ? num(p.minimo) : ""} a ${p.maximo != null ? num(p.maximo) : ""}</small>` : "";
+  return `<label class="${p.erro ? "com-erro" : ""}">${esc(p.rotulo)}${p.unidade ? ` (${esc(p.unidade)})` : ""}${faixa}${input}${p.erro ? `<small class="neg">${esc(p.erro)}</small>` : ""}</label>`;
+}
+function respCfg(alvo, codigo, el) {
+  const st = cfgs[alvo]; st.respostas[codigo] = el.type === "checkbox" ? el.checked : el.value;
+  if (st.respostas[codigo] === "") delete st.respostas[codigo];
+  simularCfg(alvo);
+}
+function trocarModeloCfg(alvo, id) { const st = cfgs[alvo]; st.modelo_id = id ? Number(id) : null; st.respostas = {}; st.indice = null; simularCfg(alvo); }
+function desenharCfg(alvo) {
+  const st = cfgs[alvo], r = st.resultado, el = $(alvo); if (!el) return;
+  const seletor = st.modo !== "teste" ? `<label class="dica">Produto <select onchange="trocarModeloCfg('${alvo}', this.value)" aria-label="Produto"><option value="">Escolha o produto…</option>
+      ${st.modelos.map((m) => `<option value="${m.id}" ${m.id === st.modelo_id ? "selected" : ""}>${esc(m.linha ? m.linha + " › " : "")}${esc(m.nome)}</option>`).join("")}</select></label>` : "";
+  const extras = st.modo !== "teste" ? `<label class="dica">Ambiente <input value="${esc(st.ambiente)}" placeholder="Cozinha" size="14" onchange="cfgs['${alvo}'].ambiente = this.value.trim()"></label>` : "";
+  const qtd = `<label class="dica">Quantidade <input type="number" min="1" max="999" value="${st.quantidade}" style="width:80px" onchange="cfgs['${alvo}'].quantidade = Math.max(1, Number(this.value) || 1); simularCfg('${alvo}')"></label>`;
+  if (!r) { el.innerHTML = `<div class="linha">${seletor}</div>${st.erro ? `<div class="msg err">${esc(st.erro)}</div>` : ""}`; return; }
+  const perg = r.perguntas.filter((p) => p.visivel && !p.sombra), calc = r.perguntas.filter((p) => p.visivel && p.sombra && p.valor != null);
+  el.innerHTML = `<div class="linha">${seletor}${extras}${qtd}</div>
+    <div class="cfg cfg-perg">${perg.map((p) => campoCfg(alvo, p)).join("")}</div>
+    ${calc.length ? `<p class="dica">Calculado: ${calc.map((p) => `${esc(p.rotulo)} <b>${esc(fmtValor(p.valor))}${p.unidade ? " " + esc(p.unidade) : ""}</b>`).join(" · ")}</p>` : ""}
+    <div class="cfg-res"><b>${esc(r.descricao)}</b> ${r.codigo_existente ? `<span class="tag">já configurado: ${esc(r.codigo_existente)}</span>` : `<span class="tag">configuração nova</span>`}
+      <div class="kpi-linha"><span>${brl(r.preco.unitario)}<small>preço unitário</small></span><span>${brl(r.preco.total)}<small>total × ${r.preco.quantidade}</small></span>
+        <span>${r.custo.pecas}<small>peças</small></span><span>${num(r.custo.m2_chapa, 3)} m²<small>de chapa</small></span></div></div>
+    ${r.pendencias.length ? `<div class="msg err">Pendência de engenharia (avise a engenharia de produto):\n• ${r.pendencias.map(esc).join("\n• ")}</div>` : ""}
+    ${st.aoAdicionar ? `<div class="linha" style="margin-top:10px"><button class="btn" ${r.valido ? "" : "disabled"} onclick="adicionarCfg('${alvo}')">${st.indice != null ? "Atualizar item" : st.botao || "Adicionar à proposta"}</button>
+      ${!r.valido && !r.pendencias.length ? `<span class="dica">Responda as perguntas marcadas.</span>` : ""}</div>` : ""}
+    <details ${st.modo === "teste" ? "open" : ""}><summary>Engenharia gerada: árvore, peças, perfis, consumo e custo</summary>${detalheCfg(r)}</details>`;
+}
+function detalheCfg(r) {
+  const arv = (nos) => `<ul class="arvore">${nos.map((n) => `<li class="${n.incluido ? "" : "inativo"}">${n.tipo === "SUBCONJUNTO" ? "▸ " : ""}<b>${esc(n.codigo)}</b> ${esc(n.descricao || "")}
+      ${n.incluido ? `<small>${n.quantidade != null ? `× ${num(n.quantidade, 3)}` : ""} ${esc(n.medidas || "")}${n.material ? " · " + esc(n.material) : ""}${n.origem ? " · de " + esc(n.origem) : ""}</small>` : `<small>fora desta configuração</small>`}
+      ${n.filhos ? arv(n.filhos) : ""}</li>`).join("")}</ul>`;
+  const m = r.modulo, c = r.custo;
+  return `<h2>Árvore (${esc(r.modelo.heranca.join(" › "))})</h2>${arv(r.arvore)}
+    <h2>Peças de chapa</h2><div class="tabela">${tabela([["Peça", (p) => `<b>${esc(p.codigo)}</b> ${esc(p.descricao)}`], ["Material", (p) => esc(p.material_codigo)],
+      ["C × L × E", (p) => `${num(p.comprimento_mm)} × ${num(p.largura_mm)}${p.espessura_mm ? " × " + num(p.espessura_mm) : ""}`, 1], ["Qtd", (p) => p.quantidade, 1],
+      ["Fitas", (p) => ["c1", "c2", "l1", "l2"].filter((l) => p["fita_" + l]).map((l) => `${l}: ${esc(p["fita_" + l])}`).join(" ") || "—"]], m.pecas)}</div>
+    <h2>Perfis, vidros e itens</h2><div class="tabela">${tabela([["Item", (i) => esc(i.descricao)], ["Material", (i) => esc(i.material_codigo)], ["Qtd", (i) => `${num(i.quantidade, 4)} ${esc(i.unidade)}`, 1]], m.itens)}</div>
+    <h2>Consumo e custo</h2><div class="tabela">${tabela([["Material", (l) => `<b>${esc(l.material_codigo)}</b> ${esc(l.descricao)}`], ["Quantidade", (l) => `${num(l.quantidade, 4)} ${esc(l.unidade)}`, 1], ["Custo", (l) => brl(l.custo), 1]], c.consumo)}</div>
+    <p class="dica">Material ${brl(c.material)} + mão de obra ${brl(c.mao_de_obra)} (${num(c.horas)} h) = <b>${brl(c.total)}</b> · ${r.preco.markup ? `markup ${num(r.preco.markup, 4)} (${esc(r.preco.origem)})` : esc(r.preco.origem)}${r.preco.adicionais.length ? " · adicionais: " + r.preco.adicionais.map((a) => `${esc(a.opcao)} ${brl(a.valor)}`).join(", ") : ""}</p>`;
+}
+function adicionarCfg(alvo) {
+  const st = cfgs[alvo], r = st.resultado; if (!r?.valido) return;
+  st.aoAdicionar({modelo_id: st.modelo_id, respostas: r.respostas, quantidade: st.quantidade, ambiente: st.ambiente || "Produtos configurados",
+    descricao: r.descricao, preco_unitario: r.preco.unitario, codigo: r.codigo_existente}, st.indice);
+}
+
+// Venda: carrinho de produtos configurados da oportunidade
+let carrinho = {op: null, itens: [], versaoXml: null, modelos: []};
+async function abrirConfigVenda(opId) {
+  const o = opAtual, ultima = o.lista_versoes[0];
+  let modelos;
+  try { modelos = await api("/api/configurador/modelos"); } catch (e) { msgOp(false, e.message); return; }
+  if (!modelos.length) { msgOp(false, "Nenhum produto programado no configurador ainda: a engenharia cadastra na aba Produtos."); return; }
+  carrinho = {op: opId, modelos, versaoXml: o.lista_versoes.find((v) => v.tem_xml)?.id ?? null,
+    itens: (ultima?.itens_config || []).map((i) => ({modelo_id: i.modelo_id, respostas: i.respostas, quantidade: i.quantidade, ambiente: i.ambiente,
+      descricao: i.descricao, preco_unitario: i.preco_unitario, codigo: i.codigo}))};
+  $("op-config").hidden = false;
+  desenharCarrinho();
+  await montarConfigurador("op-cfg", {modo: "venda", modelos, aoAdicionar: guardarNoCarrinho, ambiente: carrinho.itens.at(-1)?.ambiente || ""});
+  $("op-config").scrollIntoView({behavior: "smooth", block: "start"});
+}
+function guardarNoCarrinho(item, indice) {
+  if (indice != null) carrinho.itens[indice] = item; else carrinho.itens.push(item);
+  const st = cfgs["op-cfg"]; st.indice = null; st.respostas = {};
+  desenharCarrinho(); simularCfg("op-cfg");
+}
+function editarCarrinho(i) {
+  const it = carrinho.itens[i], st = cfgs["op-cfg"];
+  Object.assign(st, {modelo_id: it.modelo_id, respostas: {...it.respostas}, quantidade: it.quantidade, ambiente: it.ambiente, indice: i});
+  simularCfg("op-cfg"); $("op-cfg").scrollIntoView({behavior: "smooth", block: "start"});
+}
+function tirarCarrinho(i) { carrinho.itens.splice(i, 1); desenharCarrinho(); }
+function desenharCarrinho() {
+  const c = carrinho, total = c.itens.reduce((s, i) => s + i.preco_unitario * i.quantidade, 0);
+  $("op-carrinho").innerHTML = (c.itens.length ? `<div class="tabela">${tabela([["Ambiente", (i) => esc(i.ambiente)],
+      ["Produto", (i) => `${esc(i.descricao)}${i.codigo ? ` <span class="dica">${esc(i.codigo)}</span>` : ""}`], ["Qtd", (i) => i.quantidade, 1],
+      ["Unitário", (i) => brl(i.preco_unitario), 1], ["Total", (i) => brl(i.preco_unitario * i.quantidade), 1],
+      ["", (i) => `<a onclick="editarCarrinho(${c.itens.indexOf(i)})">editar</a> · <a onclick="tirarCarrinho(${c.itens.indexOf(i)})">tirar</a>`]], c.itens)}</div>
+      <p class="dica">Produtos configurados: <b>${brl(total)}</b> antes de desconto e condição. O preço vem do custo da engenharia × markup (ou da tabela do produto).</p>`
+    : `<p class="pend">Configure um produto acima e adicione à proposta.</p>`)
+    + `<div class="linha">${c.versaoXml ? `<label class="check-in"><input type="checkbox" id="cfg-somar" checked> Somar ao projeto do Promob (XML da versão mais recente)</label>` : ""}
+      <button class="btn" ${c.itens.length ? "" : "disabled"} onclick="gerarVersaoConfigurada()">Gerar versão da proposta</button>
+      <button class="btn sec" onclick="$('op-config').hidden = true">Fechar</button></div><div id="cfg-msg"></div>`;
+}
+async function gerarVersaoConfigurada() {
+  const c = carrinho;
+  try {
+    const v = await api(`/api/oportunidades/${c.op}/versoes/configurada`, {method: "POST", json: {
+      itens: c.itens.map(({modelo_id, respostas, quantidade, ambiente}) => ({modelo_id, respostas, quantidade, ambiente})),
+      incluir_xml_da_versao: $("cfg-somar")?.checked ? c.versaoXml : null}});
+    await carregarComercial(); await verOportunidade(c.op);
+    msgOp(true, `Versão ${v.numero} gerada com ${v.itens_config.length} produto(s) configurado(s) (${v.itens_config.map((i) => i.codigo).join(", ")}). Negocie desconto e condição abaixo.`);
+  } catch (e) { $("cfg-msg").innerHTML = `<div class="msg err">${esc(e.message)}</div>`; }
+}
+
+// Projeto: a engenharia acrescenta um produto configurado (ex.: alumínio fora do Promob)
+async function abrirConfigProjeto(pid) {
+  let modelos;
+  try { modelos = await api("/api/configurador/modelos"); } catch (e) { $("proj-msg").innerHTML = `<div class="msg err">${esc(e.message)}</div>`; return; }
+  $("proj-config").hidden = false;
+  await montarConfigurador("proj-cfg", {modo: "projeto", modelos, botao: "Acrescentar ao projeto", aoAdicionar: async (item) => {
+    try { const r = await api(`/api/projetos/${pid}/configurados`, {method: "POST", json: {modelo_id: item.modelo_id, respostas: item.respostas, quantidade: item.quantidade, ambiente: item.ambiente}});
+      await verProjeto(pid); $("proj-msg").innerHTML = `<div class="msg ok">${esc(r.codigo)} · ${esc(r.descricao)} acrescentado em ${esc(r.ambiente)}.</div>`; }
+    catch (e) { $("proj-cfg-msg").innerHTML = `<div class="msg err">${esc(e.message)}</div>`; }
+  }});
+}
+async function retirarConfigurado(pid, mid) {
+  try { await api(`/api/projetos/${pid}/modulos/${mid}`, {method: "DELETE"}); await verProjeto(pid); }
+  catch (e) { $("proj-msg").innerHTML = `<div class="msg err">${esc(e.message)}</div>`; }
+}
+
 // --- Acesso -----------------------------------------------------------------
 // Cada aba aparece se o login opera ao menos uma das funções listadas (null = aberta a todos)
 const ABA_FUNCOES = {
   indicadores: ["indicadores"], gestao: ["indicadores"], comercial: ["comercial", "aprovar_venda"], painel: null, projetos: ["projetos", "pcp", "financeiro", "fiscal"], ops: null,
   apontamento: ["apontamento"], producao: ["pcp", "apontamento", "estorno", "refugo", "indicadores"], expedicao: ["expedicao"],
   estoque: ["estoque", "compras", "projetos", "pcp"], compras: ["compras"], montagem: ["montagem"], assistencia: ["assistencia"],
-  financeiro: ["financeiro", "fiscal", "conciliacao"], planejamento: ["controladoria", "aprovar_despesa"], materiais: ["materiais", "projetos", "compras", "pcp"], usuarios: ["usuarios"], configuracoes: ["usuarios"],
+  financeiro: ["financeiro", "fiscal", "conciliacao"], planejamento: ["controladoria", "aprovar_despesa"], produtos: ["produtos"], materiais: ["materiais", "projetos", "compras", "pcp"], usuarios: ["usuarios"], configuracoes: ["usuarios"],
 };
 const opera = (f) => !!sessao?.usuario.funcoes_efetivas?.includes(f);
 function abasDoLogin() {
@@ -1843,11 +2358,13 @@ async function novaOportunidade() {
 }
 function linhaCalc(c) {
   const l = (t, v, cls = "") => `<tr class="${cls}"><td>${t}</td><td class="n">${v}</td></tr>`;
-  return `<table class="calc"><tbody>${l("Preço do Promob (orçamento ao cliente)", brl(c.preco_base))}
+  const rot = {CONFIGURADOR: ["Preço dos produtos configurados", "material da engenharia"], MISTO: ["Preço do Promob + produtos configurados", "pedido Promob + material dos configurados + frete + montagem"]}[c.origem]
+    || ["Preço do Promob (orçamento ao cliente)", "pedido Promob + frete + montagem"];
+  return `<table class="calc"><tbody>${l(rot[0], brl(c.preco_base))}
     ${l(`Desconto ${pctTxt(c.desconto_pct)} · ${esc(c.condicao)} (${c.ajuste_pct >= 0 ? "+" : ""}${pctTxt(c.ajuste_pct)})`, brl(c.preco_final - c.preco_base))}
     ${l(`Preço final · ${c.parcelas}x de ${brl(c.parcela_valor)}`, brl(c.preco_final), "total")}
     ${l("(−) Impostos", brl(-c.impostos))}${l(`(−) RT do parceiro (${pctTxt(c.rt_pct)})`, brl(-c.rt))}${l("(−) Comissão do vendedor", brl(-c.comissao_vendedor))}
-    ${l(`(−) Custo de produção (pedido Promob + frete + montagem${c.mao_de_obra ? ` + mão de obra ${brl(c.mao_de_obra)}` : ""})`, brl(-c.custo_producao))}
+    ${l(`(−) Custo de produção (${rot[1]}${c.mao_de_obra ? ` + mão de obra ${brl(c.mao_de_obra)}` : ""})`, brl(-c.custo_producao))}
     ${l(`Margem · ${pctTxt(c.margem_pct)}`, brl(c.margem), "total")}
     ${c.preco_m2 ? l("Preço por m² de chapa · custo por m²", `${brl(c.preco_m2)} · ${brl(c.custo_m2)}`) : ""}</tbody></table>
     ${c.prices ? `<p class="dica">Promob Prices (tabela vigente): ${c.prices.modulos_encontrados} de ${c.prices.modulos_total} módulo(s) encontrados · ${brl(c.prices.valor_tabela_prices)}${c.prices.diferenca_pct != null ? ` · diferença de ${pctTxt(c.prices.diferenca_pct)} sobre o valor de tabela do XML` : ""}${c.prices.faltando.length ? ` · sem preço: ${c.prices.faltando.slice(0, 5).map(esc).join(", ")}` : ""}</p>` : ""}`;
@@ -1874,8 +2391,12 @@ async function verOportunidade(id) {
     </div>` : o.motivo_perda ? `<p class="dica">Perdida: ${esc(o.motivo_perda)}</p>` : ""}
     <div id="op-msg"></div>
     ${aberta ? `<div class="linha"><label class="btn sec">Enviar XML do Promob (nova versão)<input type="file" accept=".xml" hidden onchange="enviarVersao(${o.id}, this)"></label>
+      <button class="btn sec" onclick="abrirConfigVenda(${o.id})">Configurar produtos</button>
       <label class="btn sec">Enviar renders<input type="file" accept="image/png,image/jpeg,image/webp" multiple hidden onchange="enviarRenders(${o.id}, this)"></label>
       <button class="btn sec" onclick="pedirConfirmacao('op-msg', 'Marcar a oportunidade como perdida?', () => perderOportunidade(${o.id}))">Perdida</button></div>` : ""}
+    <div id="op-config" class="pr-venda" hidden><h2>Configurar produtos</h2>
+      <p class="dica">Escolha dentro do que a engenharia liberou: as opções, medidas e acabamentos já vêm filtrados pelas regras do produto.</p>
+      <div id="op-cfg"></div><h2>Produtos desta proposta</h2><div id="op-carrinho"></div></div>
     <div class="renders" id="op-renders"></div>
     ${v ? `<h2>Negociação · versão ${v.numero} (${esc(v.arquivo)})</h2>
       <p class="dica">${v.resumo.ambientes.map((a) => `${esc(a.nome)}: ${a.modulos} módulo(s), ${num(a.m2)} m²`).join(" · ")} · total ${v.resumo.total_pecas} peças · ${num(v.resumo.m2_chapa)} m² de chapa</p>
@@ -1897,7 +2418,7 @@ async function verOportunidade(id) {
       ${["LIVRE", "APROVADA"].includes(v.aprovacao) ? `<div class="linha"><span class="dica">Fechar a venda com esta versão:</span>
         <label class="dica">1º vencimento <input id="fv-venc" type="date" value="${new Date().toISOString().slice(0, 10)}"></label>
         <label class="dica">Entrega <input id="fv-entrega" type="date"></label>
-        <button class="btn" onclick="pedirConfirmacao('op-msg', 'Fechar a venda com a versão ${v.numero} por ${brl(v.calculo.preco_final)}? O projeto é criado com o XML desta versão, o contrato gera as parcelas e as comissões entram no contas a pagar.', () => fecharVenda(${o.id}, ${v.id}))">Fechar venda</button></div>` : ""}` : ""}` : `<p class="pend">Envie o XML do Promob para abrir a negociação.</p>`}
+        <button class="btn" onclick="pedirConfirmacao('op-msg', 'Fechar a venda com a versão ${v.numero} por ${brl(v.calculo.preco_final)}? O projeto é criado com o que foi vendido nesta versão (XML do Promob e produtos configurados), o contrato gera as parcelas e as comissões entram no contas a pagar.', () => fecharVenda(${o.id}, ${v.id}))">Fechar venda</button></div>` : ""}` : ""}` : `<p class="pend">Envie o XML do Promob ou configure produtos para abrir a negociação.</p>`}
     ${o.lista_versoes.length > 1 ? `<h2>Versões anteriores</h2><div class="tabela">${tabela([["Versão", (x) => `v${x.numero}`], ["Enviada", (x) => `${quando(x.criado_em)} · ${esc(x.criado_por || "")}`],
       ["m²", (x) => x.resumo.m2_chapa, 1], ["Preço final", (x) => x.calculo ? brl(x.calculo.preco_final) : "—", 1], ["Margem", (x) => x.calculo ? pctTxt(x.calculo.margem_pct) : "—", 1],
       ["Aprovação", (x) => tag(x.aprovacao)]], o.lista_versoes.slice(1))}</div>` : ""}`;
